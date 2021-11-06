@@ -12,18 +12,14 @@ def check(func):
 
 
     return func
-
+    
 def info(func):
     print("\nProperties of function '" + func.__name__ + "'")
     ann = func.__annotations__
     print("annotations " + str(ann) + "\n\nparameters")
 
     for i in inspect.signature(func).parameters:       
-        typ = "Any"
-        if (i in ann):
-           typ = ann[i]
+        print(i + " " + str(ann[i]) if (i in ann) else "Any")
 
-        print(i + " " + str(typ))
-
-    print("\nreturns " + str(inspect.signature(func).return_annotation))
+    print("\nreturns " + (str(inspect.signature(func).return_annotation) if ('return' in ann) else "None"))
     return func
