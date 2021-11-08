@@ -1,6 +1,5 @@
 from typeChecking import *
 
-@info
-#@check
-def plusOne(a: int) -> int:
-    return 1 + a
+@typeCheck
+def inc(x: int) -> int:
+    return x + 1

@@ -1,18 +1,6 @@
 import inspect
+import typing #what to do with this?
 
-def check(func):
-    ann = func.__annotations__
-    print(ann['a'])
-    result = func(ann['a'])
-    resultType = type(result)
-    returnType = type(ann['return'])
-    
-    print(resultType)
-    print(returnType)
-
-
-    return func
-    
 def info(func):
     print("\nProperties of function '" + func.__name__ + "'")
     ann = func.__annotations__
@@ -23,3 +11,15 @@ def info(func):
 
     print("\nreturns " + (str(inspect.signature(func).return_annotation) if ('return' in ann) else "None"))
     return func
+
+def typeCheck(f):
+    anno = f.__annotations__
+    retType = anno['return']
+    def g(*xs):
+        anno.pop('return', None)
+        tps = zip(anno.values(), xs)
+        
+        for (t1,t2) in tps:
+            assert(t1 == type(t2))
+        assert(type(f(*xs)) == retType)
+    return g
