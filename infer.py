@@ -1,25 +1,29 @@
 from ast import *
+import inspect
     
 #https://docs.python.org/3/library/ast.html
 
 environment = {}
 printAST = True
 
-def infer(prog : str) -> type:
-    tree = parse(prog)
+def infer(prog) -> type:
+    tree = parse(inspect.getsource(prog))
     if (printAST):
-        for i in tree.body:
-            print(i)
-    return _mod(tree)
+        print(dump(tree, indent=4))
+
+    typ = _mod(tree)
+    return typ
      
 def _mod(prog):
     t = type(prog)
 
     if (t == Module):
-        for i in range(len(prog.body) -1):
-            _stmt(prog.body[i]
+        body = prog.body
+
+        for i in range(len(body) -1):
+            _stmt(body[i]
         )
-        return _stmt(prog.body[len(prog.body) -1])
+        return _stmt(body[len(body) -1])
     else:
         _unknown(prog)
 
@@ -54,10 +58,22 @@ def _expr(e) -> type:
         _unknown(e)
 
 def _functionDef(f: FunctionDef) -> type:
-    for stmt in f.body:
-        _stmt(stmt)
+    _arguments(f.args)
 
-    _expr(f.returns)
+    body = f.body
+
+    for i in range(len(body) -1):
+        _stmt(body[i]
+    )
+
+    return _stmt(body[len(body) -1])
+
+def _arguments(a : arguments):
+    for arg in a.args:
+        _arg(arg)
+
+def _arg(a: arg):
+    environment[a.arg] = a.annotation.id
 
 def _assign(a : Assign) -> type:
     for target in a.targets:
@@ -66,25 +82,15 @@ def _assign(a : Assign) -> type:
 def _evalConstant(c: Constant) -> int:
     return c.value
 
-def _constant(_: Constant) -> type:
-    return int
+def _constant(c: Constant) -> type:
+    return type(c.value)
 
 def _name(n: Name) -> type:
     if n.id in environment:
-        return type(environment[n.id])
-    else:
-        raise KeyError(n.id + " is not bound")
+        return environment[n.id]
 
 def _expression(e : Expr) -> type:
     return _expr(e.value)
-    
-def _collectReturnStatements(statements):
-    returns = []
-
-    for stmt in statements:
-        if (type(stmt) == Return): returns.append(stmt)
-
-    return returns
 
 def _unknown(u):
     raise Exception("Unknown type: " + str(type(u)))

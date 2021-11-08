@@ -1,6 +1,5 @@
 import inspect
-import infer
-import typing #what to do with this?
+from infer import infer
 
 def info(func):
     print("\nProperties of function '" + func.__name__ + "'")
@@ -26,5 +25,9 @@ def typeCheck(f):
     return g
 
 def checkReturnType(func):
-    assert(infer(str(func)) == func.__annotations__['return'])
+    assertEq(func.__annotations__['return'], infer(func))
     return func
+
+def assertEq(expected, actual):
+    if (not expected == actual):
+        raise Exception("expected return type of " + str(expected) + ", found " + str(actual))

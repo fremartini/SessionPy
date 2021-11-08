@@ -1,5 +1,4 @@
 from typeChecking import *
 
 @checkReturnType
-def inc(x: int) -> int:
-    return x + 1
+def zero(x: int) -> int: return 0
