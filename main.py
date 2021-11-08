@@ -1,5 +1,5 @@
 from typeChecking import *
 
-@typeCheck
+@checkReturnType
 def inc(x: int) -> int:
     return x + 1

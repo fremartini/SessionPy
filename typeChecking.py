@@ -1,4 +1,5 @@
 import inspect
+import infer
 import typing #what to do with this?
 
 def info(func):
@@ -23,3 +24,7 @@ def typeCheck(f):
             assert(t1 == type(t2))
         assert(type(f(*xs)) == retType)
     return g
+
+def checkReturnType(func):
+    assert(infer(str(func)) == func.__annotations__['return'])
+    return func
