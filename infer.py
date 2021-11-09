@@ -78,7 +78,7 @@ def _arguments(a : arguments):
         _arg(arg)
 
 def _arg(a: arg):
-    environment[a.arg] = a.annotation.id
+    environment[a.arg] = _toTyp(a.annotation.id)
 
 def _assign(a : Assign) -> type:
     for target in a.targets:
@@ -96,6 +96,14 @@ def _name(n: Name) -> type:
 
 def _expression(e : Expr) -> type:
     return _expr(e.value)
+
+def _toTyp(s: str) -> type:
+    if (s == 'int'):
+        return int
+    elif (s == 'str'):
+        return str
+    else:
+        _unknown(s)
 
 def _unknown(u):
     raise Exception("Unknown type: " + str(type(u)))
