@@ -4,14 +4,17 @@ import inspect
 #https://docs.python.org/3/library/ast.html
 
 environment = {}
-printAST = True
+printAST = False
 
 def infer(prog) -> type:
     tree = parse(inspect.getsource(prog))
-    if (printAST):
-        print(dump(tree, indent=4))
+    return inferFromAST(tree)
 
-    typ = _mod(tree)
+def inferFromAST(ast) -> type:
+    if (printAST):
+        print(dump(ast, indent=4))
+
+    typ = _mod(ast)
     return typ
      
 def _mod(prog):
