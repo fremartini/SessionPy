@@ -1,5 +1,6 @@
 from ast import *
 import inspect
+import textwrap
     
 #https://docs.python.org/3/library/ast.html
 
@@ -7,7 +8,8 @@ environment = {}
 printAST = False
 
 def infer(prog) -> type:
-    tree = parse(inspect.getsource(prog))
+    src = textwrap.dedent(inspect.getsource(prog))
+    tree = parse(src)
     return inferFromAST(tree)
 
 def inferFromAST(ast) -> type:

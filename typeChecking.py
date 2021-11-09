@@ -12,21 +12,18 @@ def info(func):
     print("\nreturns " + (str(inspect.signature(func).return_annotation) if ('return' in ann) else "None"))
     return func
 
-def typeCheck(f):
-    anno = f.__annotations__
-    retType = anno['return']
+def typeCheck(func):
+    ann = func.__annotations__
+    assertEq(ann['return'], infer(func))
+
     def g(*xs):
-        anno.pop('return', None)
-        tps = zip(anno.values(), xs)
+        ann.pop('return', None)
+        tps = zip(ann.values(), xs)
         
         for (t1,t2) in tps:
             assertEq(t1, type(t2))
-        assertEq(type(f(*xs)), retType)
-    return g
 
-def checkReturnType(func):
-    assertEq(func.__annotations__['return'], infer(func))
-    return func
+    return g
 
 def assertEq(expected, actual):
     if (not expected == actual):
