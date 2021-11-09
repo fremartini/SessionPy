@@ -1,5 +1,5 @@
 import inspect
-from infer import infer
+from infer import *
 
 def info(func):
     print("\nProperties of function '" + func.__name__ + "'")
@@ -20,8 +20,8 @@ def typeCheck(f):
         tps = zip(anno.values(), xs)
         
         for (t1,t2) in tps:
-            assert(t1 == type(t2))
-        assert(type(f(*xs)) == retType)
+            assertEq(t1, type(t2))
+        assertEq(type(f(*xs)), retType)
     return g
 
 def checkReturnType(func):

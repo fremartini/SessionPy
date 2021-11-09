@@ -11,7 +11,7 @@ def _removeIndent(func):
 def _run(func):
     return inferFromAST(_removeIndent(func))
 
-class TestTypeCheck(unittest.TestCase):
+class TestInferType(unittest.TestCase):
     def test_return_type_int_returns_int(self):
         def f() -> int: 
             return 0
@@ -24,12 +24,17 @@ class TestTypeCheck(unittest.TestCase):
 
         self.assertEqual(str, _run(f))       
 
-    def test_return_type_none_infers_type(self):
+    def test_return_type_none_infers_type_int(self):
         def f(): 
             return 0
 
         self.assertEqual(int, _run(f))
 
+    def test_return_type_none_infers_type_str(self):
+        def f(): 
+            return ""
+
+        self.assertEqual(str, _run(f))
 
 if __name__ == '__main__':
     unittest.main()
