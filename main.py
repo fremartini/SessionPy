@@ -1,4 +1,10 @@
-from typeChecking import *
+from channel import Channel, send, recv
 
-@typeCheck
-def zero(x: str) -> str: return ''
+ch : Channel = Channel(int)
+send(ch, 1)
+send(ch, 1)
+send(ch, 1)
+send(ch, 1)
+
+v = recv(ch)
+print(v)

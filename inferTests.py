@@ -36,5 +36,11 @@ class TestInferType(unittest.TestCase):
 
         self.assertEqual(str, _run(f))
 
+    def test_return_type_given_body_returning_none_returns_none(self):
+        def f() -> None:
+            print(f"")
+
+        self.assertEqual(None, _run(f))
+
 if __name__ == '__main__':
     unittest.main()

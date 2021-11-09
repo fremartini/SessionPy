@@ -32,7 +32,7 @@ def _mod(prog):
     else:
         _unknown(prog)
 
-def _stmt(s):
+def _stmt(s) -> type:
     t = type(s)
     
     if (t == Expr):
@@ -47,6 +47,8 @@ def _stmt(s):
     elif (t == FunctionDef):
         f : FunctionDef = s
         return _functionDef(f)
+    elif (t == Pass):
+        return None
     else:
         _unknown(s)
 
@@ -57,10 +59,18 @@ def _expr(e) -> type:
         return _constant(e)
     elif (t == Name):
         return _name(e)
-    elif (t == BinOp):
-        pass
+    elif (t == Call):
+        return _call(e)
+    elif (t == JoinedStr):
+        return _joinedStr(e)
     else:
         _unknown(e)
+
+def _joinedStr(s: JoinedStr) -> type:
+    return str
+
+def _call(c: Call) -> type:
+    return None
 
 def _functionDef(f: FunctionDef) -> type:
     _arguments(f.args)
@@ -78,6 +88,8 @@ def _arguments(a : arguments):
         _arg(arg)
 
 def _arg(a: arg):
+    if (a.arg == 'self'): return
+
     environment[a.arg] = _toTyp(a.annotation.id)
 
 def _assign(a : Assign) -> type:

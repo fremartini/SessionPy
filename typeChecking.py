@@ -14,15 +14,16 @@ def info(func):
 
 def typeCheck(func):
     ann = func.__annotations__
-    assertEq(ann['return'], infer(func))
 
+    if ('return' in ann):
+        assertEq(ann['return'], infer(func))
+        
     def g(*xs):
         ann.pop('return', None)
         tps = zip(ann.values(), xs)
         
         for (t1,t2) in tps:
             assertEq(t1, type(t2))
-
     return g
 
 def assertEq(expected, actual):
