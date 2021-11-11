@@ -15,7 +15,7 @@ def info(func):
 def typeCheck(func):
     ann = func.__annotations__
 
-    if ('return' in ann):
+    if 'return' in ann:
         assertEq(ann['return'], infer(func))
         
     def g(*xs):
