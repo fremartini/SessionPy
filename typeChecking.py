@@ -1,5 +1,7 @@
 import inspect
-from infer import *
+import textwrap
+import infer
+import ast
 
 def info(func):
     print("\nProperties of function '" + func.__name__ + "'")
@@ -24,6 +26,41 @@ def typeCheck(func):
         
         for (t1,t2) in tps:
             assertEq(t1, type(t2))
+    return g
+
+def _top(m : ast.Module, kwargs):
+    for b in m.body: _functionDef(b, kwargs)
+
+def _functionDef(f : ast.FunctionDef, kwargs):
+    for b in f.body: _expr(b, kwargs)
+
+def _expr(e : ast.Expr, kwargs):
+    _call(e.value, kwargs)
+
+def _call(c : ast.Call, kwargs):
+    name = _attribute(c.func)
+    arg = _constant(c.args[0])
+
+    if name in kwargs:
+        exp = kwargs.get(name)
+        act = type(arg)
+        assertEq(exp, act)
+
+def _attribute(a : ast.Attribute):
+    return _name(a.value)
+
+def _name(n : ast.Name):
+    return n.id
+
+def _constant(c : ast.Constant):
+    return c.value
+
+def check_channels(kwargs):
+    def g(f):
+        src = textwrap.dedent(inspect.getsource(f))
+        tree = ast.parse(src)
+        _top(tree, kwargs)
+        return f
     return g
 
 def assertEq(expected, actual):

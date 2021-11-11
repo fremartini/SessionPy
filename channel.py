@@ -23,22 +23,13 @@ class Channel:
     def __str__(self) -> str:
         return f"Channel{str(self.chType)} {str(self.queue)}"
 
-def check_channel(func):
-    #assert func.getArgs[1].chType == type(func.getArgs[2])
-    params = inspect.signature(func).parameters
-    print(params)
+    @typeCheck
+    def send(self, e):
+        self.queue.append(e)
+        print(f"appended {e}: {self.queue}")
 
-    ch : Channel = params['ch']
-    e = params['e']
-
-    print(type(ch))
-
-def send(ch : Channel, e) -> str:
-    # assert type(e) == ch.chType #TODO: yikes
-    ch.queue.append(e)
-    print(f"appended {e}: {ch.queue}")
-
-def recv(ch : Channel):
-    v = ch.queue.pop(0)
-    print(f"poppped {v} from queue")
-    return v
+    @typeCheck
+    def recv(self):
+        v = self.queue.pop(0)
+        print(f"poppped {v} from queue")
+        return v
