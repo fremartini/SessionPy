@@ -30,6 +30,7 @@ class Channel:
 
     def send(self, e):
         s = socket.socket()
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             s.bind(self.addr)
             s.listen()
@@ -38,11 +39,10 @@ class Channel:
             c, addr = s.accept()
             c.send(bytes(str(e), 'utf-8'))
             c.close()
+            
         except OSError as ex:
-            print("send ?")
             s.connect(self.addr)
-            r = s.recv(512)
-            print (r)
+            s.send(bytes(str(e), 'utf-8'))
         except Exception as ex:
             traceback.print_exception(type(ex), ex, ex.__traceback__)
         finally:
@@ -50,18 +50,19 @@ class Channel:
 
     def recv(self):
         s : socket = socket.socket()
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             s.connect(self.addr)
             r = s.recv(512)
             print (r)
         except OSError as ex:
-            print("recv ?")
             s.bind(self.addr)
             s.listen()
-            print (f"Waiting for someone to connect")
+            print (f"Waiting for someone to send a message")
 
             c, addr = s.accept()
-            print (f"Someone connected")
+            r = c.recv(512)
+            print (r)
             c.close()
         except Exception as ex:
             traceback.print_exception(type(ex), ex, ex.__traceback__)
