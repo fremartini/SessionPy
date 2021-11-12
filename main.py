@@ -1,4 +1,4 @@
-from TCPchannel import Channel
+from channel import *
 from typeChecking import check_channels, check_file
 
 @check_file

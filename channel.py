@@ -1,4 +1,6 @@
 from typeChecking import *
+import socket
+import traceback
 
 """
 find some language construct that allows to do communication, 
@@ -16,20 +18,53 @@ stop()                                  # close the connection
 """
 
 class Channel:
-    def __init__(self, typ):
+    host = 'localhost'
+
+    def __init__(self, typ, port):
         self.chType = typ
-        self.queue = []
+        self.port = port
+        self.addr = (Channel.host, port)
 
     def __str__(self) -> str:
         return f"Channel{str(self.chType)} {str(self.queue)}"
 
-    @typeCheck
     def send(self, e):
-        self.queue.append(e)
-        print(f"appended {e}: {self.queue}")
+        s = socket.socket()
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            s.bind(self.addr)
+            s.listen()
+            print (f"Waiting for someone to recieve {str(e)}")
 
-    @typeCheck
+            c, addr = s.accept()
+            c.send(bytes(str(e), 'utf-8'))
+            c.close()
+            
+        except OSError as ex:
+            s.connect(self.addr)
+            s.send(bytes(str(e), 'utf-8'))
+        except Exception as ex:
+            traceback.print_exception(type(ex), ex, ex.__traceback__)
+        finally:
+            s.close()
+
     def recv(self):
-        v = self.queue.pop(0)
-        print(f"poppped {v} from queue")
-        return v
+        s : socket = socket.socket()
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            s.connect(self.addr)
+            r = s.recv(512)
+            print (r)
+        except OSError as ex:
+            s.bind(self.addr)
+            s.listen()
+            print (f"Waiting for someone to send a message")
+
+            c, addr = s.accept()
+            r = c.recv(512)
+            print (r)
+            c.close()
+        except Exception as ex:
+            traceback.print_exception(type(ex), ex, ex.__traceback__)
+        finally:
+            s.close()
