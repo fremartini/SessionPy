@@ -1,3 +1,2 @@
 A -> B : int;
-A -> C : int;
-B -> C : bool;
+A -> B : int;

@@ -1,4 +1,4 @@
-roles/
+role_*
 .vscode/
 
 # Byte-compiled / optimized / DLL files
