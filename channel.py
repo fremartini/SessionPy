@@ -1,21 +1,7 @@
 from typeChecking import *
 import socket
 import traceback
-
-"""
-find some language construct that allows to do communication, 
-i.e., it allows to do send and receive over something. 
-This could be some Python feature.
-
-Conversation API:
-
-create(protocol, inv_config.yml)        # session initiation bla
-join(self, role, principal_name)        # accept an invitation
-send(self, to_role, op, payload)        # send a msg
-recv(self, from_role)                   # receive a msg
-recv_async(self, from_role, callback)   # receive asynchronously
-stop()                                  # close the connection
-"""
+import time
 
 class Channel:
     host = 'localhost'
@@ -29,6 +15,7 @@ class Channel:
         return f"Channel{str(self.chType)} {str(self.queue)}"
 
     def send(self, e):
+        time.sleep(1)
         s = socket.socket()
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
@@ -49,6 +36,7 @@ class Channel:
             s.close()
 
     def recv(self):
+        time.sleep(1)
         s : socket = socket.socket()
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:

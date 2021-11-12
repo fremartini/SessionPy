@@ -4,11 +4,12 @@ from typing import TypeVar
 
 from protocol import *
 
-@check_file
+#@check_file
 def main():
-    Client = TypeVar("Client")
-    Server = TypeVar("Server")
-    p = Protocol[(Client, Server, int), (Server, Client, int)]
+    Protocol().projectFile("proto.p")
+    #Client = TypeVar("Client")
+    #Server = TypeVar("Server")
+    #p = Protocol[(Client, Server, int), (Server, Client, int)]
 
     #ch : Channel[out(int), into(bool)] = Channel(5000)
     #will_send_ints(ch)

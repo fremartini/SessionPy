@@ -1,2 +1,3 @@
-Client -> Server : int;
-Server -> Client : int
+A -> B : int;
+A -> C : int;
+B -> C : bool;
