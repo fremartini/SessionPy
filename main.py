@@ -1,13 +1,17 @@
 from TCPchannel import Channel
-from typeChecking import check_channels
+from typeChecking import check_channels, check_file
 
-"""
-Goal: make the decorator "check_channel" look for channel in parameters and
-make sure it is used correctly in body
-"""
+@check_file
+def main():
+    pass
+    #ch : Channel[out(int), into(bool)] = Channel(5000)
+    #will_send_ints(ch)
 
-#@check_channels({'chI': int})
-#def will_send_ints(chI: Channel):
-#    chI.send(1)
+@check_channels({'chI': int})
+def will_send_ints(chI: Channel):
+    chI.send(1)
 
-ch : Channel = Channel(int, 5000)
+if __name__ == '__main__':
+    main()
+
+#TODO: generics & simple communication

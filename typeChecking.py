@@ -63,6 +63,21 @@ def check_channels(kwargs):
         return f
     return g
 
+def _read_src_from_file(file):
+    f = open(file, "r") 
+    src = f.read()
+    f.close()
+
+    return src
+
+def check_file(f):
+    file = inspect.getfile(f)
+    src = _read_src_from_file(file)
+
+    tree : ast.Module = ast.parse(src)
+    print(ast.dump(tree, indent=4))
+    return f
+
 def assertEq(expected, actual):
     if (not expected == actual):
         raise Exception("expected return type of " + str(expected) + ", found " + str(actual))
