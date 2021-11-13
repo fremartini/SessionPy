@@ -4,8 +4,11 @@ import textwrap
     
 #https://docs.python.org/3/library/ast.html
 
-environment = {}
-printAST = False
+_environment = {}
+_printAST = False
+
+def printAST(ast):
+    print(dump(ast, indent=4))
 
 def infer(prog) -> type:
     src = textwrap.dedent(inspect.getsource(prog))
@@ -13,8 +16,8 @@ def infer(prog) -> type:
     return inferFromAST(tree)
 
 def inferFromAST(ast) -> type:
-    if (printAST):
-        print(dump(ast, indent=4))
+    if (_printAST):
+        printAST(ast)
 
     typ = _mod(ast)
     return typ
@@ -30,7 +33,7 @@ def _mod(prog):
         )
         return _stmt(body[len(body) -1])
     else:
-        _unknown(prog)
+        unknown(prog)
 
 def _stmt(s) -> type:
     t = type(s)
@@ -50,7 +53,7 @@ def _stmt(s) -> type:
     elif (t == Pass):
         return None
     else:
-        _unknown(s)
+        unknown(s)
 
 def _expr(e) -> type:
     t = type(e)
@@ -64,7 +67,7 @@ def _expr(e) -> type:
     elif (t == JoinedStr):
         return _joinedStr(e)
     else:
-        _unknown(e)
+        unknown(e)
 
 def _joinedStr(s: JoinedStr) -> type:
     return str
@@ -90,11 +93,11 @@ def _arguments(a : arguments):
 def _arg(a: arg):
     if (a.arg == 'self'): return
 
-    environment[a.arg] = _toTyp(a.annotation.id)
+    _environment[a.arg] = _toTyp(a.annotation.id)
 
 def _assign(a : Assign) -> type:
     for target in a.targets:
-        environment[target.id] = _evalConstant(a.value)
+        _environment[target.id] = _evalConstant(a.value)
 
 def _evalConstant(c: Constant) -> int:
     return c.value
@@ -103,8 +106,8 @@ def _constant(c: Constant) -> type:
     return type(c.value)
 
 def _name(n: Name) -> type:
-    if n.id in environment:
-        return environment[n.id]
+    if n.id in _environment:
+        return _environment[n.id]
 
 def _expression(e : Expr) -> type:
     return _expr(e.value)
@@ -115,7 +118,7 @@ def _toTyp(s: str) -> type:
     elif (s == 'str'):
         return str
     else:
-        _unknown(s)
+        unknown(s)
 
-def _unknown(u):
+def unknown(u):
     raise Exception("Unknown type: " + str(type(u)))

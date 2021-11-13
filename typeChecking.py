@@ -1,6 +1,7 @@
 import inspect
 import textwrap
-import infer
+from typing import Any
+from infer import infer, printAST, unknown
 import ast
 
 def info(func):
@@ -28,40 +29,88 @@ def typeCheck(func):
             assertEq(t1, type(t2))
     return g
 
-def _top(m : ast.Module, kwargs):
-    for b in m.body: _functionDef(b, kwargs)
+def check_file(f):
+    file = inspect.getfile(f)
+    src = _read_src_from_file(file)
 
-def _functionDef(f : ast.FunctionDef, kwargs):
-    for b in f.body: _expr(b, kwargs)
+    tree : ast.Module = ast.parse(src)
+    return f
 
-def _expr(e : ast.Expr, kwargs):
-    _call(e.value, kwargs)
+def check_channels(f):
+    src = textwrap.dedent(inspect.getsource(f))
+    tree = ast.parse(src)
+    channels, exprs = _getChannelAssignments(tree)
 
-def _call(c : ast.Call, kwargs):
-    name = _attribute(c.func)
-    arg = _constant(c.args[0])
+    for k, v in exprs.items():
+        if (v == Any):
+            continue
+        assertEq(channels[k], v)
 
-    if name in kwargs:
-        exp = kwargs.get(name)
-        act = type(arg)
-        assertEq(exp, act)
+    return f
 
-def _attribute(a : ast.Attribute):
-    return _name(a.value)
+def _getChannelAssignments(m : ast.Module):
+    return _functionDef(m.body[0])
 
-def _name(n : ast.Name):
-    return n.id
+def _functionDef(f : ast.FunctionDef):
+    assignments = dict()
+    exprs = dict()
+
+    for b in f.body: 
+        typ = type(b)
+
+        if (typ == ast.Assign):
+            chName, chTyp = _assign(b)
+            assignments[chName] = chTyp
+        elif (typ == ast.Expr):
+            chName, chTyp = _expr(b)
+            exprs[chName] = chTyp
+        else:
+            unknown(b)
+
+    return (assignments, exprs)
+
+def _assign(a : ast.Assign):
+    target = _name(a.targets[0])
+    val = _assignCall(a.value)
+    return (target, val)
+
+def _expr(e : ast.Expr):
+    return _exprCall(e.value)
+
+def _exprCall(c : ast.Call):
+    varName, op = _attribute(c.func)
+    args = Any
+    if (op == "send"):
+        a = c.args[0]
+        if (type(a) == ast.Constant):
+            args = type(_constant(c.args[0]))
+        elif (type(a) == ast.Name):
+            args = type(_name(c.args[0]))
+        else:
+            unknown(a)
+
+    return (varName, args)
 
 def _constant(c : ast.Constant):
     return c.value
 
-def check_channels(kwargs):
-    def g(f):
-        src = textwrap.dedent(inspect.getsource(f))
-        tree = ast.parse(src)
-        _top(tree, kwargs)
-        return f
-    return g
+def _attribute(a : ast.Attribute):
+    return (_name(a.value), a.attr)
+
+def _assignCall(c : ast.Call):
+    typ = _name(c.args[0])
+
+    if (typ == 'str'):
+        return str
+    elif (typ == 'int'):
+        return int
+    elif (typ == 'bool'):
+        return bool
+    else: 
+        unknown(typ)
+
+def _name(n : ast.Name):
+    return n.id
 
 def _read_src_from_file(file):
     f = open(file, "r") 
@@ -70,14 +119,6 @@ def _read_src_from_file(file):
 
     return src
 
-def check_file(f):
-    file = inspect.getfile(f)
-    src = _read_src_from_file(file)
-
-    tree : ast.Module = ast.parse(src)
-    print(ast.dump(tree, indent=4))
-    return f
-
 def assertEq(expected, actual):
     if (not expected == actual):
-        raise Exception("expected return type of " + str(expected) + ", found " + str(actual))
+        raise Exception("expected type " + str(expected) + ", found " + str(actual))
