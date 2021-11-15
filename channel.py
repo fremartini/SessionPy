@@ -6,13 +6,10 @@ import time
 class Channel:
     host = 'localhost'
 
-    def __init__(self, typ, port):
-        self.chType = typ
+    def __init__(self, ST, port):
+        self.ST = ST
         self.port = port
         self.addr = (Channel.host, port)
-
-    def __str__(self) -> str:
-        return f"Channel{str(self.chType)} {str(self.queue)}"
 
     def send(self, e):
         time.sleep(1)

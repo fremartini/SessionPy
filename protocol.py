@@ -1,12 +1,9 @@
-from typing import TypeVar, Generic, List
-
-T = TypeVar("T")
-class Protocol(Generic[T]):
-    def __init__(self) -> None:
-        pass
+class Protocol():
+    def __init__(self, protoc : str) -> None:
+        self.protoc = protoc
 
     def __str__(self) -> str:
-        return "protocol"
+        return self.protoc
 
     def projectStr(self, p : str) -> None:
         self._write(p)
