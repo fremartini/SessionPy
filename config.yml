@@ -1,0 +1,11 @@
+computers:
+  - c1:
+    host: localhost
+    port: 50000
+  - c2:
+    host: localhost
+    port: 50010
+  
+
+
+  

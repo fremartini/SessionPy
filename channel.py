@@ -6,10 +6,10 @@ import time
 class Channel:
     host = 'localhost'
 
-    def __init__(self, ST, port):
+    def __init__(self, ST):
         self.ST = ST
-        self.port = port
-        self.addr = (Channel.host, port)
+        self.port = 5000
+        self.addr = (Channel.host, self.port)
 
     def send(self, e):
         time.sleep(1)

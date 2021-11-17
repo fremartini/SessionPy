@@ -8,3 +8,7 @@ class Op(Enum):
 class SessionType:
     def __init__(self, op : Op, typ : type, rest) -> None:
         self.t = (op, typ, rest)
+
+
+
+    #Channel(SessionType(Op.SEND, int, SessionType(Op.RECV, int, SessionType(Op.END, None, None))))
