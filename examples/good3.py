@@ -2,6 +2,7 @@ from channel import *
 from sessiontype import *
 from fromfile import check_file
 
+@check_file
 def main():
     ch = Channel[Recv[int, Send[bool, End]]]()
     v = ch.recv()

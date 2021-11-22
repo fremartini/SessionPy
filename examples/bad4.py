@@ -7,7 +7,7 @@ def f(c: Channel):
     print('received value', b) # should happen; at this point we receive
     return b
 
-
+@check_file
 def main():
     ch = Channel[Send[int, Recv[bool, Send[str, End]]]]()
     ch.send(42) 

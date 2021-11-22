@@ -7,6 +7,7 @@ def f(c: Channel):
     print('received value', 666) # this should happen! expecting a receive
     return v
 
+@check_file
 def main():
     ch = Channel[Send[int, Recv[bool, Send[str, End]]]]()
     ch.send(42) 
