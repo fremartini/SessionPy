@@ -52,7 +52,8 @@ class Analyzer(ast.NodeVisitor):
     
     def search_call(self, call_obj):
         f = call_obj.func
-        if isinstance(f, ast.Subscript): # Essentially, typing information is within a Subscript
+        if isinstance(f, ast.Subscript) and f.value.id == 'Channel': 
+            # Essentially, typing information is within a Subscript
             """
             A subscript, such as l[1]. value is the subscripted object (usually
                     sequence or mapping). slice is an index, slice or key. It
