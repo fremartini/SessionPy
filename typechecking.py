@@ -1,7 +1,7 @@
 import inspect
 import textwrap
 from typing import Any
-from infer import infer, unknown
+from infer import infer, unknown, printAST
 import ast
 
 def info(func):
@@ -28,13 +28,6 @@ def typeCheck(func):
         for (t1,t2) in tps:
             assertEq(t1, type(t2))
     return g
-
-def check_file(f):
-    file = inspect.getfile(f)
-    src = _read_src_from_file(file)
-
-    tree : ast.Module = ast.parse(src)
-    return f
 
 def check_channels(f):
     src = textwrap.dedent(inspect.getsource(f))
@@ -111,13 +104,6 @@ def _assignCall(c : ast.Call):
 
 def _name(n : ast.Name):
     return n.id
-
-def _read_src_from_file(file):
-    f = open(file, "r") 
-    src = f.read()
-    f.close()
-
-    return src
 
 def assertEq(expected, actual):
     if (not expected == actual):

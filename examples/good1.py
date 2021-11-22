@@ -2,12 +2,10 @@ from channel import *
 from sessiontype import *
 from fromfile import check_file
 
-@check_file
 def main():
-    c  = Channel[Send[int, Send[str, End]]]()
-    c.init()
-    c.send(1)
-    c.recv()
+    ch = Channel[Send[int, End]]()
+    ch.send(42)
+    print('sent', 42) # we expect this!
 
 if __name__ == '__main__':
     main()

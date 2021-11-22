@@ -1,4 +1,3 @@
-from channel import Channel
 from typing import TypeVar, Generic
 
 ST = TypeVar('ST')
@@ -19,15 +18,16 @@ class End(SessionType):
 def is_session_type(t : type):
     return issubclass(t, SessionType)
 
-def extract(c : Channel):
-    return builder(c.__orig_class__.__args__[0]) 
+def construct_fsa(self):
+    return _build(self.__orig_class__.__args__[0]) 
 
-def builder(st : SessionType):
+def _build(st : SessionType):
     if st == End:
         return []
     action = st.__origin__
     typ, rest = st.__args__ 
-    return [(action, typ)] + builder(rest)
+    return [(action, typ)] + _build(rest)
+
 
 # Exctracting type info
 #c = Channel[Recv[str, Send[int, End]]]()
