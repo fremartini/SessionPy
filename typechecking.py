@@ -1,7 +1,7 @@
 import inspect
 import textwrap
 from typing import Any
-from infer import infer, unknown, printAST
+from infer import infer, unknown, print_ast
 import ast
 
 def info(func):

@@ -1,5 +1,5 @@
 import inspect, ast
-from infer import printAST
+from infer import print_ast
 
 assignments = {}
 exprs = {}
@@ -9,7 +9,7 @@ def check_file(f):
     src = _read_src_from_file(file)
 
     tree : ast.Module = ast.parse(src)
-    printAST(tree)
+    print_ast(tree)
     _module(tree)
     print(assignments)
     print(exprs)

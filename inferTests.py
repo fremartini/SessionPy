@@ -1,4 +1,4 @@
-from infer import inferFromAST
+from infer import infer_from_ast
 import unittest
 import textwrap
 import ast
@@ -9,7 +9,7 @@ def _removeIndent(func):
     return ast.parse(src)
 
 def _run(func):
-    return inferFromAST(_removeIndent(func))
+    return infer_from_ast(_removeIndent(func))
 
 class TestInferType(unittest.TestCase):
     def test_return_type_int_returns_int(self):
