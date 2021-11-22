@@ -1,13 +1,15 @@
-from typeChecking import *
 import socket
 import traceback
 import time
+from typing import TypeVar, Generic
 
-class Channel:
+
+T = TypeVar('T')
+class Channel(Generic[T]):
     host = 'localhost'
 
-    def __init__(self, ST):
-        self.ST = ST
+    def __init__(self):
+        self.ST = None
         self.port = 5000
         self.addr = (Channel.host, self.port)
 

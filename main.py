@@ -1,6 +1,6 @@
 from channel import *
 from conversation import Conversation
-from sessionType import *
+from sessiontype import *
 
 """
 It starts by specifying the intended interactions (choreography) 
