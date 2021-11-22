@@ -52,12 +52,19 @@ class Analyzer(ast.NodeVisitor):
     
     def search_call(self, call_obj):
         f = call_obj.func
-        if isinstance(f, ast.Subscript):
+        if isinstance(f, ast.Subscript): # Essentially, typing information is within a Subscript
+            """
+            A subscript, such as l[1]. value is the subscripted object (usually
+                    sequence or mapping). slice is an index, slice or key. It
+            can be a Tuple and contain a Slice. ctx is Load, Store or Del
+            according to the action performed with the subscript.
+            """
             st = self.search_slice(f.slice)
             print(st) # TODO: this prints our session type
 
     def search_slice(self, slice_obj):
-        if isinstance(slice_obj, ast.Tuple):
+        if isinstance(slice_obj, ast.Tuple): 
+            # A tuple of the form (<type>, Subscript) where Subcscript should be recursively called
             tmp = ''
             for dim in slice_obj.dims:
                 if isinstance(dim, ast.Name):
@@ -69,9 +76,9 @@ class Analyzer(ast.NodeVisitor):
             #for elt in slice_obj.elts: # TODO: this contains the same – investigate which one to keep
             #    print('elt', elt.id)
         if isinstance(slice_obj, ast.Subscript):
-            name = slice_obj.value
+            name = slice_obj.value # This is the ast.Name of the action, i.e. Send/Recv/End
             assert(isinstance(name, ast.Name))
-            return name.id + ' ' + self.search_slice(slice_obj.slice)
+            return name.id + ' ' + self.search_slice(slice_obj.slice) # Slice contains rest of the session type
         dump('???', slice_obj)
     def report(self):
         pprint(self.stats)
