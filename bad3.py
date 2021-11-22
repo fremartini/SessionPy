@@ -1,8 +1,8 @@
 from channel import *
 from sessiontype import *
-from fromfile import check_file
+from ast_playground import verify_channels
 
-@check_file
+@verify_channels
 def main():
     ch = Channel[Send[int, Recv[bool, End]]]()
     v = ch.recv()
@@ -10,5 +10,3 @@ def main():
     print('received value', v) # this should NOT happen - wrong type!
     print('sent value', True)  
 
-if __name__ == '__main__':
-    main()
