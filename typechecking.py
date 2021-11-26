@@ -48,7 +48,6 @@ class Analyzer(ast.NodeVisitor):
 
     def verify_channels(self, nd):
         for stmt in nd:
-            dump_ast(stmt)
             match stmt:
                 case ast.Assign(): self.check_assign(stmt)
                 case ast.Expr(): self.check_expr(stmt)
