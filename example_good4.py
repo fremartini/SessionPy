@@ -1,6 +1,6 @@
 from channel import *
 from sessiontype import *
-from ast_playground import verify_channels
+from typechecking import verify_channels
 
 def f(c: Channel):
     v = c.recv()

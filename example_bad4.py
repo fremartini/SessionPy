@@ -1,4 +1,4 @@
-from ast_playground import verify_channels
+from typechecking import verify_channels
 from channel import *
 from sessiontype import *
 

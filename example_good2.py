@@ -1,6 +1,6 @@
 from channel import *
 from sessiontype import *
-from ast_playground import verify_channels
+from typechecking import verify_channels
 
 @verify_channels
 def main():
