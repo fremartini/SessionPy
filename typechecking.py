@@ -9,7 +9,7 @@ def verify_channels(f):
     tree = ast.parse(src)
     analyzer = Analyzer()
     analyzer.visit(tree)
-    analyzer.report()
+    #analyzer.report()
     return f
 
 class Analyzer(ast.NodeVisitor):
@@ -30,6 +30,21 @@ class Analyzer(ast.NodeVisitor):
             match stmt:
                 case ast.Assign(): self.check_assign(stmt)
                 case ast.Expr(): self.check_expr(stmt)
+
+        self.check_channel_postcondition()
+
+    def check_channel_postcondition(self):
+        """ 
+        If a session-type list is not empty, it has not been used in
+        accordance with its type: throw error.  
+        """
+        errors = []
+        for ch_name, ch_ops in self.channels.items():
+            if ch_ops:
+                errors.append(f'channel "{ch_name}" is not exhausted')
+
+        if errors:
+            raise Exception (f"ill-typed program: {errors}")
 
     def check_expr(self, expr):
         assert(isinstance(expr, ast.Expr))
@@ -55,10 +70,10 @@ class Analyzer(ast.NodeVisitor):
         channel.  
         
         Examples: 
-         * ch.send(42) 
+         * ch.send(42) or ch.send(f())
          * c.recv() 
 
-        In the first case, we need to validate that type of argument (42)
+        In the first case, we need to validate that type of argument (42, f())
         matches the current action and type of our session type.  
     """
     def check_call(self, call):
@@ -70,11 +85,11 @@ class Analyzer(ast.NodeVisitor):
             match op:
                 case 'send':
                     assert(len(call.args) == 1)
-                    arg = call.args[0]
-                    if isinstance(arg, ast.Constant):
-                        arg = arg.value
+                    arg_typ = self.infer_arg(call.args[0])
                     st = self.channels[channel_name]
-                    arg_typ = type(arg)            # TODO: infer type
+                    if not st:
+                        raise Exception("Channel has been exhausted of operations")
+
                     (action,typ), *tail = st
                     assertEq(typ, arg_typ)
                     assertEq(action, op)
@@ -82,12 +97,21 @@ class Analyzer(ast.NodeVisitor):
                 case 'recv':
                     assert(len(call.args) == 0)
                     st = self.channels[channel_name]
+                    if not st:
+                        raise Exception("Channel has been exhausted of operations")
                     (action,typ), *tail = st        # TODO: ch = Channel[Recv[int, End]]() crashes, not enough values to unpack
                     assertEq(action, op)
                     self.channels[channel_name] = tail
-                    print(self.channels[channel_name])
         
 
+    def infer_arg(self, arg):
+        #TODO: currently we only support constants, expand with function calls, expressions etc?
+        if isinstance(arg, ast.Constant):
+            arg = arg.value
+        
+        print(f"argument infered to be type {type(arg)}")
+        return type(arg)
+        
     """
     If the channel contains a subscript e.g ch = Channel[Recv[int, End]]()
     extract the typing information contained within the subscript and add it to the global dictionary
@@ -95,7 +119,7 @@ class Analyzer(ast.NodeVisitor):
     def if_channel_add_to_dict(self, var_name, call_obj):
         assert(isinstance(var_name, ast.Name))
         f = call_obj.func
-        if isinstance(f, ast.Subscript) and f.value.id == 'Channel': 
+        if isinstance(f, ast.Subscript) and f.value.id in ['TCPChannel', 'QChannel']:
             
             # Essentially, typing information is within a Subscript
             """

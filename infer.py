@@ -10,7 +10,8 @@ _print_ast = False
 def print_ast(ast):
     print(dump(ast, indent=4))
 
-def infer(prog) -> type:
+def infer(expr) -> type:
+    return type(expr)
     src = textwrap.dedent(inspect.getsource(prog))
     tree = parse(src)
     return infer_from_ast(tree)
