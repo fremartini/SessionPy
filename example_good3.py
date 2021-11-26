@@ -4,7 +4,7 @@ from typechecking import verify_channels
 
 @verify_channels
 def main():
-    ch = Channel[Recv[int, Send[bool, End]]]()
+    ch = QChannel[Recv[int, Send[bool, End]]]()
     v = ch.recv()
     ch.send(True)
     print('received value', v) # this should happen!

@@ -2,14 +2,14 @@ from typechecking import verify_channels
 from channel import *
 from sessiontype import *
 
-def f(c: Channel):
-    b = c.recv()
+def f(ch: Channel):
+    b = ch.recv()
     print('received value', b) # should happen; at this point we receive
     return b
 
 @verify_channels
 def main():
-    ch = Channel[Send[int, Recv[bool, Send[str, End]]]]()
+    ch = QChannel[Send[int, Recv[bool, Send[str, End]]]]()
     ch.send(42) 
     print('sent value', True)  # okay so far
     f(ch)

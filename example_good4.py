@@ -10,7 +10,7 @@ def f(c: Channel):
 
 @verify_channels
 def main():
-    ch = Channel[Send[int, Recv[bool, Send[str, End]]]]()
+    ch = QChannel[Send[int, Recv[bool, Send[str, End]]]]()
     ch.send(42) 
     print('sent value', True)  
     f(ch)

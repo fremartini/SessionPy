@@ -4,7 +4,7 @@ from typechecking import verify_channels
 
 @verify_channels
 def main():
-    ch = Channel[Recv[int, End]]()
+    ch = QChannel[Recv[int, End]]()
     ch.send(42)
     print('sent value', 42) # should never happen
 

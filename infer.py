@@ -5,21 +5,16 @@ import textwrap
 #https://docs.python.org/3/library/ast.html
 
 _environment = {}
-_print_ast = False
 
 def print_ast(ast):
     print(dump(ast, indent=4))
 
 def infer(expr) -> type:
-    return type(expr)
-    src = textwrap.dedent(inspect.getsource(prog))
+    src = textwrap.dedent(inspect.getsource(expr))
     tree = parse(src)
     return infer_from_ast(tree)
 
 def infer_from_ast(ast) -> type:
-    if (_print_ast):
-        print_ast(ast)
-
     typ = _mod(ast)
     return typ
      

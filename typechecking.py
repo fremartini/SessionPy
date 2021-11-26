@@ -3,6 +3,18 @@ import ast
 from pprint import pprint
 from util import dump
 from textwrap import dedent
+from infer import print_ast
+
+def check_file(f):
+    file = inspect.getfile(f)
+    src = _read_src_from_file(file)
+    tree : ast.Module = ast.parse(src)
+    print_ast(tree)
+    return f
+
+def _read_src_from_file(file):
+    with open(file, "r") as f:
+        return f.read()
 
 def verify_channels(f):
     src = dedent(inspect.getsource(f))
@@ -18,6 +30,8 @@ class Analyzer(ast.NodeVisitor):
         self.channels = {}
 
     def visit_FunctionDef(self, node):
+        print_ast(node)
+
         for dec in node.decorator_list:
             if dec.id == 'verify_channels': 
                 if self.entry != None:
@@ -78,14 +92,16 @@ class Analyzer(ast.NodeVisitor):
     """
     def check_call(self, call):
         assert(isinstance(call, ast.Call))
-        attri = call.func
-        if(isinstance(attri, ast.Attribute)):       # channel usage : v = ch.recv()
-            channel_name = attri.value.id           
-            op = attri.attr
+        call_func = call.func
+        call_args = call.args
+        if(isinstance(call_func, ast.Attribute)):       # this structure: x.y()
+                                                        #                 ^ attribute
+            channel_name = call_func.value.id           
+            op = call_func.attr
             match op:
                 case 'send':
-                    assert(len(call.args) == 1)
-                    arg_typ = self.infer_arg(call.args[0])
+                    assert(len(call_args) == 1)
+                    arg_typ = self.infer_arg(call_args[0])
                     st = self.channels[channel_name]
                     if not st:
                         raise Exception("Channel has been exhausted of operations")
@@ -95,13 +111,23 @@ class Analyzer(ast.NodeVisitor):
                     assertEq(action, op)
                     self.channels[channel_name] = tail
                 case 'recv':
-                    assert(len(call.args) == 0)
+                    assert(len(call_args) == 0)
                     st = self.channels[channel_name]
                     if not st:
                         raise Exception("Channel has been exhausted of operations")
                     (action,typ), *tail = st        # TODO: ch = Channel[Recv[int, End]]() crashes, not enough values to unpack
                     assertEq(action, op)
                     self.channels[channel_name] = tail
+        elif isinstance(call_func, ast.Name): # structure: print(), f(), etc.
+                                              #            ^^^^^    ^ - Name
+            func_name = call.func.id
+            for arg in call_args:
+                # we have a function call with a channel
+                if isinstance(arg, ast.Name) and arg.id in self.channels: 
+                    #get func from file
+                    ...
+                
+            
         
 
     def infer_arg(self, arg):
