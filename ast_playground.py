@@ -11,6 +11,7 @@ def verify_channels(f):
     analyzer = Analyzer()
     analyzer.visit(tree)
     analyzer.report()
+    return f
 
 class Analyzer(ast.NodeVisitor):
     def __init__(self):
@@ -97,7 +98,7 @@ class Analyzer(ast.NodeVisitor):
             for dim in sliced.dims:
                 if isinstance(dim, ast.Name):
                     if dim.id != 'End':
-                        acc.append(self.strToTyp(dim.id))
+                        acc.append(strToTyp(dim.id))
                 else:
                     assert(isinstance(dim, ast.Subscript))
                     tmp = self.search_slice(dim)
@@ -110,12 +111,12 @@ class Analyzer(ast.NodeVisitor):
             acc += tmp
         return acc
 
-    def strToTyp(self, s):
-        match s:
-            case 'int': return int
-            case 'str': return str
-            case 'bool': return bool
-            case _: raise Exception (f"unknown type {s}")
-
     def report(self):
         pprint(self.channels)
+
+def strToTyp(s):
+    match s:
+        case 'int': return int
+        case 'str': return str
+        case 'bool': return bool
+        case _: raise Exception (f"unknown type {s}")

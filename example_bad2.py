@@ -1,11 +1,11 @@
 from channel import *
 from sessiontype import *
-from fromfile import check_file
+from ast_playground import verify_channels
 
-@check_file
+@verify_channels
 def main():
     ch = Channel[Recv[int, End]]()
-    ch.send(42)
+    a = ch.send(42)
     print('sent value', 42) # should never happen
 
 if __name__ == '__main__':

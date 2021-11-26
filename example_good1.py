@@ -1,8 +1,8 @@
 from channel import *
 from sessiontype import *
-from fromfile import check_file
+from ast_playground import verify_channels
 
-@check_file
+@verify_channels
 def main():
     ch = Channel[Send[int, End]]()
     ch.send(42)

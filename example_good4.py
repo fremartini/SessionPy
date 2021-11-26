@@ -1,13 +1,14 @@
 from channel import *
 from sessiontype import *
-from fromfile import check_file
+from ast_playground import verify_channels
 
 def f(c: Channel):
     v = c.recv()
     print('received value', 666) # this should happen! expecting a receive
     return v
 
-@check_file
+
+@verify_channels
 def main():
     ch = Channel[Send[int, Recv[bool, Send[str, End]]]]()
     ch.send(42) 

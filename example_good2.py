@@ -1,14 +1,12 @@
 from channel import *
 from sessiontype import *
-from fromfile import check_file
+from ast_playground import verify_channels
 
-@check_file
+@verify_channels
 def main():
-    ch = Channel[Recv[int, Send[bool, End]]]()
+    ch = Channel[Recv[int, End]]()
     v = ch.recv()
-    ch.send(True)
     print('received value', v) # this should happen!
-    print('sent value', True)  
 
 if __name__ == '__main__':
     main()
