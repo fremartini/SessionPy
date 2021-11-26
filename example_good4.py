@@ -2,8 +2,8 @@ from channel import *
 from sessiontype import *
 from typechecking import verify_channels
 
-def f(c: Channel):
-    v = c.recv()
+def f(ch: Channel):
+    v = ch.recv()
     print('received value', 666) # this should happen! expecting a receive
     return v
 

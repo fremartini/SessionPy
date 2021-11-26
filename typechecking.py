@@ -1,37 +1,44 @@
 import inspect
 import ast
 from pprint import pprint
-from util import dump
+from infer import infer
+from scanner import Scanner
+from util import *
 from textwrap import dedent
-from infer import print_ast
-
-def check_file(f):
-    file = inspect.getfile(f)
-    src = _read_src_from_file(file)
-    tree : ast.Module = ast.parse(src)
-    print_ast(tree)
-    return f
-
-def _read_src_from_file(file):
-    with open(file, "r") as f:
-        return f.read()
 
 def verify_channels(f):
-    src = dedent(inspect.getsource(f))
-    tree = ast.parse(src)
-    analyzer = Analyzer()
-    analyzer.visit(tree)
-    #analyzer.report()
+    analyzer = Analyzer(f)
+    analyzer.scan()
+    analyzer.check()
     return f
 
 class Analyzer(ast.NodeVisitor):
-    def __init__(self):
+    def __init__(self, func):
+        self.func = func
         self.entry = None
         self.channels = {}
+        self.functions = {}
+
+    """
+    Scan the file the decorated function belongs to, for functions
+    that has Channels as parameters
+    """
+    def scan(self):
+        file = dedent(inspect.getfile(self.func))
+        src = _read_src_from_file(file)
+        tree : ast.Module = ast.parse(src)
+        self.functions = Scanner(tree).run()
+
+    """
+    Check that Channels are used correctly in all functions which they are used
+    """
+    def check(self):
+        src = dedent(inspect.getsource(self.func))
+        tree = ast.parse(src)
+        self.visit(tree)
+        self.check_channel_postcondition()
 
     def visit_FunctionDef(self, node):
-        print_ast(node)
-
         for dec in node.decorator_list:
             if dec.id == 'verify_channels': 
                 if self.entry != None:
@@ -41,11 +48,10 @@ class Analyzer(ast.NodeVisitor):
 
     def verify_channels(self, nd):
         for stmt in nd:
+            dump_ast(stmt)
             match stmt:
                 case ast.Assign(): self.check_assign(stmt)
                 case ast.Expr(): self.check_expr(stmt)
-
-        self.check_channel_postcondition()
 
     def check_channel_postcondition(self):
         """ 
@@ -55,7 +61,7 @@ class Analyzer(ast.NodeVisitor):
         errors = []
         for ch_name, ch_ops in self.channels.items():
             if ch_ops:
-                errors.append(f'channel "{ch_name}" is not exhausted')
+                errors.append(f'channel "{ch_name}" is not exhausted {ch_ops}')
 
         if errors:
             raise Exception (f"ill-typed program: {errors}")
@@ -101,7 +107,7 @@ class Analyzer(ast.NodeVisitor):
             match op:
                 case 'send':
                     assert(len(call_args) == 1)
-                    arg_typ = self.infer_arg(call_args[0])
+                    arg_typ = infer(call_args[0])
                     st = self.channels[channel_name]
                     if not st:
                         raise Exception("Channel has been exhausted of operations")
@@ -125,19 +131,8 @@ class Analyzer(ast.NodeVisitor):
                 # we have a function call with a channel
                 if isinstance(arg, ast.Name) and arg.id in self.channels: 
                     #get func from file
-                    ...
+                    self.verify_channels(self.functions[func_name].body)
                 
-            
-        
-
-    def infer_arg(self, arg):
-        #TODO: currently we only support constants, expand with function calls, expressions etc?
-        if isinstance(arg, ast.Constant):
-            arg = arg.value
-        
-        print(f"argument infered to be type {type(arg)}")
-        return type(arg)
-        
     """
     If the channel contains a subscript e.g ch = Channel[Recv[int, End]]()
     extract the typing information contained within the subscript and add it to the global dictionary
@@ -191,3 +186,7 @@ def strToTyp(s):
 def assertEq(expected, actual):
     if (not expected == actual):
         raise Exception("expected " + str(expected) + ", found " + str(actual))
+
+def _read_src_from_file(file):
+    with open(file, "r") as f:
+        return f.read()
