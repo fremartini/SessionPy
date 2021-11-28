@@ -9,7 +9,6 @@ def main():
     c.send("hi")
 
     c.recv()
-    c.recv()
 
 if __name__ == '__main__':
     main()

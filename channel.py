@@ -3,6 +3,10 @@ from sessiontype import *
 from collections import deque
 
 T = TypeVar('T')
+
+"""
+Channel superclass, this should never be instantiated
+"""
 class Channel(Generic[T]):
     def init(self):
         fsa = construct_fsa(self)
@@ -15,6 +19,9 @@ class Channel(Generic[T]):
     def recv(self):
         ...
 
+"""
+TCP Channel for communicating via sockets
+"""
 class TCPChannel(Channel[T]):
     def send(self, e):
         return super().send(e)
@@ -22,6 +29,9 @@ class TCPChannel(Channel[T]):
     def recv(self):
         return super().recv()
 
+"""
+Queue Channel for local communication
+"""
 class QChannel(Channel[T]):
     def __init__(self) -> None:
         self.queue = deque()
