@@ -14,7 +14,7 @@ def verify_channels(f):
     analyzer.check()
     return f
 
-class Analyzer(ast.NodeVisitor):
+class Analyzer():
     def __init__(self, func):
         self.func = func
 
@@ -24,7 +24,7 @@ class Analyzer(ast.NodeVisitor):
     """
     def scan(self):
         file = dedent(inspect.getfile(self.func))
-        src = _read_src_from_file(file)
+        src = self._read_src_from_file(file)
         tree : ast.Module = ast.parse(src)
         self.functions, self.channels = Scanner(tree).run()
 
@@ -39,6 +39,6 @@ class Analyzer(ast.NodeVisitor):
     def report(self):
         pprint(self.channels)
 
-def _read_src_from_file(file):
-    with open(file, "r") as f:
-        return f.read()
+    def _read_src_from_file(self, file):
+        with open(file, "r") as f:
+            return f.read()

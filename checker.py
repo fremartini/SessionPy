@@ -1,6 +1,7 @@
 import ast
 
 from infer import infer
+from util import dump_ast
 
 class Checker(ast.NodeVisitor):
     def __init__(self, tree, functions, channels):
@@ -12,19 +13,6 @@ class Checker(ast.NodeVisitor):
         self.visit(self.tree)
         self.verify_postconditions()
 
-    def verify_postconditions(self):
-        """ 
-        If a session-type list is not empty, it has not been used in
-        accordance with its type: throw error.  
-        """
-        errors = []
-        for ch_name, ch_ops in self.channels.items():
-            if ch_ops:
-                errors.append(f'channel "{ch_name}" is not exhausted {ch_ops}')
-
-        if errors:
-            raise Exception (f"ill-typed program: {errors}")
-
     def visit_FunctionDef(self, node: ast.FunctionDef):
         for dec in node.decorator_list:
             if dec.id == 'verify_channels': 
@@ -34,6 +22,8 @@ class Checker(ast.NodeVisitor):
         for stmt in body:
             match stmt:
                 case ast.Expr(): self.check_expr(stmt)
+                case ast.Assign(): self.check_assign(stmt)
+
 
     def check_expr(self, expr):
         assert(isinstance(expr, ast.Expr))
@@ -99,6 +89,19 @@ class Checker(ast.NodeVisitor):
                 if isinstance(arg, ast.Name) and arg.id in self.channels: 
                     #get func from file
                     self.verify_channels(self.functions[func_name].body)
+
+    def verify_postconditions(self):
+        """ 
+        If a session-type list is not empty, it has not been used in
+        accordance with its type: throw error.  
+        """
+        errors = []
+        for ch_name, ch_ops in self.channels.items():
+            if ch_ops:
+                errors.append(f'channel "{ch_name}" is not exhausted')
+
+        if errors:
+            raise Exception (f"ill-typed program: {errors}")
 
 def assertEq(expected, actual):
     if (not expected == actual):
