@@ -1,12 +1,11 @@
 import inspect
 import ast
-from pprint import pprint
 from scanner import Scanner
 from textwrap import dedent
 from checker import Checker
 
 """
-Annotate functions that should have its channels checked, with this decorator
+Annotate functions that should have its channels checked with this decorator
 """
 def verify_channels(f):
     analyzer = Analyzer(f)
@@ -25,7 +24,7 @@ class Analyzer():
     def scan(self):
         file = dedent(inspect.getfile(self.func))
         src = self._read_src_from_file(file)
-        tree : ast.Module = ast.parse(src)
+        tree = ast.parse(src)
         self.functions, self.channels = Scanner(tree).run()
 
     """
@@ -36,9 +35,6 @@ class Analyzer():
         tree = ast.parse(src)
         Checker(tree, self.functions, self.channels).run()
            
-    def report(self):
-        pprint(self.channels)
-
     def _read_src_from_file(self, file):
         with open(file, "r") as f:
             return f.read()

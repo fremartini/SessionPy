@@ -1,7 +1,6 @@
 import ast
 
 from infer import infer
-from util import dump_ast
 
 class Checker(ast.NodeVisitor):
     def __init__(self, tree, functions, channels):
@@ -85,9 +84,8 @@ class Checker(ast.NodeVisitor):
                                               #            ^^^^^    ^ - Name
             func_name = call.func.id
             for arg in call_args:
-                # we have a function call with a channel
                 if isinstance(arg, ast.Name) and arg.id in self.channels: 
-                    #get func from file
+                    #verify referenced functions body
                     self.verify_channels(self.functions[func_name].body)
 
     def verify_postconditions(self):
