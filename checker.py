@@ -84,19 +84,16 @@ class Checker(ast.NodeVisitor):
         elif isinstance(call_func, ast.Name): # structure: print(), f(), etc.
                                               #            ^^^^^    ^ - Name
             func_name = call.func.id
-            for arg in call_args:
+
+            for idx, arg in enumerate(call_args):
                 if isinstance(arg, ast.Name) and arg.id in self.channels: 
                     func = self.functions[func_name]
-                    func_chan_args = self.get_channel_arguments(func.args)
+                    func_chan_arg = func.args.args[idx].arg
 
-                    self.channels[func_chan_args] = self.channels[arg.id]
+                    self.channels[func_chan_arg] = self.channels[arg.id]
                     self.verify_channels(func.body)
-                    self.channels[arg.id] = self.channels[func_chan_args]
-                    self.channels.pop(func_chan_args)
-
-    def get_channel_arguments(self, args : ast.arguments):
-        a = args.args[0]
-        return a.arg
+                    self.channels[arg.id] = self.channels[func_chan_arg]
+                    self.channels.pop(func_chan_arg)
 
     def verify_postconditions(self):
         """ 

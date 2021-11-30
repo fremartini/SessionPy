@@ -10,3 +10,6 @@ def main():
     v = ch1.recv()
     print('received value', v) # this should NOT happen - wrong type!
     print('sent value', True)  
+
+if __name__ == '__main__':
+    main()
