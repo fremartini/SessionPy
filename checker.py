@@ -63,6 +63,10 @@ class Checker(ast.NodeVisitor):
             channel_name = call_func.value.id           
             op = call_func.attr
             match op:
+                case 'branch':
+                    ...
+                case 'select':
+                    ...
                 case 'send':
                     assert(len(call_args) == 1)
                     arg_typ = infer(call_args[0])

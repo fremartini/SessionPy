@@ -8,31 +8,10 @@ T = TypeVar('T')
 Channel superclass, this should never be instantiated
 """
 class Channel(Generic[T]):
-    def init(self):
-        fsa = construct_fsa(self)
-        self.fsa = fsa
-        self.state = fsa[0]
-
-    def send(self, e):
-        ...
-
-    def recv(self):
-        ...
-
-"""
-TCP Channel for communicating via sockets
-"""
-class TCPChannel(Channel[T]):
-    def send(self, e):
-        return super().send(e)
-
-    def recv(self):
-        return super().recv()
-
-"""
-Queue Channel for local communication
-"""
-class QChannel(Channel[T]):
+    #def init(self):
+    #    fsa = construct_fsa(self)
+    #    self.fsa = fsa
+    #    self.state = fsa[0]
     def __init__(self) -> None:
         self.queue = deque()
 
@@ -41,4 +20,11 @@ class QChannel(Channel[T]):
         return True
 
     def recv(self):
-        return self.queue.popleft()
+        if self.queue:
+            return self.queue.popleft()
+
+    def branch(self, t, e):
+        ...
+
+    def select(self, op):
+        ...

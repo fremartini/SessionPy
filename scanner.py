@@ -52,7 +52,7 @@ class Scanner(ast.NodeVisitor):
     def if_channel_add_to_dict(self, var_name, call_obj):
         assert(isinstance(var_name, ast.Name))
         f = call_obj.func
-        if isinstance(f, ast.Subscript) and f.value.id in ['TCPChannel', 'QChannel']:
+        if isinstance(f, ast.Subscript) and f.value.id in ['Channel']:
             
             # Essentially, typing information is within a Subscript
             """
