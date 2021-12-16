@@ -1,5 +1,5 @@
 import socket, sys
-from tools import recv_int, send_int
+from util import recv_int, send_int
 import sys
 
 HOST = '127.0.0.1'

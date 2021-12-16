@@ -1,5 +1,6 @@
 import yaml
 import socket
+from util import parse
 
 id = 5000
 central_port = 5005 #store in config
@@ -8,13 +9,6 @@ def generate_id():
     global id
     id += 100
     return id
-
-def parse(config):
-    with open(config, "r") as stream:
-        try:
-            return yaml.safe_load(stream)
-        except yaml.YAMLError as exc:
-            print(exc)
 
 def projectGlobalProtocol(protoc):
         roles = dict()
