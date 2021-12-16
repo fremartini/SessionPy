@@ -15,13 +15,7 @@ try:
     i = recv_int(soc)
     print(f'received {i} from Alice')
     
-
-
-
 except socket.error as message:
-
-    # if any error occurs then with the
-    # help of sys.exit() exit from the program
     print('Bind failed. Error Code : '
         + str(message[0]) + ' Message '
         + message[1])

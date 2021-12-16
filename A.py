@@ -15,20 +15,15 @@ except socket.error as message:
         + message[1])
     sys.exit(1)
 
-# We have a connection
-
 soc.listen(2)
 conn, address = soc.accept()
 
-# print the address of connection
 print(f'# Connected with Bob on {address}!')
 
-# Initially, sharing their public keys
 i = recv_int(conn)
 print(f'received integer: {i}')
 
 send_int(conn, 42)
-
 conn.close()
 soc.close()
 print('Protocol exited successfully!')
