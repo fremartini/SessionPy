@@ -1,6 +1,7 @@
 import os
 import socket
 from typing import TypeVar, Generic
+from conversation import send
 from sessiondata import SessionData
 from sessiontype import *
 from collections import deque
@@ -29,11 +30,16 @@ class Channel(Generic[T]):
         if self.queue:
             return self.queue.popleft()
 
-    def offer(self, t, e):
-        raise NotImplementedError
+    def offer(self):
+        v = self.recv()
+        if (v == 0):
+            return Branch.LEFT
+        else:
+            return Branch.RIGHT
 
-    def choose(self, op):
-        raise NotImplementedError
+    def choose(self, leftOrRight):
+        assert(isinstance(leftOrRight, Branch))
+        return self.send(Branch(leftOrRight))
 
 class TCPChannel(Generic[T]):
     def __init__(self) -> None:

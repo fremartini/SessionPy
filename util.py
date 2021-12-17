@@ -50,3 +50,7 @@ def deserialize(obj):
 
 def load_router_config():
     return parse("config.yml")['router']
+
+def print_channels(channels):
+    for ch_name in channels:
+        print(f'"{ch_name}": {channels[ch_name]}')

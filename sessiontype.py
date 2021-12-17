@@ -13,10 +13,10 @@ class Send(SessionType, Generic[A, ST]):
 class Recv(SessionType, Generic[A, ST]):
     ...
 
-class Branch(SessionType, Generic[ST, ST1]):
+class Offer(SessionType, Generic[ST, ST1]):
     ...
 
-class Select(SessionType, Generic[ST, ST1]):
+class Choose(SessionType, Generic[ST, ST1]):
     ...
 
 class End(SessionType):

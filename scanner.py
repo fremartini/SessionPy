@@ -1,4 +1,25 @@
 import ast
+from sessiontype import *
+
+class TypeNode:
+    def __init__(self, action, typ) -> None:
+        self.action = action
+        self.typ = typ
+        self.left = None
+        self.right = None
+    
+    def branch(l, r):
+        cmd1, typ1 = l
+        cmd2, typ2 = r
+        node1 = TypeNode(cmd1, typ1)
+        node2 = TypeNode(cmd2, typ2)
+        return (node1, node2)
+
+    def empty_if_none(self, obj):
+        return '' if obj == None else str(obj) + " "
+
+    def __str__(self) -> str:
+        return f"[action: {self.action} " + (f'{self.typ} ' if self.typ else '') + (f'left: {self.left} ' if self.left else '') + (f'right: {self.right}' if self.right else '') + "]"
 
 class Scanner(ast.NodeVisitor):
     def __init__(self, file_ast):
@@ -62,28 +83,36 @@ class Scanner(ast.NodeVisitor):
             according to the action performed with the subscript.
             """
             st = self.search_slice(f.slice)
-            it = iter(st)
-            self.channels[var_name.id] = list(zip(it,it)) # store list of tuples [(send, int), (recv, bool) etc.]
+            self.channels[var_name.id] = st
 
-    def search_slice(self, sliced):
-        acc = []
-        if isinstance(sliced, ast.Tuple): 
-            # A tuple of the form (<type>, Subscript) where Subcscript should be recursively called
-            for dim in sliced.dims:
-                if isinstance(dim, ast.Name):
-                    if dim.id != 'End':
-                        acc.append(strToTyp(dim.id))
-                else:
-                    assert(isinstance(dim, ast.Subscript))
-                    tmp = self.search_slice(dim)
-                    acc += tmp
-        if isinstance(sliced, ast.Subscript):
-            name = sliced.value # This is the ast.Name of the action, i.e. Send/Recv/End
-            assert(isinstance(name, ast.Name))
-            tmp = self.search_slice(sliced.slice)
-            acc.append(str.lower(name.id))
-            acc += tmp
-        return acc
+    def search_slice(self, func_slice):
+        if isinstance(func_slice, ast.Name): # base case: End
+            assert (str.lower(func_slice.id) == 'end')
+            return None
+
+        tn = None
+        action = func_slice.value # This is the ast.Name of the action, i.e. Send/Recv/End
+        assert(isinstance(action, ast.Name))
+        action = str.lower(action.id)
+        if action == 'offer':
+            assert(isinstance(func_slice.slice, ast.Tuple))
+            st1 = self.search_slice(func_slice.slice.elts[0])
+            st2 = self.search_slice(func_slice.slice.elts[1])
+            tn = TypeNode(action, None)
+            tn.left = st1
+            tn.right = st2
+        else:
+            typ = self.get_concrete_type(func_slice.slice)
+            st  = self.get_session_type(func_slice.slice)
+            tn = TypeNode(action, strToTyp(typ))
+            tn.right = st
+        return tn
+
+    def get_concrete_type(self, slice):
+        return slice.elts[0].id
+    
+    def get_session_type(self, slice):
+        return self.search_slice(slice.elts[1])
 
 def strToTyp(s):
     match s:

@@ -1,6 +1,6 @@
 import ast
 
-from util import dump_ast
+from util import dump_ast, print_channels
 from infer import infer
 
 class Checker(ast.NodeVisitor):
@@ -18,12 +18,55 @@ class Checker(ast.NodeVisitor):
             if dec.id == 'verify_channels': 
                 self.verify_channels(node.body)
 
-    def verify_channels(self, body):
-        for stmt in body:
+    def verify_channels(self, stmts):
+        for stmt in stmts:
             match stmt:
                 case ast.Expr(): self.check_expr(stmt)
                 case ast.Assign(): self.check_assign(stmt)
+                case ast.Match(): self.check_match(stmt)
 
+    def check_match(self, match):
+        assert(isinstance(match, ast.Match))
+
+        if self.is_channel_offer(match.subject):
+            ch_name = match.subject.func.value.id
+            #dump_ast(match)
+            cases = match.cases
+            assert len(cases) == 2
+            for case in cases:
+                pattern = case.pattern
+                body = case.body
+
+                att = pattern.value
+
+                if att.attr == 'LEFT':
+                    tmp = self.channels[ch_name]
+                    self.channels[ch_name] = self.channels[ch_name].left
+                    self.verify_channels(body)
+
+                    assert(not self.channels[ch_name])
+                    self.channels[ch_name] = tmp
+                    self.channels[ch_name].left = None
+                elif att.attr == 'RIGHT':
+                    tmp = self.channels[ch_name]
+                    self.channels[ch_name] = self.channels[ch_name].right
+                    self.verify_channels(body)
+                    assert(not self.channels[ch_name])
+                    self.channels[ch_name] = tmp
+                    self.channels[ch_name].right = None
+
+            self.channels[ch_name] = self.channels[ch_name].right
+
+    # check that att is of form x.y 
+    def check_attribute(self, att, predX, y): 
+        assert(isinstance(att, ast.Attribute))
+        assert(isinstance(att.value, ast.Name))
+        return predX(att.value.id) and att.attr == y
+
+    def is_channel_offer(self, subject):
+        return (isinstance(subject, ast.Call) and 
+                isinstance(subject.func, ast.Attribute) and
+                self.check_attribute(subject.func, lambda x: x in self.channels, 'offer'))
 
     def check_expr(self, expr):
         assert(isinstance(expr, ast.Expr))
@@ -39,7 +82,7 @@ class Checker(ast.NodeVisitor):
     """
     def check_assign(self, asgn):
         assert(isinstance(asgn, ast.Assign))
-        t, v = *asgn.targets, asgn.value 
+        _, v = *asgn.targets, asgn.value 
         if isinstance(v, ast.Call):
             self.check_call(v)
 
@@ -63,9 +106,16 @@ class Checker(ast.NodeVisitor):
             channel_name = call_func.value.id           
             op = call_func.attr
             match op:
-                case 'branch':
-                    ...
-                case 'select':
+                case 'offer':
+                    assert(len(call_args) == 0)
+                    st = self.channels[channel_name]
+                    if not st:
+                        raise Exception("Channel has been exhausted of operations")
+                    print(f"expected {op}, got {st.action}")
+                    assertEq(st.action, op)
+
+                case 'choose':
+
                     ...
                 case 'send':
                     assert(len(call_args) == 1)
@@ -73,18 +123,16 @@ class Checker(ast.NodeVisitor):
                     st = self.channels[channel_name]
                     if not st:
                         raise Exception("Channel has been exhausted of operations")
-                    (action,typ), *tail = st
-                    assertEq(typ, arg_typ)
-                    assertEq(action, op)
-                    self.channels[channel_name] = tail
+                    assertEq(st.typ, arg_typ)
+                    assertEq(st.action, op)
+                    self.channels[channel_name] = st.right
                 case 'recv':
                     assert(len(call_args) == 0)
                     st = self.channels[channel_name]
                     if not st:
                         raise Exception("Channel has been exhausted of operations")
-                    (action,typ), *tail = st
-                    assertEq(action, op)
-                    self.channels[channel_name] = tail
+                    assertEq(st.action, op)
+                    self.channels[channel_name] = st.right
         elif isinstance(call_func, ast.Name): # structure: print(), f(), etc.
                                               #            ^^^^^    ^ - Name
             func_name = call.func.id
@@ -107,7 +155,7 @@ class Checker(ast.NodeVisitor):
         errors = []
         for ch_name, ch_ops in self.channels.items():
             if ch_ops:
-                errors.append(f'channel "{ch_name}" is not exhausted')
+                errors.append(f'channel "{ch_name}" is not exhausted, missing: {self.channels[ch_name]}')
 
         if errors:
             raise Exception (f"ill-typed program: {errors}")
