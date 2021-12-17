@@ -94,7 +94,7 @@ class Scanner(ast.NodeVisitor):
         action = func_slice.value # This is the ast.Name of the action, i.e. Send/Recv/End
         assert(isinstance(action, ast.Name))
         action = str.lower(action.id)
-        if action == 'offer':
+        if action in ['offer', 'choose']:
             assert(isinstance(func_slice.slice, ast.Tuple))
             st1 = self.search_slice(func_slice.slice.elts[0])
             st2 = self.search_slice(func_slice.slice.elts[1])

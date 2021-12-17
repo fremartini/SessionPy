@@ -1,6 +1,6 @@
 import inspect
 import ast
-from scanner import Scanner, TypeNode
+from scanner import Scanner
 from textwrap import dedent
 from checker import Checker
 from util import print_channels
