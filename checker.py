@@ -2,27 +2,38 @@ import ast
 from infer import infer
 from enum import Enum
 from util import channels_str
+from collections import deque
+
 class Scope(Enum):
     LEFT = 0
     RIGHT = 1
-    NORMAL = 2
 
 class Checker(ast.NodeVisitor):
     def __init__(self, tree, functions, channels):
         self.tree = tree
         self.functions = functions
         self.channels = channels
-        self.scope = Scope.NORMAL
+        self.scope = []
 
-    def get_channel_name_scope(self, ch_name : str) -> str:
-        key = ch_name
-        match self.scope:
-            case Scope.LEFT: 
-                key = f'{ch_name}_LEFT'
-            case Scope.RIGHT: 
-                key = f'{ch_name}_RIGHT'
-        return key
+    def get_session_type(self, ch_name : str):
+        st = self.channels[ch_name]
+        for left_right in self.scope:
+            if left_right == Scope.LEFT:
+                st = st.left
+            else:
+                st = st.right
+        return st
 
+    """
+        [] = normal
+        [RIGHT] = right branch
+        [RIGHT, LEFT] = right, then left
+    """
+    def add_scope(self, scope_type : Scope):
+        self.scope.append(scope_type)
+
+    def pop_scope(self):
+        return self.scope.pop()
 
 
     def run(self):
@@ -79,12 +90,15 @@ class Checker(ast.NodeVisitor):
                 self.check_attribute(subject.func, lambda x: x in self.channels, 'offer'))
 
     def check_if(self, expr):
-        body = expr.body
-        orelse = expr.orelse
-
-        self.verify_channels(body)
-        self.scope = Scope.NORMAL
-        self.verify_channels(orelse)
+        prev_scope_count = len(self.scope)
+        self.verify_channels(expr.body)
+        while prev_scope_count != len(self.scope):
+            self.pop_scope()
+            
+        prev_prev_scope_count = len(self.scope) 
+        self.verify_channels(expr.orelse)
+        while prev_prev_scope_count != len(self.scope):
+            self.pop_scope()
 
     def check_expr(self, expr):
         assert(isinstance(expr, ast.Expr))
@@ -121,12 +135,13 @@ class Checker(ast.NodeVisitor):
         call_args = call.args
         if(isinstance(call_func, ast.Attribute)):       # this structure: x.y()
                                                         #                 ^ attribute
-            ch_name = self.get_channel_name_scope(call_func.value.id) 
+            ch_name = call_func.value.id
             op = call_func.attr
-            st = self.channels[ch_name]
+            st = self.get_session_type(ch_name)
             match op:
                 case 'choose':
                     print('Scope', self.scope, 'in call to choose, current channels:\n', channels_str(self.channels))
+                    print('current channel name', ch_name)
                     assert(len(call_args) == 1)
                     arg = call_args[0]
                     if not st:
@@ -135,10 +150,7 @@ class Checker(ast.NodeVisitor):
                     assert(arg.value.id == 'Branch')
                     left_or_right = arg.attr
                     assert left_or_right in ['LEFT', 'RIGHT']
-                    self.scope = Scope.LEFT if left_or_right == 'LEFT' else Scope.RIGHT
-                    ch_name = self.get_channel_name_scope(ch_name)
-                    self.channels[ch_name] = st.left if self.scope == Scope.LEFT else st.right
-                    print('CHANNELS:\n', self.channels)
+                    self.add_scope(Scope.LEFT if left_or_right == 'LEFT' else Scope.RIGHT)
                 case 'send':
                     print('Scope', self.scope, 'in call to SEND, current channels:\n', channels_str(self.channels))
                     assert(len(call_args) == 1)
@@ -147,9 +159,10 @@ class Checker(ast.NodeVisitor):
                         raise Exception(f"{ch_name} has been exhausted of operations")
                     assertEq(st.typ, arg_typ)
                     assertEq(st.action, op)
-                    self.channels[ch_name] = st.right
+                    self.channels[ch_name] = st.right # TODO might explode
                 case 'recv':
                     print('Scope', self.scope, 'in call to RECV, current channels:\n', channels_str(self.channels))
+                    print('current channel name', ch_name)
                     assert(len(call_args) == 0)
                     if not st:
                         raise Exception(f"{ch_name} has been exhausted of operations")
