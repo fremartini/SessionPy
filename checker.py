@@ -1,11 +1,29 @@
 import ast
 from infer import infer
+from enum import Enum
+from util import channels_str
+class Scope(Enum):
+    LEFT = 0
+    RIGHT = 1
+    NORMAL = 2
 
 class Checker(ast.NodeVisitor):
     def __init__(self, tree, functions, channels):
         self.tree = tree
         self.functions = functions
         self.channels = channels
+        self.scope = Scope.NORMAL
+
+    def get_channel_name_scope(self, ch_name : str) -> str:
+        key = ch_name
+        match self.scope:
+            case Scope.LEFT: 
+                key = f'{ch_name}_LEFT'
+            case Scope.RIGHT: 
+                key = f'{ch_name}_RIGHT'
+        return key
+
+
 
     def run(self):
         self.visit(self.tree)
@@ -34,24 +52,18 @@ class Checker(ast.NodeVisitor):
             for case in cases:
                 pattern = case.pattern
                 body = case.body
-
+                # st = self.get_session_type(ch_name)
                 att = pattern.value
-
                 if att.attr == 'LEFT':
-                    tmp = self.channels[ch_name]
-                    self.channels[ch_name] = self.channels[ch_name].left
+                    key = f'{ch_name}_LEFT'
+                    self.channels[key] = self.channels[ch_name].left
                     self.verify_channels(body)
-
-                    assert(not self.channels[ch_name])
-                    self.channels[ch_name] = tmp
-                    self.channels[ch_name].left = None
+                    self.scope = Scope.LEFT
                 elif att.attr == 'RIGHT':
-                    tmp = self.channels[ch_name]
-                    self.channels[ch_name] = self.channels[ch_name].right
+                    key = f'{ch_name}_RIGHT'
+                    self.channels[key] = self.channels[ch_name].right
                     self.verify_channels(body)
-                    assert(not self.channels[ch_name])
-                    self.channels[ch_name] = tmp
-                    self.channels[ch_name].right = None
+                    self.scope = Scope.RIGHT
 
             self.channels[ch_name] = self.channels[ch_name].right
 
@@ -71,6 +83,7 @@ class Checker(ast.NodeVisitor):
         orelse = expr.orelse
 
         self.verify_channels(body)
+        self.scope = Scope.NORMAL
         self.verify_channels(orelse)
 
     def check_expr(self, expr):
@@ -108,41 +121,40 @@ class Checker(ast.NodeVisitor):
         call_args = call.args
         if(isinstance(call_func, ast.Attribute)):       # this structure: x.y()
                                                         #                 ^ attribute
-            channel_name = call_func.value.id           
+            ch_name = self.get_channel_name_scope(call_func.value.id) 
             op = call_func.attr
+            st = self.channels[ch_name]
             match op:
                 case 'choose':
+                    print('Scope', self.scope, 'in call to choose, current channels:\n', channels_str(self.channels))
                     assert(len(call_args) == 1)
-                    st = self.channels[channel_name]
-
+                    arg = call_args[0]
                     if not st:
-                        raise Exception(f"{channel_name} has been exhausted of operations")
+                        raise Exception(f"{ch_name} has been exhausted of operations")
 
-                    arg = call_args[0].attr
-
-                    if (str.lower(arg) == "left"):
-                        self.channels[channel_name] = st.left
-                    elif (str.lower(arg) == "right"):
-                        self.channels[channel_name] = st.right
-                    else:
-                        raise Exception("not left or right")   
+                    assert(arg.value.id == 'Branch')
+                    left_or_right = arg.attr
+                    assert left_or_right in ['LEFT', 'RIGHT']
+                    self.scope = Scope.LEFT if left_or_right == 'LEFT' else Scope.RIGHT
+                    ch_name = self.get_channel_name_scope(ch_name)
+                    self.channels[ch_name] = st.left if self.scope == Scope.LEFT else st.right
+                    print('CHANNELS:\n', self.channels)
                 case 'send':
+                    print('Scope', self.scope, 'in call to SEND, current channels:\n', channels_str(self.channels))
                     assert(len(call_args) == 1)
                     arg_typ = infer(call_args[0])
-                    st = self.channels[channel_name]
                     if not st:
-                        raise Exception(f"{channel_name} has been exhausted of operations")
+                        raise Exception(f"{ch_name} has been exhausted of operations")
                     assertEq(st.typ, arg_typ)
                     assertEq(st.action, op)
-                    self.channels[channel_name] = st.right
+                    self.channels[ch_name] = st.right
                 case 'recv':
+                    print('Scope', self.scope, 'in call to RECV, current channels:\n', channels_str(self.channels))
                     assert(len(call_args) == 0)
-                    st = self.channels[channel_name]
                     if not st:
-                        raise Exception(f"{channel_name} has been exhausted of operations")
+                        raise Exception(f"{ch_name} has been exhausted of operations")
                     assertEq(st.action, op)
-                        
-                    self.channels[channel_name] = st.right
+                    self.channels[ch_name] = st.right
         elif isinstance(call_func, ast.Name): # structure: print(), f(), etc.
                                               #            ^^^^^    ^ - Name
             func_name = call.func.id
@@ -163,6 +175,7 @@ class Checker(ast.NodeVisitor):
         accordance with its type: throw error.  
         """
         errors = []
+        print('final channels:\n', channels_str(self.channels))
         for ch_name, ch_ops in self.channels.items():
             if ch_ops:
                 errors.append(f'channel "{ch_name}" is not exhausted, missing: {self.channels[ch_name]}')

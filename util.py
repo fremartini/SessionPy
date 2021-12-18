@@ -54,3 +54,10 @@ def load_router_config():
 def print_channels(channels):
     for ch_name in channels:
         print(f'"{ch_name}": {channels[ch_name]}')
+
+def channels_str(channels):
+    res = ''
+    for ch_name in channels:
+        res += f'"{ch_name}": {channels[ch_name]}\n'
+    return res
+        
