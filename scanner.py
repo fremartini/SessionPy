@@ -1,6 +1,5 @@
 import ast
 from sessiontype import *
-from util import dump_ast
 
 class TypeNode:
     def __init__(self, action, typ) -> None:
@@ -96,7 +95,6 @@ class Scanner(ast.NodeVisitor):
         assert(isinstance(action, ast.Name))
         action = str.lower(action.id)
         if action in ['offer', 'choose']:
-            dump_ast(func_slice.slice)
             assert(isinstance(func_slice.slice, ast.Tuple))
             st1 = self.search_slice(func_slice.slice.elts[0])
             st2 = self.search_slice(func_slice.slice.elts[1])

@@ -13,16 +13,20 @@ class Checker(ast.NodeVisitor):
         self.tree = tree
         self.functions = functions
         self.channels = channels
-        self.scope = []
+        self.scopes = []
 
     def get_session_type(self, ch_name : str):
         st = self.channels[ch_name]
-        for left_right in self.scope:
+        for left_right in self.scopes:
             if left_right == Scope.LEFT:
                 st = st.left
             else:
                 st = st.right
         return st
+
+    def adv(self, ch_name):
+        self.channels[ch_name] = self.channels[ch_name].right
+        return self.channels[ch_name]
 
     """
         [] = normal
@@ -30,10 +34,10 @@ class Checker(ast.NodeVisitor):
         [RIGHT, LEFT] = right, then left
     """
     def add_scope(self, scope_type : Scope):
-        self.scope.append(scope_type)
+        self.scopes.append(scope_type)
 
     def pop_scope(self):
-        return self.scope.pop()
+        return self.scopes.pop()
 
 
     def run(self):
@@ -69,12 +73,12 @@ class Checker(ast.NodeVisitor):
                     key = f'{ch_name}_LEFT'
                     self.channels[key] = self.channels[ch_name].left
                     self.verify_channels(body)
-                    self.scope = Scope.LEFT
+                    self.scopes = Scope.LEFT
                 elif att.attr == 'RIGHT':
                     key = f'{ch_name}_RIGHT'
                     self.channels[key] = self.channels[ch_name].right
                     self.verify_channels(body)
-                    self.scope = Scope.RIGHT
+                    self.scopes = Scope.RIGHT
 
             self.channels[ch_name] = self.channels[ch_name].right
 
@@ -90,14 +94,14 @@ class Checker(ast.NodeVisitor):
                 self.check_attribute(subject.func, lambda x: x in self.channels, 'offer'))
 
     def check_if(self, expr):
-        prev_scope_count = len(self.scope)
+        prev_scope_count = len(self.scopes)
         self.verify_channels(expr.body)
-        while prev_scope_count != len(self.scope):
+        while prev_scope_count != len(self.scopes):
             self.pop_scope()
             
-        prev_prev_scope_count = len(self.scope) 
+        prev_prev_scope_count = len(self.scopes) 
         self.verify_channels(expr.orelse)
-        while prev_prev_scope_count != len(self.scope):
+        while prev_prev_scope_count != len(self.scopes):
             self.pop_scope()
 
     def check_expr(self, expr):
@@ -140,8 +144,8 @@ class Checker(ast.NodeVisitor):
             st = self.get_session_type(ch_name)
             match op:
                 case 'choose':
-                    print('Scope', self.scope, 'in call to choose, current channels:\n', channels_str(self.channels))
-                    print('current channel name', ch_name)
+                    #print('Scope', self.scopes, 'in call to choose, current channels:\n', channels_str(self.channels))
+                    #print('current channel name', ch_name)
                     assert(len(call_args) == 1)
                     arg = call_args[0]
                     if not st:
@@ -152,22 +156,47 @@ class Checker(ast.NodeVisitor):
                     assert left_or_right in ['LEFT', 'RIGHT']
                     self.add_scope(Scope.LEFT if left_or_right == 'LEFT' else Scope.RIGHT)
                 case 'send':
-                    print('Scope', self.scope, 'in call to SEND, current channels:\n', channels_str(self.channels))
+                    #print('Scope', self.scopes, 'in call to SEND, current channels:\n', channels_str(self.channels))
                     assert(len(call_args) == 1)
                     arg_typ = infer(call_args[0])
                     if not st:
                         raise Exception(f"{ch_name} has been exhausted of operations")
                     assertEq(st.typ, arg_typ)
                     assertEq(st.action, op)
-                    self.channels[ch_name] = st.right # TODO might explode
+
+
+                    if not self.scopes: #global scope
+                        self.channels[ch_name] = st.right
+                    else: #left or right
+                        ist = self.get_session_type(ch_name)
+                        if (self.scopes[len(self.scopes)-1] == Scope.LEFT):
+                            self.channels[ch_name].left = ist.right
+                        else:
+                            self.channels[ch_name].right = ist.right
+
+                        if(self.channels[ch_name].left == None and self.channels[ch_name].right == None):
+                            self.channels[ch_name] = self.channels[ch_name].right
                 case 'recv':
-                    print('Scope', self.scope, 'in call to RECV, current channels:\n', channels_str(self.channels))
-                    print('current channel name', ch_name)
+                    #print('Scope', self.scopes, 'in call to RECV, current channels:\n', channels_str(self.channels))
+                    #print('current channel name', ch_name)
                     assert(len(call_args) == 0)
                     if not st:
                         raise Exception(f"{ch_name} has been exhausted of operations")
                     assertEq(st.action, op)
-                    self.channels[ch_name] = st.right
+
+                    if not self.scopes: #global scope
+                        self.channels[ch_name] = st.right
+                    else: #left or right
+                        ist = self.get_session_type(ch_name)
+                        if (self.scopes[len(self.scopes)-1] == Scope.LEFT):
+                            self.channels[ch_name].left = ist.right
+                        else:
+                            self.channels[ch_name].right = ist.right
+
+
+                        if(self.channels[ch_name].left == None and self.channels[ch_name].right == None):
+                            self.channels[ch_name] = self.channels[ch_name].right
+
         elif isinstance(call_func, ast.Name): # structure: print(), f(), etc.
                                               #            ^^^^^    ^ - Name
             func_name = call.func.id
@@ -188,7 +217,7 @@ class Checker(ast.NodeVisitor):
         accordance with its type: throw error.  
         """
         errors = []
-        print('final channels:\n', channels_str(self.channels))
+        #print('final channels:\n', channels_str(self.channels))
         for ch_name, ch_ops in self.channels.items():
             if ch_ops:
                 errors.append(f'channel "{ch_name}" is not exhausted, missing: {self.channels[ch_name]}')

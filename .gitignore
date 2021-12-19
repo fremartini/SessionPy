@@ -1,6 +1,7 @@
 role_*
 .vscode/
 *.p
+.ionide/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
