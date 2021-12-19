@@ -1,5 +1,6 @@
 import ast
 from sessiontype import *
+from util import dump_ast
 
 class TypeNode:
     def __init__(self, action, typ) -> None:
@@ -9,11 +10,11 @@ class TypeNode:
         self.right = None
     
     def branch(l, r):
-        cmd1, typ1 = l
-        cmd2, typ2 = r
-        node1 = TypeNode(cmd1, typ1)
-        node2 = TypeNode(cmd2, typ2)
-        return (node1, node2)
+        action1, typ1 = l
+        action2, typ2 = r
+        l_node = TypeNode(action1, typ1)
+        r_node = TypeNode(action2, typ2)
+        return (l_node, r_node)
 
     def empty_if_none(self, obj):
         return '' if obj == None else str(obj) + " "
@@ -22,38 +23,33 @@ class TypeNode:
         return f"[action: {self.action} " + (f'{self.typ} ' if self.typ else '') + (f'left: {self.left} ' if self.left else '') + (f'right: {self.right}' if self.right else '') + "]"
 
 class Scanner(ast.NodeVisitor):
-    def __init__(self, file_ast):
-        self.file_ast = file_ast
+    def __init__(self, ast):
+        self.ast = ast #TODO: only look at referenced functions
         self.functions = {}
         self.channels = {}
-        self.entry = None
 
     """
     Scans a file AST for channels in the annotated function
     and functions that accepts channels as parameters
     """
     def run(self):
-        self.visit(self.file_ast)
+        self.visit(self.ast)
         return (self.functions, self.channels)
 
     def visit_FunctionDef(self, node: ast.FunctionDef):
-        for dec in node.decorator_list:
-            if dec.id == 'verify_channels': 
-                if self.entry != None:
-                    raise Exception('multiple defs with @verify_channels found')
-                self.entry = node
-                self.verify_channels(node.body)
+        self.verify_channels(node.body)
 
-        args = node.args
-        assert(isinstance(args, ast.arguments))
-        args = args.args
-        for a in args:
-            assert(isinstance(a, ast.arg))
-            ann = a.annotation.id               #type annotation : 'Channel'
-            a = a.arg                           #variable name : 'c'
-            if (str.lower(ann) == 'channel'):
-                self.functions[node.name] = node
-                break
+        if False:
+            args = node.args
+            assert(isinstance(args, ast.arguments))
+            args = args.args
+            for a in args:
+                assert(isinstance(a, ast.arg))
+                ann = a.annotation.id               #type annotation : 'Channel'
+                a = a.arg                           #variable name : 'c'
+                if (str.lower(ann) == 'channel'):
+                    self.functions[node.name] = node
+                    break
 
     def verify_channels(self, body):
         for stmt in body:

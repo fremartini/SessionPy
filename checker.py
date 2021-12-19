@@ -67,7 +67,6 @@ class Checker(ast.NodeVisitor):
             for case in cases:
                 pattern = case.pattern
                 body = case.body
-                # st = self.get_session_type(ch_name)
                 att = pattern.value
                 if att.attr == 'LEFT':
                     key = f'{ch_name}_LEFT'
