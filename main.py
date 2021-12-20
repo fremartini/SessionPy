@@ -4,19 +4,17 @@ from typechecking import verify_channels
 
 @verify_channels
 def main():
-    ch = Channel[Send[int, Offer[Send[str, Recv[int, End]], Send[int, End]]]]()
-    ch.send(5)
+    ch = Channel[Send[int, Recv[bool, Send[str, End]]]]()
+    ch.send(42) 
+    print('sent value', True)  
+    f(ch)
+    ch.send("we're done here...") # ending the session
 
-    match ch.offer():
-        case Branch.LEFT:
-            print("A: receiving message from client (B)")
-            ch.send("hello!")
-            msg = ch.recv()
-            print(f"A: received message '{msg}'")    
-            
-        case Branch.RIGHT:
-            print("A: sending number to client (B)")
-            ch.send(42)
+def f(ch: Channel):
+    v = ch.recv()
+    print('received value', 666) # this should happen! expecting a receive
+    return v
+
 
 if __name__ == '__main__':
     main()

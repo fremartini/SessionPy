@@ -23,8 +23,9 @@ class TypeNode:
         return f"[action: {self.action} " + (f'{self.typ} ' if self.typ else '') + (f'left: {self.left} ' if self.left else '') + (f'right: {self.right}' if self.right else '') + "]"
 
 class Scanner(ast.NodeVisitor):
-    def __init__(self, ast):
-        self.ast = ast #TODO: only look at referenced functions
+    def __init__(self, ast, file_ast):
+        self.ast = ast
+        self.file_ast = file_ast
         self.functions = {}
         self.channels = {}
 
@@ -33,13 +34,17 @@ class Scanner(ast.NodeVisitor):
     and functions that accepts channels as parameters
     """
     def run(self):
-        self.visit(self.ast)
+        self.visit(self.file_ast)
         return (self.functions, self.channels)
 
     def visit_FunctionDef(self, node: ast.FunctionDef):
-        self.verify_channels(node.body)
+        print(f'\nfunctionDef: visiting {node.name}')
+        if len(node.decorator_list) == 1:
+            dec = node.decorator_list[0]
 
-        if False:
+            if dec.id == 'verify_channels':
+                self.verify_channels(node.body)
+        else:
             args = node.args
             assert(isinstance(args, ast.arguments))
             args = args.args
@@ -116,3 +121,5 @@ def strToTyp(s):
         case 'str': return str
         case 'bool': return bool
         case _: raise Exception (f"unknown type {s}")
+
+        

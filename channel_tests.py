@@ -27,10 +27,9 @@ class TestVerifyChannels(unittest.TestCase):
             ch.send(True)
             print('received value', v) # this should happen!
             print('sent value', True)
-
-    """
+    
     def test_good4(test):
-        def f(c: Channel):
+        def f(c : Channel):
             v = c.recv()
             print('received value', 666) # this should happen! expecting a receive
             return v
@@ -43,12 +42,11 @@ class TestVerifyChannels(unittest.TestCase):
             print('sent value', True)  
             f(ch)
             ch.send("we're done here...") # ending the session
-    """
-
+    
     def test_good5(self):
         @verify_channels
         def main():
-            ch = Channel[Send[int, Offer[Send[str, Recv[int, End]], Send[int, End]]]]()
+            ch = Channel[Send[int, Offer[Send[str, Recv[str, End]], Send[int, End]]]]()
             ch.send(5)
 
             match ch.offer():
@@ -61,11 +59,12 @@ class TestVerifyChannels(unittest.TestCase):
                 case Branch.RIGHT:
                     print("A: sending number to client (B)")
                     ch.send(42)
+    
 
     def test_good6(self):
         @verify_channels
         def main():
-            ch = Channel[Recv[int, Choose[Send[str, End], Choose[Send[int, End], Recv[int, End]]]]]()
+            ch = Channel[Recv[int, Choose[Send[str, End], Choose[Send[str, End], Recv[int, End]]]]]()
             n = ch.recv()
 
             if 10 > 5:
@@ -75,11 +74,30 @@ class TestVerifyChannels(unittest.TestCase):
                 ch.choose(Branch.RIGHT)
                 if 1 + 3 > 4:
                     ch.choose(Branch.LEFT)
-                    ch.send(1)
+                    ch.send("hi")
                 else:
                     ch.choose(Branch.RIGHT)
                     i = ch.recv()
+    
+    def test_passing_channel_multiple_times_should_be_okay(test):
 
+        def f(c : Channel):
+            v = c.recv()
+            g(v, c)
+
+        def g(i: int, chan : Channel):
+            res = 'incremented by one is ' + str(i + 1)
+            chan.send(res)
+
+        @verify_channels
+        def main():
+            ch = Channel[Send[int, Recv[int, Send[str, End]]]]()
+            ch.send(42) 
+            print('sent value', True)  
+            f(ch)
+            ch.send("we're done here...") # ending the session
+    
+    
     def test_bad1(self):
         with self.assertRaises(Exception):
             @verify_channels

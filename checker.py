@@ -205,7 +205,6 @@ class Checker(ast.NodeVisitor):
         elif isinstance(call_func, ast.Name): # structure: print(), f(), etc.
                                               #            ^^^^^    ^ - Name
             func_name = call.func.id
-
             for idx, arg in enumerate(call_args):
                 if isinstance(arg, ast.Name) and arg.id in self.channels: 
                     func = self.functions[func_name]

@@ -18,11 +18,11 @@ Scan the file the decorated function belongs to, for functions
 that has Channels as parameters
 """
 def scan(func):
-    #file = dedent(inspect.getfile(func))
-    #src = _read_src_from_file(file)
-    #tree = ast.parse(src)
+    file = dedent(inspect.getfile(func))
+    file_src = _read_src_from_file(file)
+    file_ast = ast.parse(file_src)
     tree = ast.parse(dedent(inspect.getsource(func)))
-    functions, channels = Scanner(tree).run()
+    functions, channels = Scanner(tree, file_ast).run()
     print(f"#####\nScanner phase found:\nfunctions: {functions}\nchannels: {channels_str(channels)}\n#####")
     return (functions, channels)
 
