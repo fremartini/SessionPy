@@ -38,10 +38,8 @@ class Scanner(ast.NodeVisitor):
         return (self.functions, self.channels)
 
     def visit_FunctionDef(self, node: ast.FunctionDef):
-        print(f'\nfunctionDef: visiting {node.name}')
         if len(node.decorator_list) == 1:
             dec = node.decorator_list[0]
-
             if dec.id == 'verify_channels':
                 self.verify_channels(node.body)
         else:
@@ -50,6 +48,7 @@ class Scanner(ast.NodeVisitor):
             args = args.args
             for a in args:
                 assert(isinstance(a, ast.arg))
+                if not a.annotation: continue
                 ann = a.annotation.id               #type annotation : 'Channel'
                 a = a.arg                           #variable name : 'c'
                 if (str.lower(ann) == 'channel'):

@@ -10,7 +10,8 @@ Annotate functions that should have its channels checked with this decorator
 """
 def verify_channels(f):
     functions, channels = scan(f)
-    check(f, functions, channels)
+    if (functions or channels):
+        check(f, functions, channels)
     return f
 
 """
@@ -23,7 +24,7 @@ def scan(func):
     file_ast = ast.parse(file_src)
     tree = ast.parse(dedent(inspect.getsource(func)))
     functions, channels = Scanner(tree, file_ast).run()
-    print(f"#####\nScanner phase found:\nfunctions: {functions}\nchannels: {channels_str(channels)}\n#####")
+    #print(f"#####\nScanner phase found:\nfunctions: {functions}\nchannels: {channels_str(channels)}#####")
     return (functions, channels)
 
 """

@@ -125,7 +125,6 @@ class TestVerifyChannels(unittest.TestCase):
                 print('received value', v) # this should NOT happen - wrong type!
                 print('sent value', True)  
 
-    """
     def test_bad4(self):
         with self.assertRaises(Exception):
             def f(c: Channel):
@@ -141,7 +140,6 @@ class TestVerifyChannels(unittest.TestCase):
                 f(ch)
                 s = ch.recv()
                 print('received', s) # should NOT happen; at this point we should send
-    """
 
     def test_bad5(self):
         with self.assertRaises(Exception):

@@ -1,4 +1,5 @@
 import ast
+from unittest.main import main
 from infer import infer
 from enum import Enum
 from util import channels_str
@@ -145,9 +146,6 @@ class Checker(ast.NodeVisitor):
                 case 'choose':
                     ch_name = call_func.value.id
                     st = self.get_session_type(ch_name)
-
-                    print('Scope', self.scopes, 'in call to choose, current channels:\n', channels_str(self.channels))
-                    print('current channel name', ch_name)
                     assert(len(call_args) == 1)
                     arg = call_args[0]
                     if not st:
@@ -160,7 +158,6 @@ class Checker(ast.NodeVisitor):
                 case 'send':
                     ch_name = call_func.value.id
                     st = self.get_session_type(ch_name)
-                    print('Scope', self.scopes, 'in call to SEND, current channels:\n', channels_str(self.channels))
                     assert(len(call_args) == 1)
                     arg_typ = infer(call_args[0])
                     if not st:
@@ -182,8 +179,6 @@ class Checker(ast.NodeVisitor):
                 case 'recv':
                     ch_name = call_func.value.id
                     st = self.get_session_type(ch_name)
-                    print('Scope', self.scopes, 'in call to RECV, current channels:\n', channels_str(self.channels))
-                    print('current channel name', ch_name)
                     assert(len(call_args) == 0)
                     if not st:
                         raise Exception(f"{ch_name} has been exhausted of operations")
@@ -207,13 +202,18 @@ class Checker(ast.NodeVisitor):
             func_name = call.func.id
             for idx, arg in enumerate(call_args):
                 if isinstance(arg, ast.Name) and arg.id in self.channels: 
-                    func = self.functions[func_name]
-                    func_chan_arg = func.args.args[idx].arg
-
-                    self.channels[func_chan_arg] = self.channels[arg.id]
+                    func = self.functions[func_name]                #external function, f(ch)
+                    main_channel_name = arg.id                      #channel name where the function was called, ch
+                    func_channel_name = func.args.args[idx].arg     #channel name in called function, ch1
+                    
+                    self.channels[func_channel_name] = self.channels[main_channel_name]
                     self.verify_channels(func.body)
-                    self.channels[arg.id] = self.channels[func_chan_arg]
-                    self.channels.pop(func_chan_arg)
+                    self.channels[main_channel_name] = self.channels[func_channel_name]
+
+                    if not (main_channel_name == func_channel_name): 
+                        self.channels.pop(func_channel_name)
+
+                    
 
     def verify_postconditions(self):
         """ 
@@ -221,7 +221,6 @@ class Checker(ast.NodeVisitor):
         accordance with its type: throw error.  
         """
         errors = []
-        print('final channels:\n', channels_str(self.channels))
         for ch_name, ch_ops in self.channels.items():
             if ch_ops:
                 errors.append(f'channel "{ch_name}" is not exhausted, missing: {self.channels[ch_name]}')
