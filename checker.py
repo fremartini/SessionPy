@@ -1,22 +1,20 @@
 import ast
-from unittest.main import main
-from infer import infer
 from enum import Enum
-from util import channels_str
-from collections import deque
+
 
 class Scope(Enum):
     LEFT = 0
     RIGHT = 1
 
+
 class Checker(ast.NodeVisitor):
-    def __init__(self, tree, functions, channels):
-        self.tree = tree
+    def __init__(self, file_ast, functions, channels):
+        self.file_ast = file_ast
         self.functions = functions
         self.channels = channels
         self.scopes = []
 
-    def get_session_type(self, ch_name : str):
+    def get_session_type(self, ch_name: str):
         st = self.channels[ch_name]
         for left_right in self.scopes:
             if left_right == Scope.LEFT:
@@ -25,29 +23,19 @@ class Checker(ast.NodeVisitor):
                 st = st.right
         return st
 
-    def adv(self, ch_name):
-        self.channels[ch_name] = self.channels[ch_name].right
-        return self.channels[ch_name]
-
-    """
-        [] = normal
-        [RIGHT] = right branch
-        [RIGHT, LEFT] = right, then left
-    """
-    def add_scope(self, scope_type : Scope):
+    def add_scope(self, scope_type: Scope):
         self.scopes.append(scope_type)
 
     def pop_scope(self):
         return self.scopes.pop()
 
-
     def run(self):
-        self.visit(self.tree)
+        self.visit(self.file_ast)
         self.verify_postconditions()
 
     def visit_FunctionDef(self, node: ast.FunctionDef):
         for dec in node.decorator_list:
-            if dec.id == 'verify_channels': 
+            if dec.id == 'verify_channels':
                 self.verify_channels(node.body)
 
     def verify_channels(self, stmts):
@@ -65,8 +53,7 @@ class Checker(ast.NodeVisitor):
             ch_name = match.subject.func.value.id
             st = self.get_session_type(ch_name)
 
-            if not st:
-                raise Exception(f"{ch_name} has been exhausted of operations")
+            self.fail_if_exhausted(st, ch_name)
 
             cases = match.cases
             assert len(cases) == 2
@@ -83,14 +70,18 @@ class Checker(ast.NodeVisitor):
                     self.verify_channels(body)
                     self.pop_scope()
 
-    # checks <predX(x) and attr.y == y>
-    def check_attribute(self, att, predX, y): 
+    def fail_if_exhausted(self, st, ch_name):
+        if not st:
+            raise Exception(f"{ch_name} has been exhausted of operations")
+
+    def check_attribute(self, att, predX, y):
+        """checks <predX(x) and attr.y == y>"""
         assert(isinstance(att, ast.Attribute))
         assert(isinstance(att.value, ast.Name))
         return predX(att.value.id) and att.attr == y
 
     def is_channel_offer(self, subject):
-        return (isinstance(subject, ast.Call) and 
+        return (isinstance(subject, ast.Call) and
                 isinstance(subject.func, ast.Attribute) and
                 self.check_attribute(subject.func, lambda x: x in self.channels, 'offer'))
 
@@ -99,8 +90,8 @@ class Checker(ast.NodeVisitor):
         self.verify_channels(expr.body)
         while prev_scope_count != len(self.scopes):
             self.pop_scope()
-            
-        prev_prev_scope_count = len(self.scopes) 
+
+        prev_prev_scope_count = len(self.scopes)
         self.verify_channels(expr.orelse)
         while prev_prev_scope_count != len(self.scopes):
             self.pop_scope()
@@ -110,110 +101,112 @@ class Checker(ast.NodeVisitor):
         if isinstance(expr.value, ast.Call):
             self.check_call(expr.value)
 
-    """
-    In this function, we check for following two scenarios: 
-     * ch = Channel...
-     * <var> = ch.send/recv
-    First, if we assign a channel to a variable, our dictionary should be updated with session type.
-    Second, if some variable is assigned to a call to our channel, we should progress ST/validate types.
-    """
     def check_assign(self, asgn):
+        """
+        In this function, we check for following two scenarios:
+        * ch = Channel...
+        * <var> = ch.send/recv
+        First, if we assign a channel to a variable, our dictionary should be updated with session type.
+        Second, if some variable is assigned to a call to our channel, we should progress ST/validate types.
+        """
         assert(isinstance(asgn, ast.Assign))
-        _, v = *asgn.targets, asgn.value 
+        _, v = *asgn.targets, asgn.value
         if isinstance(v, ast.Call):
             self.check_call(v)
 
-    """
+    def check_call(self, call):
+        """
         Extracts type and method for a a call object right now ASSUMED to be a
-        channel.  
-        
-        Examples: 
+        channel.
+
+        Examples:
          * ch.send(42) or ch.send(f())
-         * c.recv() 
+         * c.recv()
 
         In the first case, we need to validate that type of argument (42, f())
-        matches the current action and type of our session type.  
-    """
-    def check_call(self, call):
+        matches the current action and type of our session type.
+        """
         assert(isinstance(call, ast.Call))
         call_func = call.func
         call_args = call.args
         if(isinstance(call_func, ast.Attribute)):       # this structure: x.y()
-                                                        #                 ^ attribute
-
+            #                 ^ attribute
             op = call_func.attr
             match op:
                 case 'choose':
-                    ch_name = call_func.value.id
-                    st = self.get_session_type(ch_name)
-                    assert(len(call_args) == 1)
-                    arg = call_args[0]
-                    if not st:
-                        raise Exception(f"{ch_name} has been exhausted of operations")
-
-                    assert(arg.value.id == 'Branch')
-                    left_or_right = arg.attr
-                    assert left_or_right in ['LEFT', 'RIGHT']
-                    self.add_scope(Scope.LEFT if left_or_right == 'LEFT' else Scope.RIGHT)
+                    self.choose(call_func, call_args)
                 case 'send':
-                    ch_name = call_func.value.id
-                    st = self.get_session_type(ch_name)
-                    assert(len(call_args) == 1)
-                    arg_typ = infer(call_args[0])
-                    if not st:
-                        raise Exception(f"{ch_name} has been exhausted of operations")
-                    assertEq(st.typ, arg_typ)
-                    assertEq(st.action, op)
-
-                    if not self.scopes: #global scope
-                        self.channels[ch_name] = st.right
-                    else: #left or right
-                        ist = self.get_session_type(ch_name)
-                        if (self.scopes[len(self.scopes)-1] == Scope.LEFT):
-                            self.channels[ch_name].left = ist.right
-                        else:
-                            self.channels[ch_name].right = ist.right
-
-                        if(self.channels[ch_name].left == None and self.channels[ch_name].right == None):
-                            self.channels[ch_name] = self.channels[ch_name].right
+                    self.send(call_func, call_args, op)
                 case 'recv':
-                    ch_name = call_func.value.id
-                    st = self.get_session_type(ch_name)
-                    assert(len(call_args) == 0)
-                    if not st:
-                        raise Exception(f"{ch_name} has been exhausted of operations")
-                    assertEq(st.action, op)
+                    self.recv(call_func, call_args, op)
 
-                    if not self.scopes: #global scope
-                        self.channels[ch_name] = st.right
-                    else: #left or right
-                        ist = self.get_session_type(ch_name)
-                        if (self.scopes[len(self.scopes)-1] == Scope.LEFT):
-                            self.channels[ch_name].left = ist.right
-                        else:
-                            self.channels[ch_name].right = ist.right
+        elif isinstance(call_func, ast.Name):  # structure: print(), f(), etc.
+            #            ^^^^^    ^ - Name
+            self.function_call(call, call_args)
 
+    def choose(self, call_func, call_args):
+        ch_name = call_func.value.id
+        st = self.get_session_type(ch_name)
+        assert(len(call_args) == 1)
+        arg = call_args[0]
+        if not st:
+            raise Exception(f"{ch_name} has been exhausted of operations")
 
-                        if(self.channels[ch_name].left == None and self.channels[ch_name].right == None):
-                            self.channels[ch_name] = self.channels[ch_name].right
+        assert(arg.value.id == 'Branch')
+        left_or_right = arg.attr
+        assert left_or_right in ['LEFT', 'RIGHT']
+        self.add_scope(Scope.LEFT if left_or_right == 'LEFT' else Scope.RIGHT)
 
-        elif isinstance(call_func, ast.Name): # structure: print(), f(), etc.
-                                              #            ^^^^^    ^ - Name
-            func_name = call.func.id
-            for idx, arg in enumerate(call_args):
-                if isinstance(arg, ast.Name) and arg.id in self.channels: 
-                    func = self.functions[func_name]                #external function, f(ch)
-                    main_channel_name = arg.id                      #channel name where the function was called, ch
-                    func_channel_name = func.args.args[idx].arg     #channel name in called function, ch1
-                    
-                    self.channels[func_channel_name] = self.channels[main_channel_name]
-                    self.verify_channels(func.body)
-                    self.channels[main_channel_name] = self.channels[func_channel_name]
+    def recv(self, call_func, call_args, op):
+        ch_name = call_func.value.id
+        st = self.get_session_type(ch_name)
+        assert(len(call_args) == 0)
+        self.fail_if_exhausted(st, ch_name)
+        assertEq(st.action, op)
 
-                    if not (main_channel_name == func_channel_name): 
-                        self.channels.pop(func_channel_name)
+        self.foo(ch_name)
 
-                    
+    def send(self, call_func, call_args, op):
+        ch_name = call_func.value.id
+        st = self.get_session_type(ch_name)
+        assert(len(call_args) == 1)
+        arg_typ = infer(call_args[0])
+        self.fail_if_exhausted(st, ch_name)
+        assertEq(st.typ, arg_typ)
+        assertEq(st.action, op)
+
+        self.foo(ch_name)
+
+    def function_call(self, call, call_args):
+        func_name = call.func.id
+        for idx, arg in enumerate(call_args):
+            if isinstance(arg, ast.Name) and arg.id in self.channels:
+                # external function, f(ch)
+                func = self.functions[func_name]
+                # channel name where the function was called, ch
+                main_channel_name = arg.id
+                # channel name in called function, ch1
+                func_channel_name = func.args.args[idx].arg
+
+                self.channels[func_channel_name] = self.channels[main_channel_name]
+                self.verify_channels(func.body)
+                self.channels[main_channel_name] = self.channels[func_channel_name]
+
+                if not (main_channel_name == func_channel_name):
+                    self.channels.pop(func_channel_name)
+
+    def foo(self, ch_name):
+        st = self.get_session_type(ch_name)
+        if not self.scopes:  # global scope
+            self.channels[ch_name] = st.right
+        else:  # left or right
+            if (self.scopes[len(self.scopes)-1] == Scope.LEFT):
+                self.channels[ch_name].left = st.right
+            else:
+                self.channels[ch_name].right = st.right
+
+            if(self.channels[ch_name].left == None and self.channels[ch_name].right == None):
+                self.channels[ch_name] = self.channels[ch_name].right
 
     def verify_postconditions(self):
         """ 
@@ -223,11 +216,22 @@ class Checker(ast.NodeVisitor):
         errors = []
         for ch_name, ch_ops in self.channels.items():
             if ch_ops:
-                errors.append(f'channel "{ch_name}" is not exhausted, missing: {self.channels[ch_name]}')
+                errors.append(
+                    f'channel "{ch_name}" is not exhausted, missing: {self.channels[ch_name]}')
 
         if errors:
-            raise Exception (f"ill-typed program: {errors}")
+            raise Exception(f"ill-typed program: {errors}")
+
 
 def assertEq(expected, actual):
     if (not expected == actual):
         raise Exception("expected " + str(expected) + ", found " + str(actual))
+
+
+def infer(expr) -> type:
+    # TODO: currently we only support constants, expand with function calls, expressions etc?
+    if isinstance(expr, ast.Constant):
+        arg = expr.value
+
+    # print(f"argument infered to be type {type(arg)}")
+    return type(arg)

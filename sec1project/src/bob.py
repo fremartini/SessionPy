@@ -4,8 +4,10 @@ from tools import *
 from rsa import *
 import sys
 
+
 def read():
     return sign(receive(soc), alice_e, alice_n)
+
 
 HOST = '127.0.0.1'
 PORT = 50789
@@ -35,7 +37,7 @@ try:
 
     roll_rand = read()
     assert h(roll_rand) == alice_commit
-    roll = int(roll_rand[0]) 
+    roll = int(roll_rand[0])
     print(f'The roll was {roll}')
 
     # In reverse
@@ -45,7 +47,7 @@ try:
 
     reply = read()
     if reply:
-        # Assert Alice received the commit 
+        # Assert Alice received the commit
         assert reply == my_commit
         send_signed(soc, roll_rand, 'roll and random string', 'Alice', my_key)
 
@@ -55,8 +57,8 @@ except socket.error as message:
     # if any error occurs then with the
     # help of sys.exit() exit from the program
     print('Bind failed. Error Code : '
-        + str(message[0]) + ' Message '
-        + message[1])
+          + str(message[0]) + ' Message '
+          + message[1])
     sys.exit()
 
 soc.close()

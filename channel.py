@@ -10,15 +10,13 @@ from util import deserialize, load_router_config, serialize
 
 T = TypeVar('T')
 
+
 class Branch(Enum):
     LEFT = 0
     RIGHT = 1
 
+
 class Channel(Generic[T]):
-    #def init(self):
-    #    fsa = construct_fsa(self)
-    #    self.fsa = fsa
-    #    self.state = fsa[0]
     def __init__(self) -> None:
         self.queue = deque()
 
@@ -41,6 +39,7 @@ class Channel(Generic[T]):
         assert(isinstance(leftOrRight, Branch))
         return self.send(Branch(leftOrRight))
 
+
 class TCPChannel(Generic[T]):
     def __init__(self) -> None:
         yaml = load_router_config()
@@ -62,11 +61,11 @@ class TCPChannel(Generic[T]):
                 print(f"listening on {self.addr}")
                 conn, a = s.accept()
                 with conn:
-                    msg : SessionData = deserialize(conn.recv(1024))
+                    msg: SessionData = deserialize(conn.recv(1024))
                     return msg.payload
         except KeyboardInterrupt:
             os._exit(0)
-            
+
     def offer(self, t, e):
         raise NotImplementedError
 

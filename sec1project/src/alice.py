@@ -1,9 +1,12 @@
-import socket, sys
+import socket
+import sys
 from tools import *
 from rsa import *
 
+
 def read():
     return sign(receive(conn), bob_e, bob_n)
+
 
 HOST = '127.0.0.1'
 PORT = 50789
@@ -18,11 +21,12 @@ my_key.generate()
 
 print("waiting for Bob to connect ...")
 
-try: soc.bind((HOST, PORT))
+try:
+    soc.bind((HOST, PORT))
 except socket.error as message:
     print('Bind failed. Error Code : '
-        + str(message[0]) + ' Message '
-        + message[1])
+          + str(message[0]) + ' Message '
+          + message[1])
     sys.exit(1)
 
 # We have a connection
@@ -48,7 +52,8 @@ reply = read()
 if reply:
     # Check if Bob received the commit
     assert reply == my_commit
-    send_signed(conn, str(my_roll) + rA, 'roll and random string', 'Bob', my_key)
+    send_signed(conn, str(my_roll) + rA,
+                'roll and random string', 'Bob', my_key)
 
 # Receive Bob's roll
 bob_commit = read()

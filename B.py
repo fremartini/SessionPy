@@ -1,4 +1,5 @@
-import socket, sys
+import socket
+import sys
 from util import recv_int, send_int
 import sys
 
@@ -14,11 +15,11 @@ try:
     send_int(soc, 666)
     i = recv_int(soc)
     print(f'received {i} from Alice')
-    
+
 except socket.error as message:
     print('Bind failed. Error Code : '
-        + str(message[0]) + ' Message '
-        + message[1])
+          + str(message[0]) + ' Message '
+          + message[1])
     sys.exit()
 
 soc.close()

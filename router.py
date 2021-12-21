@@ -1,11 +1,14 @@
-import socket, os
+import socket
+import os
 from util import deserialize, load_router_config
+
 
 def main():
     yaml = load_router_config()
     host = yaml['host']
     port = yaml['port']
     serve(host, port)
+
 
 def serve(host, port):
     try:
@@ -20,6 +23,7 @@ def serve(host, port):
                     print(deserialize(conn.recv(1024)))
     except KeyboardInterrupt:
         os._exit(0)
+
 
 if __name__ == '__main__':
     main()

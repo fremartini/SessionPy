@@ -1,4 +1,5 @@
-import socket, sys
+import socket
+import sys
 from util import recv_int, send_int
 
 HOST = '127.0.0.1'
@@ -8,11 +9,12 @@ soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 print("waiting for Bob to connect ...")
 
-try: soc.bind((HOST, PORT))
+try:
+    soc.bind((HOST, PORT))
 except socket.error as message:
     print('Bind failed. Error Code : '
-        + str(message[0]) + ' Message '
-        + message[1])
+          + str(message[0]) + ' Message '
+          + message[1])
     sys.exit(1)
 
 soc.listen(2)
