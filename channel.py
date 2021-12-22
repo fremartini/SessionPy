@@ -18,7 +18,7 @@ class Branch(Enum):
 
 class Channel(Generic[T]):
     def __init__(self) -> None:
-        self.queue = deque()
+        self.queue = []
 
     def send(self, e):
         self.queue.append(e)
@@ -26,7 +26,7 @@ class Channel(Generic[T]):
 
     def recv(self):
         if self.queue:
-            return self.queue.popleft()
+            return self.queue.pop(0)
 
     def offer(self):
         v = self.recv()
