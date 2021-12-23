@@ -164,7 +164,7 @@ class Checker(ast.NodeVisitor):
         self.fail_if_exhausted(st, ch_name)
         assertEq(st.action, op)
 
-        self.foo(ch_name)
+        self.advance(ch_name)
 
     def send(self, call_func, call_args, op):
         ch_name = call_func.value.id
@@ -175,7 +175,7 @@ class Checker(ast.NodeVisitor):
         assertEq(st.typ, arg_typ)
         assertEq(st.action, op)
 
-        self.foo(ch_name)
+        self.advance(ch_name)
 
     def function_call(self, call, call_args):
         func_name = call.func.id
@@ -195,7 +195,7 @@ class Checker(ast.NodeVisitor):
                 if not (main_channel_name == func_channel_name):
                     self.channels.pop(func_channel_name)
 
-    def foo(self, ch_name):
+    def advance(self, ch_name):
         st = self.get_session_type(ch_name)
         if not self.scopes:  # global scope
             self.channels[ch_name] = st.right
