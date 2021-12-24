@@ -1,11 +1,11 @@
 import ast
 from enum import Enum
 
+from util import assertEq
 
 class Scope(Enum):
     LEFT = 0
     RIGHT = 1
-
 
 class Checker(ast.NodeVisitor):
     def __init__(self, file_ast, functions, channels):
@@ -13,21 +13,6 @@ class Checker(ast.NodeVisitor):
         self.functions = functions
         self.channels = channels
         self.scopes = []
-
-    def get_session_type(self, ch_name: str):
-        st = self.channels[ch_name]
-        for left_right in self.scopes:
-            if left_right == Scope.LEFT:
-                st = st.left
-            else:
-                st = st.right
-        return st
-
-    def add_scope(self, scope_type: Scope):
-        self.scopes.append(scope_type)
-
-    def pop_scope(self):
-        return self.scopes.pop()
 
     def run(self):
         self.visit(self.file_ast)
@@ -46,56 +31,6 @@ class Checker(ast.NodeVisitor):
                 case ast.Match(): self.check_match(stmt)
                 case ast.If(): self.check_if(stmt)
 
-    def check_match(self, match):
-        assert(isinstance(match, ast.Match))
-
-        if self.is_channel_offer(match.subject):
-            ch_name = match.subject.func.value.id
-            st = self.get_session_type(ch_name)
-
-            self.fail_if_exhausted(st, ch_name)
-
-            cases = match.cases
-            assert len(cases) == 2
-            for case in cases:
-                pattern = case.pattern
-                body = case.body
-                att = pattern.value
-                if att.attr == 'LEFT':
-                    self.add_scope(Scope.LEFT)
-                    self.verify_channels(body)
-                    self.pop_scope()
-                elif att.attr == 'RIGHT':
-                    self.add_scope(Scope.RIGHT)
-                    self.verify_channels(body)
-                    self.pop_scope()
-
-    def fail_if_exhausted(self, st, ch_name):
-        if not st:
-            raise Exception(f"{ch_name} has been exhausted of operations")
-
-    def check_attribute(self, att, predX, y):
-        """checks <predX(x) and attr.y == y>"""
-        assert(isinstance(att, ast.Attribute))
-        assert(isinstance(att.value, ast.Name))
-        return predX(att.value.id) and att.attr == y
-
-    def is_channel_offer(self, subject):
-        return (isinstance(subject, ast.Call) and
-                isinstance(subject.func, ast.Attribute) and
-                self.check_attribute(subject.func, lambda x: x in self.channels, 'offer'))
-
-    def check_if(self, expr):
-        prev_scope_count = len(self.scopes)
-        self.verify_channels(expr.body)
-        while prev_scope_count != len(self.scopes):
-            self.pop_scope()
-
-        prev_prev_scope_count = len(self.scopes)
-        self.verify_channels(expr.orelse)
-        while prev_prev_scope_count != len(self.scopes):
-            self.pop_scope()
-
     def check_expr(self, expr):
         assert(isinstance(expr, ast.Expr))
         if isinstance(expr.value, ast.Call):
@@ -113,6 +48,43 @@ class Checker(ast.NodeVisitor):
         _, v = *asgn.targets, asgn.value
         if isinstance(v, ast.Call):
             self.check_call(v)
+
+    def check_match(self, match):
+        assert(isinstance(match, ast.Match))
+
+        if self.is_channel_offer(match.subject):
+            ch_name = match.subject.func.value.id
+            st = self.get_session_type(ch_name)
+            self.fail_if_exhausted(st, ch_name)
+
+            cases = match.cases
+            assert len(cases) == 2
+            for case in cases:
+                pattern = case.pattern
+                body = case.body
+                att = pattern.value
+                if att.attr == 'LEFT':
+                    self.verify_in_scope(Scope.LEFT, body)
+                elif att.attr == 'RIGHT':
+                    self.verify_in_scope(Scope.RIGHT, body)
+                else:
+                    raise Exception("Scope was not left or right")
+
+    def verify_in_scope(self, scope, body):
+        self.add_scope(scope)
+        self.verify_channels(body)
+        self.pop_scope()        
+
+    def check_if(self, expr):
+        prev_scope_count = len(self.scopes)
+        self.verify_channels(expr.body)
+        while prev_scope_count != len(self.scopes):
+            self.pop_scope()
+
+        prev_prev_scope_count = len(self.scopes)
+        self.verify_channels(expr.orelse)
+        while prev_prev_scope_count != len(self.scopes):
+            self.pop_scope()
 
     def check_call(self, call):
         """
@@ -144,13 +116,25 @@ class Checker(ast.NodeVisitor):
             #            ^^^^^    ^ - Name
             self.function_call(call, call_args)
 
+
+    def check_attribute(self, att, predX, y):
+        """checks <predX(x) and attr.y == y>"""
+        assert(isinstance(att, ast.Attribute))
+        assert(isinstance(att.value, ast.Name))
+        return predX(att.value.id) and att.attr == y
+
+    def is_channel_offer(self, subject):
+        return (isinstance(subject, ast.Call) and
+                isinstance(subject.func, ast.Attribute) and
+                self.check_attribute(subject.func, lambda x: x in self.channels, 'offer'))
+
     def choose(self, call_func, call_args):
         ch_name = call_func.value.id
         st = self.get_session_type(ch_name)
         assert(len(call_args) == 1)
         arg = call_args[0]
-        if not st:
-            raise Exception(f"{ch_name} has been exhausted of operations")
+
+        self.fail_if_exhausted(st, ch_name)
 
         assert(arg.value.id == 'Branch')
         left_or_right = arg.attr
@@ -222,11 +206,24 @@ class Checker(ast.NodeVisitor):
         if errors:
             raise Exception(f"ill-typed program: {errors}")
 
+    def fail_if_exhausted(self, st, ch_name):
+        if not st:
+            raise Exception(f"{ch_name} has been exhausted of operations")
 
-def assertEq(expected, actual):
-    if (not expected == actual):
-        raise Exception("expected " + str(expected) + ", found " + str(actual))
+    def get_session_type(self, ch_name: str):
+        st = self.channels[ch_name]
+        for left_right in self.scopes:
+            if left_right == Scope.LEFT:
+                st = st.left
+            else:
+                st = st.right
+        return st
 
+    def add_scope(self, scope_type: Scope):
+        self.scopes.append(scope_type)
+
+    def pop_scope(self):
+        return self.scopes.pop()
 
 def infer(expr) -> type:
     # TODO: currently we only support constants, expand with function calls, expressions etc?

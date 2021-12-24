@@ -54,7 +54,6 @@ def parse(config):
         except yaml.YAMLError as exc:
             print(exc)
 
-
 def serialize(obj):
     return pickle.dumps(obj)
 
@@ -72,3 +71,7 @@ def channels_str(channels):
     for ch_name in channels:
         res += f'"{ch_name}": {channels[ch_name]}\n'
     return res
+
+def assertEq(expected, actual):
+    if (not expected == actual):
+        raise Exception("expected " + str(expected) + ", found " + str(actual))
