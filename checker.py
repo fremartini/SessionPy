@@ -1,7 +1,7 @@
 import ast
 from enum import Enum
 
-from util import assertEq
+from util import assertEq, dump_ast
 
 class Scope(Enum):
     LEFT = 0
@@ -38,11 +38,7 @@ class Checker(ast.NodeVisitor):
 
     def check_assign(self, asgn):
         """
-        In this function, we check for following two scenarios:
-        * ch = Channel...
-        * <var> = ch.send/recv
-        First, if we assign a channel to a variable, our dictionary should be updated with session type.
-        Second, if some variable is assigned to a call to our channel, we should progress ST/validate types.
+        Look for send, recv, choose, call operations in assign expression
         """
         assert(isinstance(asgn, ast.Assign))
         _, v = *asgn.targets, asgn.value
@@ -50,6 +46,10 @@ class Checker(ast.NodeVisitor):
             self.check_call(v)
 
     def check_match(self, match):
+        """
+        The offer operation must be used within a match block,
+        verify the left and right block
+        """
         assert(isinstance(match, ast.Match))
 
         if self.is_channel_offer(match.subject):
@@ -62,10 +62,10 @@ class Checker(ast.NodeVisitor):
             for case in cases:
                 pattern = case.pattern
                 body = case.body
-                att = pattern.value
-                if att.attr == 'LEFT':
+                att = pattern.value.attr
+                if att == 'LEFT':
                     self.verify_in_scope(Scope.LEFT, body)
-                elif att.attr == 'RIGHT':
+                elif att == 'RIGHT':
                     self.verify_in_scope(Scope.RIGHT, body)
                 else:
                     raise Exception("Scope was not left or right")
@@ -88,34 +88,50 @@ class Checker(ast.NodeVisitor):
 
     def check_call(self, call):
         """
-        Extracts type and method for a a call object right now ASSUMED to be a
-        channel.
-
-        Examples:
-         * ch.send(42) or ch.send(f())
-         * c.recv()
-
-        In the first case, we need to validate that type of argument (42, f())
-        matches the current action and type of our session type.
+        Check calls that are choose, send, recv or function calls
         """
         assert(isinstance(call, ast.Call))
         call_func = call.func
         call_args = call.args
-        if(isinstance(call_func, ast.Attribute)):       # this structure: x.y()
-            #                 ^ attribute
+        if(isinstance(call_func, ast.Attribute)):
             op = call_func.attr
-            match op:
-                case 'choose':
-                    self.choose(call_func, call_args)
-                case 'send':
-                    self.send(call_func, call_args, op)
-                case 'recv':
-                    self.recv(call_func, call_args, op)
+            if op in ['choose', 'send', 'recv']:
+                ch_name = call_func.value.id
+                st = self.get_session_type(ch_name)
+                self.fail_if_exhausted(st, ch_name)
+                match op:
+                    case 'choose':
+                        self.choose(call_args)
+                    case 'send':
+                        self.send(call_args, op, st, ch_name)
+                    case 'recv':
+                        self.recv(call_args, op, st, ch_name)
 
-        elif isinstance(call_func, ast.Name):  # structure: print(), f(), etc.
-            #            ^^^^^    ^ - Name
+        elif isinstance(call_func, ast.Name):
             self.function_call(call, call_args)
 
+    def choose(self, call_args):
+        assert(len(call_args) == 1)
+        arg = call_args[0]
+
+        assert(arg.value.id == 'Branch')
+        left_or_right = arg.attr
+        assert left_or_right in ['LEFT', 'RIGHT']
+        self.add_scope(Scope.LEFT if left_or_right == 'LEFT' else Scope.RIGHT)
+
+    def recv(self, call_args, op, st, ch_name):
+        assert(len(call_args) == 0)
+        assertEq(st.action, op)
+
+        self.advance(ch_name)
+
+    def send(self, call_args, op, st, ch_name):
+        assert(len(call_args) == 1)
+        arg_typ = infer(call_args[0])
+        assertEq(st.typ, arg_typ)
+        assertEq(st.action, op)
+
+        self.advance(ch_name)
 
     def check_attribute(self, att, predX, y):
         """checks <predX(x) and attr.y == y>"""
@@ -127,39 +143,6 @@ class Checker(ast.NodeVisitor):
         return (isinstance(subject, ast.Call) and
                 isinstance(subject.func, ast.Attribute) and
                 self.check_attribute(subject.func, lambda x: x in self.channels, 'offer'))
-
-    def choose(self, call_func, call_args):
-        ch_name = call_func.value.id
-        st = self.get_session_type(ch_name)
-        assert(len(call_args) == 1)
-        arg = call_args[0]
-
-        self.fail_if_exhausted(st, ch_name)
-
-        assert(arg.value.id == 'Branch')
-        left_or_right = arg.attr
-        assert left_or_right in ['LEFT', 'RIGHT']
-        self.add_scope(Scope.LEFT if left_or_right == 'LEFT' else Scope.RIGHT)
-
-    def recv(self, call_func, call_args, op):
-        ch_name = call_func.value.id
-        st = self.get_session_type(ch_name)
-        assert(len(call_args) == 0)
-        self.fail_if_exhausted(st, ch_name)
-        assertEq(st.action, op)
-
-        self.advance(ch_name)
-
-    def send(self, call_func, call_args, op):
-        ch_name = call_func.value.id
-        st = self.get_session_type(ch_name)
-        assert(len(call_args) == 1)
-        arg_typ = infer(call_args[0])
-        self.fail_if_exhausted(st, ch_name)
-        assertEq(st.typ, arg_typ)
-        assertEq(st.action, op)
-
-        self.advance(ch_name)
 
     def function_call(self, call, call_args):
         func_name = call.func.id
@@ -180,10 +163,15 @@ class Checker(ast.NodeVisitor):
                     self.channels.pop(func_channel_name)
 
     def advance(self, ch_name):
+        """
+        Advance a session type if it is in
+        * global scope : go to right child
+        * local scope  : inside a left or right branch, advance left or right branch
+        """
         st = self.get_session_type(ch_name)
         if not self.scopes:  # global scope
             self.channels[ch_name] = st.right
-        else:  # left or right
+        else:  # local scope
             if (self.scopes[len(self.scopes)-1] == Scope.LEFT):
                 self.channels[ch_name].left = st.right
             else:
