@@ -1,5 +1,6 @@
 import ast
 from sessiontype import *
+from util import dump_ast
 
 
 class TypeNode:
@@ -89,6 +90,8 @@ class Scanner(ast.NodeVisitor):
             assert (str.lower(func_slice.id) == 'end')
             return None
 
+        print('search_slice')
+        dump_ast(func_slice)
         tn = None
         action = func_slice.value  # This is the ast.Name of the action, i.e. Send/Recv/End
         assert(isinstance(action, ast.Name))
@@ -108,9 +111,17 @@ class Scanner(ast.NodeVisitor):
         return tn
 
     def get_concrete_type(self, slice):
-        return slice.elts[0].id
+        assert(isinstance(slice, ast.Tuple))
+        hd, *_ = slice.elts
+        if isinstance(hd, ast.Subscript):
+            if hd.value.id != 'Channel':
+                return hd.value.id
+            else:
+                raise TypeError('Cannot send Channels inside channel definition')
+        return hd.id
 
     def get_session_type(self, slice):
+        assert(isinstance(slice, ast.Tuple))
         return self.search_slice(slice.elts[1])
 
 
