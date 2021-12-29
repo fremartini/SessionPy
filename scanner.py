@@ -130,4 +130,5 @@ def strToTyp(s):
         case 'int': return int
         case 'str': return str
         case 'bool': return bool
-        case _: raise Exception(f"unknown type {s}")
+        #case _: raise Exception(f"unknown type {s}")
+        case _: return str(s)

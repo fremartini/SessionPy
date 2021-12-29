@@ -1,7 +1,8 @@
 import ast
 from enum import Enum
+from typing import Annotated
 
-from util import assertEq, dump_ast
+from util import assertEq, dump, dump_ast
 
 class Scope(Enum):
     LEFT = 0
@@ -13,6 +14,7 @@ class Checker(ast.NodeVisitor):
         self.functions = functions
         self.channels = channels
         self.scopes = []
+        self.env = {}
 
     def run(self):
         self.visit(self.file_ast)
@@ -25,8 +27,10 @@ class Checker(ast.NodeVisitor):
 
     def verify_channels(self, stmts):
         for stmt in stmts:
+            dump_ast(stmt)
             match stmt:
                 case ast.Expr(): self.check_expr(stmt)
+                case ast.AnnAssign(): self.check_ann_assign(stmt)
                 case ast.Assign(): self.check_assign(stmt)
                 case ast.Match(): self.check_match(stmt)
                 case ast.If(): self.check_if(stmt)
@@ -36,12 +40,28 @@ class Checker(ast.NodeVisitor):
         if isinstance(expr.value, ast.Call):
             self.check_call(expr.value)
 
+    def check_ann_assign(self, anna):
+        assert(isinstance(anna, ast.AnnAssign))
+        if isinstance(anna.annotation, ast.Name):
+            self.env[anna.target.id] = anna.annotation.id
+        if isinstance(anna.annotation, ast.Subscript):
+            self.env[anna.target.id] = anna.annotation.value.id
+        if isinstance(anna.value, ast.Call):
+            self.check_call(anna.value)
+
+
     def check_assign(self, asgn):
+        print('# ASSIGN #')
         """
         Look for send, recv, choose, call operations in assign expression
         """
         assert(isinstance(asgn, ast.Assign))
-        _, v = *asgn.targets, asgn.value
+        ts, v = *asgn.targets, asgn.value
+        print('targets:')
+        dump_ast(ts)
+        print('value:')
+        dump_ast(v)
+    
         if isinstance(v, ast.Call):
             self.check_call(v)
 
@@ -106,7 +126,8 @@ class Checker(ast.NodeVisitor):
                         self.send(call_args, op, st, ch_name)
                     case 'recv':
                         self.recv(call_args, op, st, ch_name)
-
+            else:
+                raise NotImplementedError(f'Operator channel.{op} is not implemented')
         elif isinstance(call_func, ast.Name):
             self.function_call(call, call_args)
 
@@ -127,10 +148,9 @@ class Checker(ast.NodeVisitor):
 
     def send(self, call_args, op, st, ch_name):
         assert(len(call_args) == 1)
-        arg_typ = infer(call_args[0])
+        arg_typ = self.infer(call_args[0])
         assertEq(st.typ, arg_typ)
         assertEq(st.action, op)
-
         self.advance(ch_name)
 
     def check_attribute(self, att, predX, y):
@@ -213,10 +233,14 @@ class Checker(ast.NodeVisitor):
     def pop_scope(self):
         return self.scopes.pop()
 
-def infer(expr) -> type:
-    # TODO: currently we only support constants, expand with function calls, expressions etc?
-    if isinstance(expr, ast.Constant):
-        arg = expr.value
+    def lookup(self, x): 
+        return self.env[x]
 
-    # print(f"argument infered to be type {type(arg)}")
-    return type(arg)
+    def infer(self, expr) -> type:
+        # TODO: currently we only support constants, expand with function calls, expressions etc?
+        print('infer')
+        print('current env:', self.env)
+
+        # print(f"argument infered to be type {type(arg)}")
+        return type(expr.value) if isinstance(expr, ast.Constant) else self.lookup(expr.id)
+

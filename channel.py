@@ -29,11 +29,7 @@ class Channel(Generic[T]):
             return self.queue.pop(0)
 
     def offer(self):
-        v = self.recv()
-        if (v == 0):
-            return Branch.LEFT
-        else:
-            return Branch.RIGHT
+        return Branch(self.recv())
 
     def choose(self, leftOrRight):
         assert(isinstance(leftOrRight, Branch))

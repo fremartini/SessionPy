@@ -1,18 +1,12 @@
 from channel import *
 from sessiontype import *
 from typechecking import verify_channels
-from enum import Enum
-
-
-class DiamondColour(Enum):
-    RED = 0
-    BLUE = 1
-    YELLOW = 2
+from diamond_util import *
 
 
 @verify_channels
 def main():
-    ch = Channel[Recv[str, Send[dict[DiamondColour, int],
+    ch = Channel[Recv[str, Send[Catalogue,
                                 Offer[Recv[str, Send[str, End]], Recv[DiamondColour, Send[str, End]]]]]]()
     req = ch.recv()
     print('Received request from seller:', req)
