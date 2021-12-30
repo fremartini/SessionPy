@@ -6,21 +6,21 @@ from typechecking import verify_channels
 
 class TestVerifyChannels(unittest.TestCase):
 
-    def test_good1(self):
+    def test_send_succeeds(self):
         @verify_channels
         def main():
             ch = Channel[Send[int, End]]()
             ch.send(42)
             print('sent', 42)  # we expect this!
        
-    def test_good2(self):
+    def test_recv_succeeds(self):
         @verify_channels
         def main():
             ch = Channel[Recv[int, End]]()
             v = ch.recv()
             print('received value', v)  # this should happen!
 
-    def test_good3(self):
+    def test_send_recv_sequence_succeeds(self):
         @verify_channels
         def main():
             ch = Channel[Recv[int, Send[bool, End]]]()
@@ -29,7 +29,7 @@ class TestVerifyChannels(unittest.TestCase):
             print('received value', v)  # this should happen!
             print('sent value', True)
 
-    def test_good4(test):    
+    def test_channel_using_function_call_succeeds(test):    
         @verify_channels
         def main():
             def inner(c: Channel):
@@ -44,7 +44,7 @@ class TestVerifyChannels(unittest.TestCase):
             inner(ch)
             ch.send("we're done here...")  # ending the session
 
-    def test_good5(self):
+    def test_channel_offer_succeeds(self):
         @verify_channels
         def main():
             ch = Channel[Send[int, Offer[Send[str, Recv[str, End]], Send[int, End]]]]()
@@ -61,7 +61,7 @@ class TestVerifyChannels(unittest.TestCase):
                     print("A: sending number to client (B)")
                     ch.send(42)
 
-    def test_good6(self):
+    def test_channel_branch_succeeds(self):
         @verify_channels
         def main():
             ch = Channel[Recv[int, Choose[Send[str, End], Choose[Send[str, End], Recv[int, End]]]]]()
@@ -79,7 +79,7 @@ class TestVerifyChannels(unittest.TestCase):
                     ch.choose(Branch.RIGHT)
                     i = ch.recv()
 
-    def test_passing_channel_multiple_times_should_be_okay(test):
+    def test_passing_channel_multiple_times_succeeds(test):
         @verify_channels
         def main():
             def f(c: Channel):
@@ -95,7 +95,7 @@ class TestVerifyChannels(unittest.TestCase):
             print('sent value', True)
             f(ch)
     
-    def test_bad1(self):
+    def test_unexpected_recv_fails(self):
         with self.assertRaises(Exception):
             @verify_channels
             def main():
@@ -103,7 +103,7 @@ class TestVerifyChannels(unittest.TestCase):
                 v = ch.recv()
                 print('received', v)  # should never happen
     
-    def test_bad2(self):
+    def test_unexpected_send_fails(self):
         with self.assertRaises(Exception):
             @verify_channels
             def main():
@@ -111,7 +111,7 @@ class TestVerifyChannels(unittest.TestCase):
                 ch.send(42)
                 print('sent value', 42)  # should never happen
 
-    def test_bad3(self):
+    def test_multiple_channels_unexpected_recv_fails(self):
         with self.assertRaises(Exception):
             @verify_channels
             def main():
@@ -124,7 +124,7 @@ class TestVerifyChannels(unittest.TestCase):
                 print('sent value', True)
     
     
-    def test_bad4(self):
+    def test_incorrect_channel_use_in_function_fails(self):
         with self.assertRaises(Exception):
             @verify_channels
             def main():
@@ -141,7 +141,7 @@ class TestVerifyChannels(unittest.TestCase):
                 # should NOT happen; at this point we should send
                 print('received', s)
 
-    def test_bad5(self):
+    def test_channel_offer_fails(self):
         with self.assertRaises(Exception):
             @verify_channels
             def main():
@@ -157,7 +157,7 @@ class TestVerifyChannels(unittest.TestCase):
                         print("A: sending number to client (B)")
                         ch.send(42)
 
-    def test_bad6(self):
+    def test_channel_choose_fails(self):
         with self.assertRaises(Exception):
             @verify_channels
             def main():
