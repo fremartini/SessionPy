@@ -22,7 +22,8 @@ class TypeNode:
 
 
 class Scanner(ast.NodeVisitor):
-    def __init__(self, file_ast):
+    def __init__(self, file_ast, func):
+        self.func = func
         self.file_ast = file_ast
         self.functions = {}
         self.channels = {}
@@ -30,13 +31,14 @@ class Scanner(ast.NodeVisitor):
     def run(self):
         """Scans a file AST for channels in the annotated functionand functions that accepts channels as parameters"""
         self.visit(self.file_ast)
+        self.visit(self.func)
         return (self.functions, self.channels)
 
     def visit_FunctionDef(self, node: ast.FunctionDef):
-        if len(node.decorator_list) > 0:
-            self.check_decorated_function(node)
-        else:
+        if len(node.decorator_list) == 0:
             self.check_non_decorated_function(node)
+        else:
+            self.check_decorated_function(node)
 
     def check_decorated_function(self, node: ast.FunctionDef):
         assert(len(node.decorator_list) == 1)
@@ -89,9 +91,6 @@ class Scanner(ast.NodeVisitor):
         if isinstance(func_slice, ast.Name):  # base case: End
             assert (str.lower(func_slice.id) == 'end')
             return None
-
-        print('search_slice')
-        dump_ast(func_slice)
         tn = None
         action = func_slice.value  # This is the ast.Name of the action, i.e. Send/Recv/End
         assert(isinstance(action, ast.Name))

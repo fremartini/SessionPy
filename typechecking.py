@@ -3,7 +3,7 @@ import ast
 from scanner import Scanner
 from textwrap import dedent
 from checker import Checker
-
+from util import channels_str, dump_ast
 
 def verify_channels(f):
     """annotate functions that should have its channels checked with this decorator"""
@@ -18,8 +18,11 @@ def scan(func):
     file = dedent(inspect.getfile(func))
     file_src = _read_src_from_file(file)
     file_ast = ast.parse(file_src)
-    functions, channels = Scanner(file_ast).run()
-    # print(f"#####\nScanner phase found:\nfunctions: {functions}\nchannels: {channels_str(channels)}#####")
+
+    func_src = dedent(inspect.getsource(func))
+    func_ast = ast.parse(func_src)
+    functions, channels = Scanner(file_ast, func_ast).run()
+    #print(f"#####\nScanner phase found:\nfunctions: {functions}\nchannels: {channels_str(channels)}#####")
     return (functions, channels)
 
 

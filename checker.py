@@ -2,7 +2,7 @@ import ast
 from enum import Enum
 from typing import Annotated
 
-from util import assertEq, dump, dump_ast
+from util import assertEq
 
 class Scope(Enum):
     LEFT = 0
@@ -27,7 +27,7 @@ class Checker(ast.NodeVisitor):
 
     def verify_channels(self, stmts):
         for stmt in stmts:
-            dump_ast(stmt)
+            #dump_ast(stmt)
             match stmt:
                 case ast.Expr(): self.check_expr(stmt)
                 case ast.AnnAssign(): self.check_ann_assign(stmt)
@@ -51,16 +51,16 @@ class Checker(ast.NodeVisitor):
 
 
     def check_assign(self, asgn):
-        print('# ASSIGN #')
+        #print('# ASSIGN #')
         """
         Look for send, recv, choose, call operations in assign expression
         """
         assert(isinstance(asgn, ast.Assign))
         ts, v = *asgn.targets, asgn.value
-        print('targets:')
-        dump_ast(ts)
-        print('value:')
-        dump_ast(v)
+        #print('targets:')
+        #dump_ast(ts)
+        #print('value:')
+        #dump_ast(v)
     
         if isinstance(v, ast.Call):
             self.check_call(v)
@@ -238,8 +238,8 @@ class Checker(ast.NodeVisitor):
 
     def infer(self, expr) -> type:
         # TODO: currently we only support constants, expand with function calls, expressions etc?
-        print('infer')
-        print('current env:', self.env)
+        #print('infer')
+        #print('current env:', self.env)
 
         # print(f"argument infered to be type {type(arg)}")
         return type(expr.value) if isinstance(expr, ast.Constant) else self.lookup(expr.id)
