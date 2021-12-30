@@ -22,29 +22,21 @@ class TypeNode:
 
 
 class Scanner(ast.NodeVisitor):
-    def __init__(self, file_ast, func):
+    def __init__(self, func):
         self.func = func
-        self.file_ast = file_ast
         self.functions = {}
         self.channels = {}
 
     def run(self):
         """Scans a file AST for channels in the annotated functionand functions that accepts channels as parameters"""
-        self.visit(self.file_ast)
         self.visit(self.func)
         return (self.functions, self.channels)
 
     def visit_FunctionDef(self, node: ast.FunctionDef):
-        if len(node.decorator_list) == 0:
-            self.check_non_decorated_function(node)
-        else:
-            self.check_decorated_function(node)
-
-    def check_decorated_function(self, node: ast.FunctionDef):
-        assert(len(node.decorator_list) == 1)
-        dec = node.decorator_list[0]
-        if dec.id == 'verify_channels':
-            self.verify_block(node.body)
+        if len(node.decorator_list) == 1:
+            dec = node.decorator_list[0]
+            if dec.id == 'verify_channels':
+                self.verify_block(node.body)
 
     def check_non_decorated_function(self, node: ast.FunctionDef):
         args = node.args
@@ -64,6 +56,7 @@ class Scanner(ast.NodeVisitor):
         for stmt in block:
             match stmt:
                 case ast.Assign(): self.check_assign(stmt)
+                case ast.FunctionDef(): self.check_non_decorated_function(stmt)
 
     def check_assign(self, asgn):
         assert(isinstance(asgn, ast.Assign))

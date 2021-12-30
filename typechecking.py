@@ -8,20 +8,16 @@ from util import channels_str, dump_ast
 def verify_channels(f):
     """annotate functions that should have its channels checked with this decorator"""
     functions, channels = scan(f)
-    if (functions or channels):
+    if channels:
         check(f, functions, channels)
     return f
 
 
 def scan(func):
     """Scan the file the decorated function belongs to, for functions that has Channels as parameters"""
-    file = dedent(inspect.getfile(func))
-    file_src = _read_src_from_file(file)
-    file_ast = ast.parse(file_src)
-
     func_src = dedent(inspect.getsource(func))
     func_ast = ast.parse(func_src)
-    functions, channels = Scanner(file_ast, func_ast).run()
+    functions, channels = Scanner(func_ast).run()
     #print(f"#####\nScanner phase found:\nfunctions: {functions}\nchannels: {channels_str(channels)}#####")
     return (functions, channels)
 
