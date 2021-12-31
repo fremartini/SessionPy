@@ -1,6 +1,6 @@
 import ast
 from sessiontype import *
-from util import dump_ast
+from util import dump_ast, strToTyp
 
 
 class TypeNode:
@@ -115,12 +115,3 @@ class Scanner(ast.NodeVisitor):
     def get_session_type(self, slice):
         assert(isinstance(slice, ast.Tuple))
         return self.search_slice(slice.elts[1])
-
-
-def strToTyp(s):
-    match s:
-        case 'int': return int
-        case 'str': return str
-        case 'bool': return bool
-        #case _: raise Exception(f"unknown type {s}")
-        case _: return str(s)

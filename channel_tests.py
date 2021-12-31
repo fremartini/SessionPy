@@ -175,5 +175,14 @@ class TestVerifyChannels(unittest.TestCase):
                     else:
                         ch.choose(Branch.RIGHT)
     
+    def test_channel_recv_ints_can_send_result(self):
+        @verify_channels
+        def main():
+            ch = Channel[Recv[int, Recv[int, Send[int, End]]]]()
+            x  = ch.recv()
+            y  = ch.recv()
+            res : int = x+y
+            ch.send(res)
+
 if __name__ == '__main__':
     unittest.main()

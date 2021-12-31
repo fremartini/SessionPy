@@ -1,23 +1,22 @@
 import ast
 from enum import Enum
-from typing import Annotated
 
-from util import assertEq
+from util import assertEq, dump_ast, strToTyp
 
 class Scope(Enum):
     LEFT = 0
     RIGHT = 1
 
 class Checker(ast.NodeVisitor):
-    def __init__(self, file_ast, functions, channels):
-        self.file_ast = file_ast
+    def __init__(self, func_ast, functions, channels):
+        self.func_ast = func_ast
         self.functions = functions
         self.channels = channels
         self.scopes = []
         self.env = {}
 
     def run(self):
-        self.visit(self.file_ast)
+        self.visit(self.func_ast)
         self.verify_postconditions()
 
     def visit_FunctionDef(self, node: ast.FunctionDef):
@@ -27,7 +26,6 @@ class Checker(ast.NodeVisitor):
 
     def verify_channels(self, stmts):
         for stmt in stmts:
-            #dump_ast(stmt)
             match stmt:
                 case ast.Expr(): self.check_expr(stmt)
                 case ast.AnnAssign(): self.check_ann_assign(stmt)
@@ -40,27 +38,21 @@ class Checker(ast.NodeVisitor):
         if isinstance(expr.value, ast.Call):
             self.check_call(expr.value)
 
-    def check_ann_assign(self, anna):
-        assert(isinstance(anna, ast.AnnAssign))
-        if isinstance(anna.annotation, ast.Name):
-            self.env[anna.target.id] = anna.annotation.id
-        if isinstance(anna.annotation, ast.Subscript):
-            self.env[anna.target.id] = anna.annotation.value.id
-        if isinstance(anna.value, ast.Call):
-            self.check_call(anna.value)
-
+    def check_ann_assign(self, ann):
+        assert(isinstance(ann, ast.AnnAssign))
+        if isinstance(ann.annotation, ast.Name):
+            self.env[ann.target.id] =  strToTyp(ann.annotation.id)
+        elif isinstance(ann.annotation, ast.Subscript):
+            self.env[ann.target.id] = strToTyp(ann.annotation.value.id)
+        elif isinstance(ann.value, ast.Call):
+            self.check_call(ann.value)
 
     def check_assign(self, asgn):
-        #print('# ASSIGN #')
         """
         Look for send, recv, choose, call operations in assign expression
         """
         assert(isinstance(asgn, ast.Assign))
-        ts, v = *asgn.targets, asgn.value
-        #print('targets:')
-        #dump_ast(ts)
-        #print('value:')
-        #dump_ast(v)
+        v = asgn.value
     
         if isinstance(v, ast.Call):
             self.check_call(v)

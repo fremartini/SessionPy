@@ -24,6 +24,6 @@ def scan(func):
 
 def check(func, functions, channels):
     """Check that Channels are used correctly in all functions in which they are used"""
-    src = dedent(inspect.getsource(func))
-    tree = ast.parse(src)
-    Checker(tree, functions, channels).run()
+    func_src = dedent(inspect.getsource(func))
+    func_ast = ast.parse(func_src)
+    Checker(func_ast, functions, channels).run()
