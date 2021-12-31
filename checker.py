@@ -52,10 +52,10 @@ class Checker(ast.NodeVisitor):
         Look for send, recv, choose, call operations in assign expression
         """
         assert(isinstance(asgn, ast.Assign))
-        v = asgn.value
-    
+        target, v = *asgn.targets, asgn.value
+            
         if isinstance(v, ast.Call):
-            self.check_call(v)
+            self.check_call(v, target)
 
     def check_match(self, match):
         """
@@ -98,7 +98,7 @@ class Checker(ast.NodeVisitor):
         while prev_prev_scope_count != len(self.scopes):
             self.pop_scope()
 
-    def check_call(self, call):
+    def check_call(self, call, target = None):
         """
         Check calls that are choose, send, recv or function calls
         """
@@ -117,7 +117,7 @@ class Checker(ast.NodeVisitor):
                     case 'send':
                         self.send(call_args, op, st, ch_name)
                     case 'recv':
-                        self.recv(call_args, op, st, ch_name)
+                        self.recv(call_args, op, st, ch_name, target)
             else:
                 raise NotImplementedError(f'Operator channel.{op} is not implemented')
         elif isinstance(call_func, ast.Name):
@@ -132,10 +132,12 @@ class Checker(ast.NodeVisitor):
         assert left_or_right in ['LEFT', 'RIGHT']
         self.add_scope(Scope.LEFT if left_or_right == 'LEFT' else Scope.RIGHT)
 
-    def recv(self, call_args, op, st, ch_name):
+    def recv(self, call_args, op, st, ch_name, target):
         assert(len(call_args) == 0)
         assertEq(st.action, op)
 
+        if not target == None:
+            self.env[target.id] =  st.typ
         self.advance(ch_name)
 
     def send(self, call_args, op, st, ch_name):

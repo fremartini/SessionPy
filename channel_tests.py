@@ -184,5 +184,12 @@ class TestVerifyChannels(unittest.TestCase):
             res : int = x+y
             ch.send(res)
 
+    def test_channel_recv_send_same_value_succeeds(self):
+        @verify_channels
+        def main():
+            ch = Channel[Recv[int, Send[int, End]]]()
+            x = ch.recv()
+            ch.send(x)
+
 if __name__ == '__main__':
     unittest.main()
