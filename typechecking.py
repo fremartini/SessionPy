@@ -3,7 +3,6 @@ import ast
 from scanner import Scanner
 from textwrap import dedent
 from checker import Checker
-from util import channels_str, dump_ast
 
 def verify_channels(f):
     """annotate functions that should have its channels checked with this decorator"""

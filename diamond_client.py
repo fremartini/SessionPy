@@ -7,8 +7,7 @@ from diamond_util import *
 @verify_channels
 def main():
     my_balance = 500_000  # USD
-    ch = Channel[Send[str, Recv[Catalogue,
-                                Choose[Recv[str, End], Send[DiamondColour, Recv[str, End]]]]]]()
+    ch = Channel[Send[str, Recv[Catalogue,Choose[Recv[str, End], Send[DiamondColour, Recv[str, End]]]]]]()
     ch.send("Hi! I'd like to purchase a diamond")
     catalogue_object : Catalogue = ch.recv()
     catalogue = dict(catalogue_object) # due to current inability to infere the dicitionary property from ST

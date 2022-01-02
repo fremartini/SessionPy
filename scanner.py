@@ -1,7 +1,6 @@
 import ast
 from sessiontype import *
-from util import dump_ast, strToTyp
-
+from util import strToTyp
 
 class TypeNode:
     def __init__(self, action, typ) -> None:

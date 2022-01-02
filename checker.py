@@ -1,7 +1,7 @@
 import ast
 from enum import Enum
 
-from util import assertEq, dump_ast, strToTyp
+from util import assertEq, strToTyp
 
 class Scope(Enum):
     LEFT = 0
@@ -232,9 +232,4 @@ class Checker(ast.NodeVisitor):
 
     def infer(self, expr) -> type:
         # TODO: currently we only support constants, expand with function calls, expressions etc?
-        #print('infer')
-        #print('current env:', self.env)
-
-        # print(f"argument infered to be type {type(arg)}")
         return type(expr.value) if isinstance(expr, ast.Constant) else self.lookup(expr.id)
-
