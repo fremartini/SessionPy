@@ -8,5 +8,6 @@ class A:
     ...
 
 a = A()
+k : int = 5
 #should fail
 add1(a)

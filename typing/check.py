@@ -26,7 +26,7 @@ def strToTyp(s):
 
 class TypeChecker(NodeVisitor):
     def __init__(self, tree) -> None:
-        self.environments : List[Dict[str, type]] = [] 
+        self.environments : List[Dict[str, type]] = [{}] 
         self.visit(tree)
 
     def visit_Module(self, node: Module) -> None:
@@ -69,10 +69,19 @@ class TypeChecker(NodeVisitor):
 
 
     def visit_AnnAssign(self, node: AnnAssign) -> None:
-        ...
+        target : str = self.visit(node.target)
+        ann : Type = strToTyp(self.visit(node.annotation))
+        #FIXME: consider annotated vs inferred type?
+        #value : Type = self.visit(node.value)
+        #assert ann == value
+
+        self.bind(target, ann)
 
     def visit_Constant(self, node: Constant) -> Type:
         return type(node.value)
+
+    def visit_Call(self, node: Call) -> Any:
+        return Any
 
     def push(self) -> None:
         self.environments.append({})
