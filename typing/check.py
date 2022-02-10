@@ -2,7 +2,7 @@ import inspect
 from ast import *
 from typing import *
 from textwrap import dedent
-import types
+from typesystem import *
 
 def check(f : callable) -> callable:
     file = dedent(inspect.getfile(f))         
@@ -18,7 +18,8 @@ def _read_src_from_file(file) -> Str:
 def dump_ast(s, node) -> None:
     print(f'{s}\n', dump(node, indent=4))
 
-def str_to_typ(s : str) -> type:
+def str_to_typ(s : str) -> Typ:
+    # TODO(Johan): There *must* be a better way, Lord have mercy on us!
     match s:
         case 'int': return int
         case 'str': return str
@@ -39,36 +40,56 @@ def union(t1: type, t2: type) -> type:
 
 class TypeChecker(NodeVisitor):
     def __init__(self, tree) -> None:
-        self.environments : List[Dict[str, type]] = [{}] 
+        # Union[int, str] = int | str
+        # [x -> int
+        # add -> [int, int, int]]
+        self.environments : List[Dict[str, type | List[type]]] = [{}] 
         self.visit(tree)
 
     def visit_Module(self, node: Module) -> None:
         for stmt in node.body:
-            print(self.environments)
             self.visit(stmt)
+        self.print_envs()
 
     def visit_FunctionDef(self, node: FunctionDef) -> None:
+        return_type : type = Any if not node.returns else str_to_typ(self.visit(node.returns))
+        parameter_types : List[Tuple[str, type]] = self.visit(node.args)
+        parameter_types = [ty for (_,ty) in parameter_types]
+        parameter_types.append(return_type)
+        self.bind(node.name, parameter_types)
+
         self.push()
-        self.visit(node.args)
+        
+        args = self.visit(node.args)
+        for pair in args:
+            v, t = pair
+            self.bind(v, t)
+
         for stmt in node.body:
             self.visit(stmt)
-        print(self.environments)
+
+        self.print_envs()
         self.pop()
 
-    def visit_arguments(self, node: arguments) -> None:
-        for arg in node.args:
-            self.visit_arg(arg)
+    def visit_arguments(self, node: arguments) -> List[Tuple[str, type]]:
+        arguments = []
 
-    def visit_arg(self, node: arg) -> None:
+        for arg in node.args:
+            arguments.append(self.visit_arg(arg))
+
+        return arguments
+
+    def visit_arg(self, node: arg) -> Tuple[str, type]:
         match node:
             case node if node.annotation:
                 ann : str = self.visit(node.annotation)
                 ann_typ : type = str_to_typ(ann)
-                self.bind(node.arg, ann_typ)
+                return (node.arg, ann_typ)
             case _:
-                self.bind(node.arg, Any)
+                return (node.arg, Any)
 
     def visit_Name(self, node: Name) -> Str:
+        # TODO: consider return (node.id, lookup(node.id)) to easily pass types around
         return node.id
 
     def visit_Assign(self, node: Assign) -> None:
@@ -91,9 +112,11 @@ class TypeChecker(NodeVisitor):
     def visit_BinOp(self, node: BinOp) -> type:
         l = self.visit(node.left)
         r = self.visit(node.right)
-        l_typ = self.lookup(l)
-        r_typ = self.lookup(r)
-        return union(l_typ, r_typ)
+        if isinstance(l, str):
+            l = self.lookup(l) 
+        if isinstance(r, str):
+            r = self.lookup(r)
+        return union(l, r)
 
     def visit_Constant(self, node: Constant) -> Type:
         return type(node.value)
@@ -101,8 +124,14 @@ class TypeChecker(NodeVisitor):
     def visit_Call(self, node: Call) -> Any:
         return Any
 
+    def visit_Return(self, node: Return) -> Type:
+        return self.lookup(self.visit(node.value))
+
     def push(self) -> None:
         self.environments.append({})
+
+    def dup(self) -> None:
+        self.environments.append(self.get_latest_scope())
 
     def pop(self) -> None:
         self.environments.pop()
@@ -110,7 +139,6 @@ class TypeChecker(NodeVisitor):
     def lookup(self, key) -> Type:
         latest_scope : Dict[str, type] = self.get_latest_scope()
 
-        print(f'trying to find {key} in {latest_scope}')
         if (key in latest_scope):
             return latest_scope[key]  
         else:
@@ -122,3 +150,6 @@ class TypeChecker(NodeVisitor):
     def bind(self, var, val) -> None:
         latest_scope : Dict[str, type] = self.get_latest_scope()
         latest_scope[var] = val
+
+    def print_envs(self) -> None:
+        print(self.environments)
