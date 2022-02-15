@@ -2,7 +2,6 @@ import inspect
 from ast import *
 from typing import *
 from textwrap import dedent
-from typesystem import *
 
 def check(f : callable) -> callable:
     file = dedent(inspect.getfile(f))         
@@ -18,7 +17,7 @@ def _read_src_from_file(file) -> Str:
 def dump_ast(s, node) -> None:
     print(f'{s}\n', dump(node, indent=4))
 
-def str_to_typ(s : str) -> Typ:
+def str_to_typ(s : str) -> type:
     # TODO(Johan): There *must* be a better way, Lord have mercy on us!
     match s:
         case 'int': return int
@@ -29,7 +28,8 @@ def str_to_typ(s : str) -> Typ:
 
 class UnionError(Exception):
     ...
-
+"""
+TODO: Delete, but keep for now
 def union(t1: type, t2: type) -> type:
     if t1 == t2: return t1
     match t1, t2:
@@ -37,6 +37,28 @@ def union(t1: type, t2: type) -> type:
         case (typ1, typ2) if typ1 is int and typ2 is float: return float
         case (typ1, typ2) if typ1 is float and typ2 is int: return float
         case (typ1, typ2): raise UnionError(f"Cannot union {typ1} with {typ2}")
+"""
+
+# TODO: Enforce subtyping, i.e. List[int] <: List[float]
+# Currently a problem due to typing's constructs != type
+def union(t1: type, t2: type) -> type:
+    if t1 == t2: return t1
+    numerics : List[type] = [float, complex, int, bool, Any] # from high to low
+    sequences : List[type] = [str, tuple, bytes, list, bytearray, Any]
+    type_hierarchies = [numerics, sequences]
+    for typ_hierarcy in type_hierarchies:
+        if t1 in typ_hierarcy and t2 in typ_hierarcy:
+            for typ in typ_hierarcy:
+                if t1 == typ or t2 == typ: 
+                    return typ
+    # TODO: Subtyping of parameterized types, List[int] <: List[float]
+    # TODO: What to do with more complex structures, i.e. Dict[X,Y] or Tuple[X,Y]?
+    # if isinstance(type(t1), list) and isinstance(type(t2), list):
+    #     t1 = get_args(t1)[0]
+    #     t2 = get_args(t2)[0]
+    #     return List [ union(t1, t2) ]
+    else:
+        return t1 if issubclass(t1, t2) else t2
 
 class TypeChecker(NodeVisitor):
     def __init__(self, tree) -> None:
@@ -66,14 +88,17 @@ class TypeChecker(NodeVisitor):
             self.bind(v, t)
 
         for stmt in node.body:
-            self.visit(stmt)
+            match stmt:
+                case stmt if isinstance(stmt, Return):
+                    actual_return_type = self.visit(stmt)
+                    self.fail_if((not return_type == Any) and actual_return_type != return_type, f'expected return type {return_type} got {actual_return_type}')
+                case _: self.visit(stmt)
 
         self.print_envs()
         self.pop()
 
     def visit_arguments(self, node: arguments) -> List[Tuple[str, type]]:
         arguments = []
-
         for arg in node.args:
             arguments.append(self.visit_arg(arg))
 
@@ -102,12 +127,11 @@ class TypeChecker(NodeVisitor):
 
     def visit_AnnAssign(self, node: AnnAssign) -> None:
         target : str = self.visit(node.target)
-        ann : Type = str_to_typ(self.visit(node.annotation))
-        #FIXME: consider annotated vs inferred type?
-        #value : Type = self.visit(node.value)
-        #assert ann == value
+        ann_type : Type = str_to_typ(self.visit(node.annotation))
+        rhs_type : Type = self.visit(node.value)
+        self.fail_if(not ann_type == rhs_type, f'annotated type {ann_type} does not match inferred type {rhs_type}')
 
-        self.bind(target, ann)
+        self.bind(target, ann_type)
 
     def visit_BinOp(self, node: BinOp) -> type:
         l = self.visit(node.left)
@@ -122,10 +146,27 @@ class TypeChecker(NodeVisitor):
         return type(node.value)
 
     def visit_Call(self, node: Call) -> Any:
-        return Any
+        name : str = self.visit(node.func)
+        args_typs : List[type] = []
+        for arg in node.args:
+            match arg:
+                case arg if isinstance(arg, Name):
+                    args_typs.append(self.lookup(self.visit(arg)))
+                case arg if isinstance(arg, Constant):
+                    args_typs.append(self.visit(arg))
+
+        expected_args : List[type] = self.lookup(name)
+        return_type : type = expected_args.pop()
+        
+        well_typed = args_typs == expected_args
+        self.fail_if(not well_typed, f'function {name} expected {expected_args}, got {args_typs}')
+
+        return return_type
 
     def visit_Return(self, node: Return) -> Type:
-        return self.lookup(self.visit(node.value))
+        match node:
+            case node if isinstance(node.value,Constant): return self.visit(node.value)
+            case _: return self.lookup(self.visit(node.value))
 
     def push(self) -> None:
         self.environments.append({})
@@ -138,18 +179,18 @@ class TypeChecker(NodeVisitor):
 
     def lookup(self, key) -> Type:
         latest_scope : Dict[str, type] = self.get_latest_scope()
-
-        if (key in latest_scope):
-            return latest_scope[key]  
-        else:
-            raise Exception(f'{key} was not found in {latest_scope}')  
+        self.fail_if(key not in latest_scope, f'{key} was not found in {latest_scope}')
+        return latest_scope[key]  
         
     def get_latest_scope(self) -> Dict[str, type]:
         return self.environments[len(self.environments)-1]
 
-    def bind(self, var, val) -> None:
+    def bind(self, var: str, typ: type) -> None:
         latest_scope : Dict[str, type] = self.get_latest_scope()
-        latest_scope[var] = val
+        latest_scope[var] = typ
+
+    def fail_if(self, e : bool, msg : str) -> None:
+        if (e): raise Exception(msg)
 
     def print_envs(self) -> None:
         print(self.environments)

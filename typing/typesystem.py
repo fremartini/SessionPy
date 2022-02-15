@@ -46,3 +46,24 @@ class TypAny():
 class TypObject(Typ):
     # TODO: Should receive something
     ...
+
+### Hierarchies
+
+class Numbers(object):
+    ...
+
+
+
+
+
+class Sequences(object):
+    ...
+
+class SetTypes(object):
+    ...
+
+class Mappings(object):
+    ...
+
+
+
