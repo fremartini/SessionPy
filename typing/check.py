@@ -134,12 +134,14 @@ class TypeChecker(NodeVisitor):
         self.bind(target, ann_type)
 
     def visit_BinOp(self, node: BinOp) -> type:
-        l = self.visit(node.left)
-        r = self.visit(node.right)
-        if isinstance(l, str):
-            l = self.lookup(l) 
-        if isinstance(r, str):
-            r = self.lookup(r)
+        match (node.left):
+            case left if isinstance(left, Name): l = self.lookup(self.visit(left))
+            case left: l = self.visit(left)
+
+        match (node.right):
+            case right if isinstance(right, Name): r = self.lookup(self.visit(right))
+            case right: r = self.visit(right)
+
         return union(l, r)
 
     def visit_Constant(self, node: Constant) -> Type:
