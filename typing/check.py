@@ -1,4 +1,5 @@
 import inspect
+import ast
 from ast import *
 from typing import *
 from textwrap import dedent
@@ -62,16 +63,12 @@ def union(t1: type, t2: type) -> type:
 
 class TypeChecker(NodeVisitor):
     def __init__(self, tree) -> None:
-        # Union[int, str] = int | str
-        # [x -> int
-        # add -> [int, int, int]]
         self.environments : List[Dict[str, type | List[type]]] = [{}] 
         self.visit(tree)
 
     def visit_Module(self, node: Module) -> None:
         for stmt in node.body:
             self.visit(stmt)
-        self.print_envs()
 
     def visit_FunctionDef(self, node: FunctionDef) -> None:
         return_type : type = Any if not node.returns else str_to_typ(self.visit(node.returns))
@@ -80,7 +77,7 @@ class TypeChecker(NodeVisitor):
         parameter_types.append(return_type)
         self.bind(node.name, parameter_types)
 
-        self.push()
+        self.dup()
         
         args = self.visit(node.args)
         for pair in args:
@@ -94,14 +91,12 @@ class TypeChecker(NodeVisitor):
                     self.fail_if((not return_type == Any) and actual_return_type != return_type, f'expected return type {return_type} got {actual_return_type}')
                 case _: self.visit(stmt)
 
-        self.print_envs()
         self.pop()
 
     def visit_arguments(self, node: arguments) -> List[Tuple[str, type]]:
         arguments = []
         for arg in node.args:
             arguments.append(self.visit_arg(arg))
-
         return arguments
 
     def visit_arg(self, node: arg) -> Tuple[str, type]:
@@ -133,7 +128,18 @@ class TypeChecker(NodeVisitor):
 
         self.bind(target, ann_type)
 
+    def op_to_str(self, op):
+        match type(op):
+            case ast.Add: return "__add__"
+            case ast.Sub: return "__sub__"
+            case ast.Mult: return "__mul__"
+
     def visit_BinOp(self, node: BinOp) -> type:
+        op_str = self.op_to_str(node.op)
+        if not hasattr(node.left, op_str):
+            return Exception(f"left operand does not support {op_str}")
+        if not hasattr(node.right, op_str):
+            return Exception(f"right operand does not support {op_str}")
         match (node.left):
             case left if isinstance(left, Name): l = self.lookup(self.visit(left))
             case left: l = self.visit(left)
@@ -141,34 +147,49 @@ class TypeChecker(NodeVisitor):
         match (node.right):
             case right if isinstance(right, Name): r = self.lookup(self.visit(right))
             case right: r = self.visit(right)
-
         return union(l, r)
 
-    def visit_Constant(self, node: Constant) -> Type:
+    def visit_Constant(self, node: Constant) -> type:
         return type(node.value)
 
     def visit_Call(self, node: Call) -> Any:
-        name : str = self.visit(node.func)
-        args_typs : List[type] = []
-        for arg in node.args:
-            match arg:
-                case arg if isinstance(arg, Name):
-                    args_typs.append(self.lookup(self.visit(arg)))
-                case arg if isinstance(arg, Constant):
-                    args_typs.append(self.visit(arg))
+        def _class_def():
+            self.bind(self.visit(node.func), ClassVar)
+            return ClassVar
 
-        expected_args : List[type] = self.lookup(name)
-        return_type : type = expected_args.pop()
-        
-        well_typed = args_typs == expected_args
-        self.fail_if(not well_typed, f'function {name} expected {expected_args}, got {args_typs}')
+        def _call():
+            name : str = self.visit(node.func)
+            args_typs : List[type] = []
+            for arg in node.args:
+                match arg:
+                    case arg if isinstance(arg, Name):
+                        args_typs.append(self.lookup(self.visit(arg)))
+                    case _: 
+                        args_typs.append(self.visit(arg))
 
-        return return_type
+            expected_args : List[type] = self.lookup(name)
+            return_type : type = expected_args.pop()
+            
+            well_typed = args_typs == expected_args
 
+            self.fail_if(not len(args_typs) == len(expected_args), f'')
+
+            self.fail_if(not well_typed, f'function {name} expected {expected_args}, got {args_typs}')
+
+            return return_type
+
+        match node:
+            case _ if self.lookup(self.visit(node.func)) == ClassDef: return _class_def()
+            case _: _call()
+                
+    
     def visit_Return(self, node: Return) -> Type:
         match node:
-            case node if isinstance(node.value,Constant): return self.visit(node.value)
-            case _: return self.lookup(self.visit(node.value))
+            case node if isinstance(node.value,Name): return self.lookup(self.visit(node.value))
+            case _: return self.visit(node.value)
+
+    def visit_ClassDef(self, node: ClassDef) -> None:
+        self.bind(node.name, ClassDef)
 
     def push(self) -> None:
         self.environments.append({})

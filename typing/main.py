@@ -1,15 +1,11 @@
 from check import check
 
-@check #hook into the pre-run phase. Can do better?
-def test_binop(x : int, y : str) -> float:
-    y : float = 1.0     # [x -> int]
-    z : int = 100       # [x -> int, y -> float]
-    n = 0
+@check
+def add1(x):
+    return x + 1
 
-    w = (x + y) + z     # [x -> int, y -> float, z -> int]
-                        # [x -> int, y -> float, z -> int, w -> float]
-    return w
+class A:
+    ...
 
-k = 1
-name = "Freddy"
-result = test_binop(k, name)
+a = A()
+add1(a)
