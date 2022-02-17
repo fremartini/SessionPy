@@ -1,6 +1,3 @@
-from check import check
-
-@check
 def add1(x):
     return x + 1
 
