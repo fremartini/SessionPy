@@ -151,11 +151,11 @@ class TypeChecker(NodeVisitor):
         self.bind(target, ann_type)
 
     def visit_BinOp(self, node: BinOp) -> type:
-        op_str = op_to_str(node.op)
-        if not hasattr(node.left, op_str):
-            raise Exception(f"left operand does not support {op_str}")
-        if not hasattr(node.right, op_str):
-            raise Exception(f"right operand does not support {op_str}")
+        #op_str = op_to_str(node.op)
+        #if not hasattr(node.left, op_str):
+        #    raise Exception(f"left operand does not support {op_str}")
+        #if not hasattr(node.right, op_str):
+        #    raise Exception(f"right operand does not support {op_str}")
         match node.left:
             case left if isinstance(left, Name):
                 l = self.lookup(self.visit(left))
