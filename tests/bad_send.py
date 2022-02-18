@@ -1,6 +1,4 @@
-from channel import *
-from sessiontype import *
-from typechecking import verify_channels
+from context import *
 
 @verify_channels
 def main():
