@@ -1,4 +1,5 @@
 import ast
+import typing # for accessing _GenericAlias
 from ast import *
 from typing import *
 import sys
@@ -50,21 +51,35 @@ def union(t1: type, t2: type) -> type:
     if t1 == t2: return t1
     numerics: List[type] = [float, complex, int, bool, Any]  # from high to low
     sequences: List[type] = [str, tuple, bytes, list, bytearray, Any]
-    type_hierarchies = [numerics, sequences]
-    for typ_hierarcy in type_hierarchies:
-        if t1 in typ_hierarcy and t2 in typ_hierarcy:
-            for typ in typ_hierarcy:
+    if t1 in numerics and t2 in sequences or t1 in sequences and t2 in numerics:
+        raise TypeError(f'cannot merge different hierarchies of {t1} and {t2}')
+    for typ_hierarchy in [numerics, sequences]:
+        if t1 in typ_hierarchy and t2 in typ_hierarchy:
+            for typ in typ_hierarchy:
                 if t1 == typ or t2 == typ:
                     return typ
-    # TODO: Subtyping of parameterized types, List[int] <: List[float]
-    # TODO: What to do with more complex structures, i.e. Dict[X,Y] or Tuple[X,Y]?
-    # if isinstance(type(t1), list) and isinstance(type(t2), list):
-    #     t1 = get_args(t1)[0]
-    #     t2 = get_args(t2)[0]
-    #     return List [ union(t1, t2) ]
-    else:
-        return t1 if issubclass(t1, t2) else t2
+    # Check if from typing module, i.e. List, Sequence, Tuple, etc.
+    if isinstance(t1, typing._GenericAlias) and isinstance(t2, typing._GenericAlias):
+        if t1._name != t2._name:
+            raise TypeError("cannot union different typing constructs")
 
+        if t1._name == 'Tuple':
+            res = []
+            for typ1, typ2 in zip(t1.__args__, t2.__args__):
+                res.append(union(typ1, typ2))
+            return Tuple[res[0], res[1]]
+        elif t1._name == 'List':
+            t1, t2 = t1.__args__[0], t2.__args__[0]
+            return List[union(t1, t2)]
+        else:
+            raise TypeError(f"cannot union {t1._name} yet")
+        
+        # TODO: Extend with other collections 
+    else:
+        if issubclass(t1,t2): return t2
+        elif issubclass(t2,t1): return t1
+        else:
+            raise TypeError(f"exhausted: could not union {t1} with {t2}")
 
 def fail_if(e: bool, msg: str) -> None:
     if e:
