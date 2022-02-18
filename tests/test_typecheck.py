@@ -1,3 +1,6 @@
+import inspect
+from textwrap import dedent
+
 from context import *
 
 
@@ -57,15 +60,35 @@ class TestTypeCheck(unittest.TestCase):
         with self.assertRaises(Exception):
             TypeChecker(get_ast(foo))
 
-    def test_function_call_subtype_of_any_succeeds(self):
+    def test_function_call_with_string_expecting_any_succeeds(self):
         def foo():
-            def inner(x) -> int:
+            def inner(x):
                 return x
 
-            # inner("asd")
+            inner("asd")
 
         TypeChecker(get_ast(foo))
 
+    def test_function_call_with_int_expecting_any_succeeds(self):
+        def foo():
+            def inner(x):
+                return x
+
+            inner(42)
+
+        TypeChecker(get_ast(foo))
+
+    def test_function_call_with_str_return_type_any_succeeds(self):
+        def foo(x: str) -> Any:
+            return x
+
+        TypeChecker(get_ast(foo))
+
+    def test_function_call_with_int_return_type_any_succeeds(self):
+        def foo(x: int) -> Any:
+            return x
+
+        TypeChecker(get_ast(foo))
 
 if __name__ == '__main__':
     unittest.main()
