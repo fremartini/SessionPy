@@ -105,6 +105,7 @@ def can_upcast_to(t1: type, t2: type):
     if t2 == Any:
         return True
 
+    #FIXME: issubclass is broken => issubclass(int, float) -> false. Find better solution
     return False
 
 
@@ -112,6 +113,7 @@ def can_downcast_to(t1: type, t2: type):
     if t1 == Any:
         return True
 
+    # FIXME: issubclass is broken => issubclass(int, float) -> false. Find better solution
     return False
 
 

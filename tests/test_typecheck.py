@@ -41,7 +41,7 @@ class TestTypeCheck(unittest.TestCase):
         tc = TypeChecker(get_ast(foo))
         assert (tc.get_latest_scope()['res'] == float)
 
-    def test_function_call_with_matching_arguments_succeeds(self):
+    def test_function_call_matching_argument_type_succeeds(self):
         def foo():
             def inner(x: int) -> int:
                 return x
@@ -50,7 +50,7 @@ class TestTypeCheck(unittest.TestCase):
 
         TypeChecker(get_ast(foo))
 
-    def test_function_call_different_arguments_fails(self):
+    def test_function_call_different_argument_type_fails(self):
         def foo():
             def inner(x: int) -> int:
                 return x
@@ -89,6 +89,26 @@ class TestTypeCheck(unittest.TestCase):
             return x
 
         TypeChecker(get_ast(foo))
+
+    def test_can_upcast_to_given_int_any_succeeds(self):
+        self.assertTrue(can_upcast_to(int, Any))
+
+    def test_can_upcast_to_given_str_any_succeeds(self):
+        self.assertTrue(can_upcast_to(str, Any))
+
+    def test_can_upcast_to_given_list_any_succeeds(self):
+        self.assertTrue(can_upcast_to(List[str], Any))
+
+    def test_can_upcast_given_float_int_fails(self):
+        self.assertFalse(can_upcast_to(float, int))
+
+    # FIXME: does not work
+    # def test_can_upcast_given_float_int_fails(self):
+    #    self.assertFalse(can_upcast_to(List[int], List[float]))
+
+    def test_can_downcast_given_float_any_succeeds(self):
+        self.assertTrue(can_downcast_to(Any, int))
+
 
 if __name__ == '__main__':
     unittest.main()
