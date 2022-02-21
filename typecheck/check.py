@@ -1,8 +1,10 @@
+import sys
 import ast
 import typing  # for accessing _GenericAlias
 from ast import *
 from typing import *
-import sys
+from pydoc import locate
+
 
 # For interopability with typing, our type must be all of the following
 Typ = Union[type, List[type], typing._GenericAlias]
@@ -16,41 +18,11 @@ def dump_ast(s, node) -> None:
     print(f'{s}\n', dump(node, indent=4))
 
 
-def str_to_typ(s: str) -> Typ:
-    # TODO(Johan): There *must* be a better way, Lord have mercy on us!
-    match s:
-        case 'int':
-            return int
-        case 'str':
-            return str
-        case 'float':
-            return float
-        case 'bool':
-            return bool
-        case 'Any':
-            return Any
-        case _:
-            raise Exception(f"unknown type {s}")
-
 
 class UnionError(Exception):
     ...
 
 
-"""
-TODO: Delete, but keep for now
-def union(t1: type, t2: type) -> type:
-    if t1 == t2: return t1
-    match t1, t2:
-        case (typ1, typ2) if typ1 is int and typ2 is int: return int
-        case (typ1, typ2) if typ1 is int and typ2 is float: return float
-        case (typ1, typ2) if typ1 is float and typ2 is int: return float
-        case (typ1, typ2): raise UnionError(f"Cannot union {typ1} with {typ2}")
-"""
-
-
-# TODO: Enforce subtyping, i.e. List[int] <: List[float]
-# Currently a problem due to typing's constructs != type
 def union(t1: Typ, t2: Typ) -> Typ:
     if t1 == t2: return t1
     numerics: List[type] = [float, complex, int, bool, Any]  # from high to low
@@ -131,7 +103,7 @@ class TypeChecker(NodeVisitor):
             self.visit(stmt)
 
     def visit_FunctionDef(self, node: FunctionDef) -> None:
-        expected_return_type: type = Any if not node.returns else str_to_typ(self.visit(node.returns))
+        expected_return_type: type = Any if not node.returns else locate(self.visit(node.returns))
         parameter_types: List[Tuple[str, type]] = self.visit(node.args)
         parameter_types = [ty for (_, ty) in parameter_types]
         parameter_types.append(expected_return_type)
@@ -148,10 +120,12 @@ class TypeChecker(NodeVisitor):
             match stmt:
                 case _ if isinstance(stmt, Return):
                     actual_return_type = self.visit(stmt)
-
+                    if expected_return_type == Any and actual_return_type and actual_return_type != Any:
+                        parameter_types.pop()
+                        parameter_types.append(actual_return_type)
+                        self.bind(node.name, parameter_types)
                     types_differ: bool = actual_return_type != expected_return_type
                     can_downcast: bool = can_downcast_to(expected_return_type, actual_return_type)
-
                     fail_if(types_differ and not can_downcast,
                             f'expected return type {expected_return_type} got {actual_return_type}')
                 case _:
@@ -169,7 +143,8 @@ class TypeChecker(NodeVisitor):
         match node:
             case node if node.annotation:
                 ann: str = self.visit(node.annotation)
-                ann_typ: type = str_to_typ(ann)
+                ann_typ: type = locate(ann)
+                assert(type(ann_typ) == type)
                 return node.arg, ann_typ
             case _:
                 return node.arg, Any
@@ -188,7 +163,8 @@ class TypeChecker(NodeVisitor):
 
     def visit_AnnAssign(self, node: AnnAssign) -> None:
         target: str = self.visit(node.target)
-        ann_type: Type = str_to_typ(self.visit(node.annotation))
+        ann_type: Type = locate(self.visit(node.annotation))
+        assert(type(ann_type) == type)
         rhs_type: Type = self.visit(node.value)
         fail_if(not ann_type == rhs_type, f'annotated type {ann_type} does not match inferred type {rhs_type}')
 
@@ -216,13 +192,14 @@ class TypeChecker(NodeVisitor):
     def visit_Constant(self, node: Constant) -> type:
         return type(node.value)
 
-    def visit_Call(self, node: Call) -> Any:
+    def visit_Call(self, node: Call) -> Typ:
         def _class_def():
             self.bind(self.visit(node.func), ClassVar)
             return ClassVar
 
         def _call():
             name: str = self.visit(node.func)
+
             args_types: List[Typ] = []
             for arg in node.args:
                 match arg:
@@ -243,11 +220,16 @@ class TypeChecker(NodeVisitor):
 
                 fail_if(types_differ and not can_upcast,
                         f'function {name} expected {expected_args}, got {args_types}')
-
             return return_type
-
+        func_name = self.visit(node.func)
+        builtin = locate(func_name)
+        if builtin:
+            if type(builtin) == type:
+                return builtin
+            else:
+                return type(builtin)
         match node:
-            case _ if self.lookup(self.visit(node.func)) == ClassDef:
+            case _ if self.lookup(func_name) == ClassDef:
                 return _class_def()
             case _:
                 _call()
