@@ -4,6 +4,8 @@ from ast import *
 from typing import *
 import sys
 
+# For interopability with typing, our type must be all of the following
+Typ = Union[type, List[type], typing._GenericAlias]
 
 def _read_src_from_file(file) -> str:
     with open(file, "r") as f:
@@ -14,7 +16,7 @@ def dump_ast(s, node) -> None:
     print(f'{s}\n', dump(node, indent=4))
 
 
-def str_to_typ(s: str) -> type:
+def str_to_typ(s: str) -> Typ:
     # TODO(Johan): There *must* be a better way, Lord have mercy on us!
     match s:
         case 'int':
@@ -49,7 +51,7 @@ def union(t1: type, t2: type) -> type:
 
 # TODO: Enforce subtyping, i.e. List[int] <: List[float]
 # Currently a problem due to typing's constructs != type
-def union(t1: type, t2: type) -> type:
+def union(t1: Typ, t2: Typ) -> Typ:
     if t1 == t2: return t1
     numerics: List[type] = [float, complex, int, bool, Any]  # from high to low
     sequences: List[type] = [str, tuple, bytes, list, bytearray, Any]
@@ -118,8 +120,10 @@ def can_downcast_to(t1: type, t2: type):
 
 
 class TypeChecker(NodeVisitor):
+
+
     def __init__(self, tree) -> None:
-        self.environments: List[Dict[str, type | List[type]]] = [{}]
+        self.environments: List[Dict[str, Typ]] = [{}]
         self.visit(tree)
 
     def visit_Module(self, node: Module) -> None:
@@ -219,7 +223,7 @@ class TypeChecker(NodeVisitor):
 
         def _call():
             name: str = self.visit(node.func)
-            args_types: List[type] = []
+            args_types: List[Typ] = []
             for arg in node.args:
                 match arg:
                     case arg if isinstance(arg, Name):
@@ -227,8 +231,8 @@ class TypeChecker(NodeVisitor):
                     case _:
                         args_types.append(self.visit(arg))
 
-            expected_args: List[type] = self.lookup(name)
-            return_type: type = expected_args.pop()
+            expected_args: List[Typ] = self.lookup(name)
+            return_type: Typ = expected_args.pop()
 
             fail_if(not len(args_types) == len(expected_args),
                     f'function {name} expected {len(expected_args)} got {len(args_types)}')
@@ -268,15 +272,15 @@ class TypeChecker(NodeVisitor):
         self.environments.pop()
 
     def lookup(self, key) -> type | List[type]:
-        latest_scope: Dict[str, type] = self.get_latest_scope()
+        latest_scope: Dict[str, Typ] = self.get_latest_scope()
         fail_if(key not in latest_scope, f'{key} was not found in {latest_scope}')
         return latest_scope[key]
 
-    def get_latest_scope(self) -> Dict[str, type]:
+    def get_latest_scope(self) -> Dict[str, Typ]:
         return self.environments[len(self.environments) - 1]
 
     def bind(self, var: str, typ: type) -> None:
-        latest_scope: Dict[str, type] = self.get_latest_scope()
+        latest_scope: Dict[str, Typ] = self.get_latest_scope()
         latest_scope[var] = typ
 
     def print_envs(self) -> None:
