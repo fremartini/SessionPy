@@ -141,9 +141,7 @@ class TypeChecker(NodeVisitor):
 
                 fail_if(types_differ and not can_upcast,
                         f'function {name} expected {expected_args}, got {args_types}')
-
             return return_type
-
         func_name = self.visit(node.func)
         builtin = locate(func_name)
         if builtin:
