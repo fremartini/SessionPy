@@ -3,11 +3,14 @@ import ast
 import typing  # for accessing _GenericAlias
 from ast import *
 from typing import *
-from pydoc import locate
-
+from pydoc import locate, safeimport
+from pprint import pprint
 
 # For interopability with typing, our type must be all of the following
-Typ = Union[type, List[type], typing._GenericAlias]
+FunctionTyp = List[type]
+ContainerType = typing._GenericAlias
+Typ = Union[type, FunctionTyp, ContainerType]
+Environment = Dict[str, Typ]
 
 def _read_src_from_file(file) -> str:
     with open(file, "r") as f:
@@ -35,7 +38,7 @@ def union(t1: Typ, t2: Typ) -> Typ:
                 if t1 == typ or t2 == typ:
                     return typ
     # Check if from typing module, i.e. List, Sequence, Tuple, etc.
-    if isinstance(t1, typing._GenericAlias) and isinstance(t2, typing._GenericAlias):
+    if isinstance(t1, ContainerType) and isinstance(t2, ContainerType):
         if t1._name != t2._name:
             raise TypeError("cannot union different typing constructs")
 
@@ -93,10 +96,46 @@ def can_downcast_to(t1: type, t2: type):
 
 class TypeChecker(NodeVisitor):
 
-
-    def __init__(self, tree) -> None:
-        self.environments: List[Dict[str, Typ]] = [{}]
+    def __init__(self, tree, ignore_imports = False) -> None:
+        self.environments: List[Environment] = [{}]
+        self.ignore_imports = ignore_imports
+        if not ignore_imports:
+            self.import_envs: Environment = {} # {'arith': { 'add': <type signature> }, ... }
         self.visit(tree)
+
+    """
+        Handles
+            
+            from X import Y, Z
+        
+        We typecheck the file X, bring top-level declarations into scope and
+        trim away everything but {Y, Z} and finally merges with out top-decls.
+    """
+    def visit_ImportFrom(self, node: ImportFrom) -> Any:
+        if self.ignore_imports:
+            return
+        module = safeimport(node.module)
+        typed_file : TypeChecker = typecheck_file(module.__file__, ignore_imports=True)
+        merging_env = typed_file.get_latest_scope()
+        import_names : Set[str] = {alias.name for alias in node.names}
+        for k in list(merging_env):
+            if k not in import_names:
+                del merging_env[k]
+        self.environments[0] |= merging_env
+
+    def visit_Import(self, node: Import) -> Any:
+        if self.ignore_imports:
+            return
+        print('IMPORTING STUFF')
+        for module in node.names:
+            print(module)
+            module_name = module.name
+            print(module_name)
+            module = safeimport(module_name)
+            typed_file = typecheck_file(module.__file__, ignore_imports=True)
+            env = typed_file.get_latest_scope()
+            self.import_envs[module_name] = env
+        print('IMPORTED ENVS', self.import_envs)
 
     def visit_Module(self, node: Module) -> None:
         for stmt in node.body:
@@ -112,18 +151,13 @@ class TypeChecker(NodeVisitor):
         self.dup()
 
         args = self.visit(node.args)
-        for pair in args:
-            v, t = pair
+        for (v,t) in args:
             self.bind(v, t)
 
         for stmt in node.body:
             match stmt:
                 case _ if isinstance(stmt, Return):
                     actual_return_type = self.visit(stmt)
-                    if expected_return_type == Any and actual_return_type and actual_return_type != Any:
-                        parameter_types.pop()
-                        parameter_types.append(actual_return_type)
-                        self.bind(node.name, parameter_types)
                     types_differ: bool = actual_return_type != expected_return_type
                     can_downcast: bool = can_downcast_to(expected_return_type, actual_return_type)
                     fail_if(types_differ and not can_downcast,
@@ -138,6 +172,15 @@ class TypeChecker(NodeVisitor):
         for arg in node.args:
             arguments.append(self.visit_arg(arg))
         return arguments
+    
+    def visit_Attribute(self, node: Attribute) -> Any:
+        print('### ATTRIBRUTE ###')
+        pprint(vars(node))
+        attr_value = self.visit(node.value)
+        if attr_value in self.import_envs: # calling member of imported file
+            res = self.import_envs[attr_value][node.attr]
+            print('returning', res)
+            return res
 
     def visit_arg(self, node: arg) -> Tuple[str, type]:
         match node:
@@ -221,18 +264,26 @@ class TypeChecker(NodeVisitor):
                 fail_if(types_differ and not can_upcast,
                         f'function {name} expected {expected_args}, got {args_types}')
             return return_type
-        func_name = self.visit(node.func)
-        builtin = locate(func_name)
-        if builtin:
-            if type(builtin) == type:
-                return builtin
-            else:
-                return type(builtin)
-        match node:
-            case _ if self.lookup(func_name) == ClassDef:
-                return _class_def()
-            case _:
-                _call()
+        print('### CALL NODE ###')
+        pprint(vars(node))
+        func_name_or_type = self.visit(node.func)
+        print('func_name_or_type', func_name_or_type)
+        if type(func_name_or_type) == str:
+            name = func_name_or_type
+            builtin = locate(name)
+            if builtin:
+                if type(builtin) == type:
+                    return builtin
+                else:
+                    return type(builtin)
+            match node:
+                case _ if self.lookup(name) == ClassDef:
+                    return _class_def()
+                case _:
+                    return _call()
+        elif type(func_name_or_type) == list: # TODO: for now, asserting FunctionType
+            return func_name_or_type
+        
 
     def visit_Return(self, node: Return) -> Type:
         match node:
@@ -268,11 +319,14 @@ class TypeChecker(NodeVisitor):
     def print_envs(self) -> None:
         print(self.environments)
 
+    def get_envs(self):
+        return self.environments
 
-def typecheck_file(file) -> None:
+
+def typecheck_file(file, ignore_imports = False) -> None:
     src = _read_src_from_file(file)
     tree = parse(src)
-    TypeChecker(tree)
+    return TypeChecker(tree, ignore_imports)
 
 
 if __name__ == '__main__':
