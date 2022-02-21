@@ -1,5 +1,5 @@
 import ast
-import typing # for accessing _GenericAlias
+import typing  # for accessing _GenericAlias
 from ast import *
 from typing import *
 import sys
@@ -25,6 +25,8 @@ def str_to_typ(s: str) -> type:
             return float
         case 'bool':
             return bool
+        case 'Any':
+            return Any
         case _:
             raise Exception(f"unknown type {s}")
 
@@ -73,13 +75,16 @@ def union(t1: type, t2: type) -> type:
             return List[union(t1, t2)]
         else:
             raise TypeError(f"cannot union {t1._name} yet")
-        
+
         # TODO: Extend with other collections 
     else:
-        if issubclass(t1,t2): return t2
-        elif issubclass(t2,t1): return t1
+        if issubclass(t1, t2):
+            return t2
+        elif issubclass(t2, t1):
+            return t1
         else:
             raise TypeError(f"exhausted: could not union {t1} with {t2}")
+
 
 def fail_if(e: bool, msg: str) -> None:
     if e:
@@ -96,6 +101,22 @@ def op_to_str(op):
             return "__mul__"
 
 
+def can_upcast_to(t1: type, t2: type):
+    if t2 == Any:
+        return True
+
+    #FIXME: issubclass is broken => issubclass(int, float) -> false. Find better solution
+    return False
+
+
+def can_downcast_to(t1: type, t2: type):
+    if t1 == Any:
+        return True
+
+    # FIXME: issubclass is broken => issubclass(int, float) -> false. Find better solution
+    return False
+
+
 class TypeChecker(NodeVisitor):
     def __init__(self, tree) -> None:
         self.environments: List[Dict[str, type | List[type]]] = [{}]
@@ -106,10 +127,10 @@ class TypeChecker(NodeVisitor):
             self.visit(stmt)
 
     def visit_FunctionDef(self, node: FunctionDef) -> None:
-        return_type: type = Any if not node.returns else str_to_typ(self.visit(node.returns))
+        expected_return_type: type = Any if not node.returns else str_to_typ(self.visit(node.returns))
         parameter_types: List[Tuple[str, type]] = self.visit(node.args)
         parameter_types = [ty for (_, ty) in parameter_types]
-        parameter_types.append(return_type)
+        parameter_types.append(expected_return_type)
         self.bind(node.name, parameter_types)
 
         self.dup()
@@ -121,10 +142,14 @@ class TypeChecker(NodeVisitor):
 
         for stmt in node.body:
             match stmt:
-                case stmt if isinstance(stmt, Return):
+                case _ if isinstance(stmt, Return):
                     actual_return_type = self.visit(stmt)
-                    fail_if((not return_type == Any) and actual_return_type != return_type,
-                            f'expected return type {return_type} got {actual_return_type}')
+
+                    types_differ: bool = actual_return_type != expected_return_type
+                    can_downcast: bool = can_downcast_to(expected_return_type, actual_return_type)
+
+                    fail_if(types_differ and not can_downcast,
+                            f'expected return type {expected_return_type} got {actual_return_type}')
                 case _:
                     self.visit(stmt)
 
@@ -166,10 +191,10 @@ class TypeChecker(NodeVisitor):
         self.bind(target, ann_type)
 
     def visit_BinOp(self, node: BinOp) -> type:
-        #op_str = op_to_str(node.op)
-        #if not hasattr(node.left, op_str):
+        # op_str = op_to_str(node.op)
+        # if not hasattr(node.left, op_str):
         #    raise Exception(f"left operand does not support {op_str}")
-        #if not hasattr(node.right, op_str):
+        # if not hasattr(node.right, op_str):
         #    raise Exception(f"right operand does not support {op_str}")
         match node.left:
             case left if isinstance(left, Name):
@@ -205,11 +230,15 @@ class TypeChecker(NodeVisitor):
             expected_args: List[type] = self.lookup(name)
             return_type: type = expected_args.pop()
 
-            well_typed = args_types == expected_args
+            fail_if(not len(args_types) == len(expected_args),
+                    f'function {name} expected {len(expected_args)} got {len(args_types)}')
 
-            fail_if(not len(args_types) == len(expected_args), f'')
+            for actual_type, expected_type in zip(args_types, expected_args):
+                types_differ: bool = expected_type != actual_type
+                can_upcast: bool = can_upcast_to(actual_type, expected_type)
 
-            fail_if(not well_typed, f'function {name} expected {expected_args}, got {args_types}')
+                fail_if(types_differ and not can_upcast,
+                        f'function {name} expected {expected_args}, got {args_types}')
 
             return return_type
 
