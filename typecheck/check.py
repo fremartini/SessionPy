@@ -127,7 +127,6 @@ class TypeChecker(NodeVisitor):
                         self.bind(node.name, parameter_types)
                     types_differ: bool = actual_return_type != expected_return_type
                     can_downcast: bool = can_downcast_to(expected_return_type, actual_return_type)
-                    print('here...', actual_return_type, expected_return_type)
                     fail_if(types_differ and not can_downcast,
                             f'expected return type {expected_return_type} got {actual_return_type}')
                 case _:
