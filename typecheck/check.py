@@ -7,7 +7,6 @@ from typing import *
 from types import GenericAlias
 from pydoc import locate, safeimport
 from pprint import pprint
-from unicodedata import name
 
 # For interopability with typing, our type must be all of the following
 FunctionTyp = list # of types
@@ -28,6 +27,8 @@ def dump_ast(s, node) -> None:
 class UnionError(Exception):
     ...
 
+def is_type(maybe_typ):
+    return isinstance(type(maybe_typ), Typ)
 
 def union(t1: Typ, t2: Typ) -> Typ:
     if t1 == t2: return t1
@@ -236,10 +237,10 @@ class TypeChecker(NodeVisitor):
         pprint(vars(node))
         target: str = self.visit(node.target)
         name_or_type = self.visit(node.annotation)
-        if isinstance(name_or_type, Typ):
+        if is_type(name_or_type):
             self.bind(target, name_or_type)
         else: 
-            ann_type: Type = locate(name)
+            ann_type: Type = locate(name_or_type)
             assert(type(ann_type) == type)
             rhs_type: Type = self.visit(node.value)
             fail_if(not ann_type == rhs_type, f'annotated type {ann_type} does not match inferred type {rhs_type}')
@@ -303,7 +304,7 @@ class TypeChecker(NodeVisitor):
             name = func_name_or_type
             builtin = locate(name)
             if builtin:
-                if isinstance(builtin, Typ):
+                if is_type(builtin):
                     return builtin
                 else:
                     return type(builtin)
