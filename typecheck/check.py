@@ -107,16 +107,24 @@ class TypeChecker(NodeVisitor):
             self.import_envs: Environment = {} # {'arith': { 'add': <type signature> }, ... }
         self.visit(tree)
 
+    """
+        Check if module given as a string is a Python library; otherwise it's
+        local
+        
+        Example:
+        {os, sys, typing, ast, ..}  => true
+        [local module]              => false 
+    """
     def is_py_lib(self, module_name: str) -> bool:
         if module_name == 'sys':
             return True
         mod = locate(module_name)
         if mod:
-            actual_file = mod.__file__
             def get_dir(path: str):
                 return os.path.dirname(os.path.realpath(path))
-            return get_dir(__file__) != get_dir(actual_file)
-        else: raise Exception(f"always expecting valid module here - got {module_name}")
+            # if path to module is outside of current dir, it's assumed to be library
+            return get_dir(__file__) != get_dir(mod.__file__)
+        else: raise Exception(f"Module <{module_name}> could not be found locally, or in library")
 
     """
         Handles
@@ -234,7 +242,6 @@ class TypeChecker(NodeVisitor):
         return res
 
     def visit_AnnAssign(self, node: AnnAssign) -> None:
-        pprint(vars(node))
         target: str = self.visit(node.target)
         name_or_type = self.visit(node.annotation)
         if is_type(name_or_type):
@@ -269,8 +276,6 @@ class TypeChecker(NodeVisitor):
         return type(node.value)
 
     def visit_Call(self, node: Call) -> Typ:
-        pprint(vars(node))
-        print(self.visit(node.func))
         def _class_def():
             self.bind(self.visit(node.func), ClassVar)
             return ClassVar
