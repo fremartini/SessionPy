@@ -103,7 +103,9 @@ class TypeChecker(NodeVisitor):
             self.visit(stmt)
 
     def visit_FunctionDef(self, node: FunctionDef) -> None:
-        expected_return_type: type = Any if not node.returns else locate(self.visit(node.returns))
+        ret = self.visit(node.returns) if node.returns else None
+        loc_ret = locate(ret) if ret else None
+        expected_return_type: type = loc_ret if loc_ret else Any
         parameter_types: List[Tuple[str, type]] = self.visit(node.args)
         parameter_types = [ty for (_, ty) in parameter_types]
         parameter_types.append(expected_return_type)
@@ -112,8 +114,7 @@ class TypeChecker(NodeVisitor):
         self.dup()
 
         args = self.visit(node.args)
-        for pair in args:
-            v, t = pair
+        for (v,t) in args:
             self.bind(v, t)
 
         for stmt in node.body:
@@ -126,6 +127,7 @@ class TypeChecker(NodeVisitor):
                         self.bind(node.name, parameter_types)
                     types_differ: bool = actual_return_type != expected_return_type
                     can_downcast: bool = can_downcast_to(expected_return_type, actual_return_type)
+                    print('here...', actual_return_type, expected_return_type)
                     fail_if(types_differ and not can_downcast,
                             f'expected return type {expected_return_type} got {actual_return_type}')
                 case _:
