@@ -1,16 +1,19 @@
 import sys
 import ast
+import os
 import typing  # for accessing _GenericAlias
 from ast import *
 from typing import *
+from types import GenericAlias
 from pydoc import locate, safeimport
 from pprint import pprint
+from unicodedata import name
 
 # For interopability with typing, our type must be all of the following
-FunctionTyp = List[type]
-ContainerType = typing._GenericAlias
+FunctionTyp = list # of types
+ContainerType = Union[typing._GenericAlias, GenericAlias]
 Typ = Union[type, FunctionTyp, ContainerType]
-Environment = Dict[str, Typ]
+Environment = dict[str, Typ]
 
 def _read_src_from_file(file) -> str:
     with open(file, "r") as f:
@@ -103,6 +106,17 @@ class TypeChecker(NodeVisitor):
             self.import_envs: Environment = {} # {'arith': { 'add': <type signature> }, ... }
         self.visit(tree)
 
+    def is_py_lib(self, module_name: str) -> bool:
+        if module_name == 'sys':
+            return True
+        mod = locate(module_name)
+        if mod:
+            actual_file = mod.__file__
+            def get_dir(path: str):
+                return os.path.dirname(os.path.realpath(path))
+            return get_dir(__file__) != get_dir(actual_file)
+        else: raise Exception(f"always expecting valid module here - got {module_name}")
+
     """
         Handles
             
@@ -114,7 +128,10 @@ class TypeChecker(NodeVisitor):
     def visit_ImportFrom(self, node: ImportFrom) -> Any:
         if self.ignore_imports:
             return
-        module = safeimport(node.module)
+        mod_name = node.module
+        module = safeimport(mod_name)
+        if self.is_py_lib(mod_name):
+            return
         typed_file : TypeChecker = typecheck_file(module.__file__, ignore_imports=True)
         merging_env = typed_file.get_latest_scope()
         import_names : Set[str] = {alias.name for alias in node.names}
@@ -123,19 +140,18 @@ class TypeChecker(NodeVisitor):
                 del merging_env[k]
         self.environments[0] |= merging_env
 
+
     def visit_Import(self, node: Import) -> Any:
         if self.ignore_imports:
             return
-        print('IMPORTING STUFF')
         for module in node.names:
-            print(module)
             module_name = module.name
-            print(module_name)
+            if self.is_py_lib(module_name):
+                continue
             module = safeimport(module_name)
             typed_file = typecheck_file(module.__file__, ignore_imports=True)
             env = typed_file.get_latest_scope()
             self.import_envs[module_name] = env
-        print('IMPORTED ENVS', self.import_envs)
 
     def visit_Module(self, node: Module) -> None:
         for stmt in node.body:
@@ -173,14 +189,17 @@ class TypeChecker(NodeVisitor):
             arguments.append(self.visit_arg(arg))
         return arguments
     
-    def visit_Attribute(self, node: Attribute) -> Any:
-        print('### ATTRIBRUTE ###')
-        pprint(vars(node))
+    """
+        Visits attributes that forms:
+            X.Y(...)
+        
+        If called on object from other file, returns function name (Y) and the
+        type signature of function as a tuple.
+    """
+    def visit_Attribute(self, node: Attribute) -> Tuple[str, Typ]:
         attr_value = self.visit(node.value)
         if attr_value in self.import_envs: # calling member of imported file
-            res = self.import_envs[attr_value][node.attr]
-            print('returning', res)
-            return res
+            return node.attr, self.import_envs[attr_value][node.attr]
 
     def visit_arg(self, node: arg) -> Tuple[str, type]:
         match node:
@@ -204,15 +223,28 @@ class TypeChecker(NodeVisitor):
         value: type = self.visit(node.value)
         self.bind(target, value)
 
+
+    def visit_Subscript(self, node: Subscript) -> Any:
+        container_str: str = self.visit(node.value)
+        container_typ: type = locate(container_str.lower())
+        typ_str: str = self.visit(node.slice)
+        typ: type = locate(typ_str)
+        res = container_typ[typ]
+        return res
+
     def visit_AnnAssign(self, node: AnnAssign) -> None:
+        pprint(vars(node))
         target: str = self.visit(node.target)
-        ann_type: Type = locate(self.visit(node.annotation))
-        assert(type(ann_type) == type)
-        rhs_type: Type = self.visit(node.value)
-        fail_if(not ann_type == rhs_type, f'annotated type {ann_type} does not match inferred type {rhs_type}')
-
-        self.bind(target, ann_type)
-
+        name_or_type = self.visit(node.annotation)
+        if isinstance(name_or_type, Typ):
+            self.bind(target, name_or_type)
+        else: 
+            ann_type: Type = locate(name)
+            assert(type(ann_type) == type)
+            rhs_type: Type = self.visit(node.value)
+            fail_if(not ann_type == rhs_type, f'annotated type {ann_type} does not match inferred type {rhs_type}')
+            self.bind(target, ann_type)
+        
     def visit_BinOp(self, node: BinOp) -> type:
         # op_str = op_to_str(node.op)
         # if not hasattr(node.left, op_str):
@@ -236,6 +268,8 @@ class TypeChecker(NodeVisitor):
         return type(node.value)
 
     def visit_Call(self, node: Call) -> Typ:
+        pprint(vars(node))
+        print(self.visit(node.func))
         def _class_def():
             self.bind(self.visit(node.func), ClassVar)
             return ClassVar
@@ -264,15 +298,12 @@ class TypeChecker(NodeVisitor):
                 fail_if(types_differ and not can_upcast,
                         f'function {name} expected {expected_args}, got {args_types}')
             return return_type
-        print('### CALL NODE ###')
-        pprint(vars(node))
         func_name_or_type = self.visit(node.func)
-        print('func_name_or_type', func_name_or_type)
         if type(func_name_or_type) == str:
             name = func_name_or_type
             builtin = locate(name)
             if builtin:
-                if type(builtin) == type:
+                if isinstance(builtin, Typ):
                     return builtin
                 else:
                     return type(builtin)
@@ -281,7 +312,18 @@ class TypeChecker(NodeVisitor):
                     return _class_def()
                 case _:
                     return _call()
-        elif type(func_name_or_type) == list: # TODO: for now, asserting FunctionType
+        elif type(func_name_or_type) == tuple: # TODO: for now, asserting FunctionType
+            fname, typ = func_name_or_type
+            args_types: List[Typ] = []
+            for arg in node.args:
+                match arg:
+                    case arg if isinstance(arg, Name):
+                        args_types.append(self.lookup(self.visit(arg)))
+                    case _:
+                        args_types.append(self.visit(arg))
+            typ.pop()
+            if args_types != typ:
+                raise TypeError(f'{fname} expected {typ}, got {args_types}')
             return func_name_or_type
         
 

@@ -1,2 +1,2 @@
-import arith
-arith.add(2,"hi")
+from typing import List
+xs : List[int] = ["hello", "world"]
