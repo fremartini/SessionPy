@@ -22,6 +22,9 @@ def _read_src_from_file(file) -> str:
 def dump_ast(s, node) -> None:
     print(f'{s}\n', dump(node, indent=4))
 
+# Debug method for checking what a thing is
+def is_a(obj):
+    print(obj, 'is a', type(obj))
 
 
 class UnionError(Exception):
@@ -236,9 +239,9 @@ class TypeChecker(NodeVisitor):
     def visit_Subscript(self, node: Subscript) -> Any:
         container_str: str = self.visit(node.value)
         container_typ: type = locate(container_str.lower())
-        typ_str: str = self.visit(node.slice)
-        typ: type = locate(typ_str)
-        res = container_typ[typ]
+        opt_typ = self.visit(node.slice)
+        typ: type = locate(opt_typ) if isinstance(opt_typ, str) else opt_typ
+        res = container_typ[typ] if container_typ else typ
         return res
 
     def visit_AnnAssign(self, node: AnnAssign) -> None:
