@@ -103,7 +103,9 @@ class TypeChecker(NodeVisitor):
             self.visit(stmt)
 
     def visit_FunctionDef(self, node: FunctionDef) -> None:
-        expected_return_type: type = Any if not node.returns else locate(self.visit(node.returns))
+        ret = self.visit(node.returns) if node.returns else None
+        loc_ret = locate(ret) if ret else None
+        expected_return_type: type = loc_ret if loc_ret else Any
         parameter_types: List[Tuple[str, type]] = self.visit(node.args)
         parameter_types = [ty for (_, ty) in parameter_types]
         parameter_types.append(expected_return_type)
@@ -112,8 +114,7 @@ class TypeChecker(NodeVisitor):
         self.dup()
 
         args = self.visit(node.args)
-        for pair in args:
-            v, t = pair
+        for (v,t) in args:
             self.bind(v, t)
 
         for stmt in node.body:
@@ -143,7 +144,7 @@ class TypeChecker(NodeVisitor):
         match node:
             case node if node.annotation:
                 ann: str = self.visit(node.annotation)
-                ann_typ: type = locate(ann)
+                ann_typ: type = self.locate_or_lookup(ann)
                 assert(type(ann_typ) == type)
                 return node.arg, ann_typ
             case _:
@@ -158,7 +159,15 @@ class TypeChecker(NodeVisitor):
         assert (len(node.targets) == 1)
 
         target: str = self.visit(node.targets[0])
-        value: type = self.visit(node.value)
+
+        match node.value:
+            case _ if isinstance(node.value, Name):
+                # number = int
+                # number = x
+                value: type = self.locate_or_lookup(self.visit(node.value))
+            case _:
+                value: type = self.visit(node.value)
+
         self.bind(target, value)
 
     def visit_AnnAssign(self, node: AnnAssign) -> None:
@@ -236,13 +245,20 @@ class TypeChecker(NodeVisitor):
 
     def visit_Return(self, node: Return) -> Type:
         match node:
-            case node if isinstance(node.value, Name):
+            case _ if isinstance(node.value, Name):
                 return self.lookup(self.visit(node.value))
             case _:
                 return self.visit(node.value)
 
     def visit_ClassDef(self, node: ClassDef) -> None:
         self.bind(node.name, ClassDef)
+
+    def locate_or_lookup(self, s: str) -> Type:
+        loc: Type = locate(s)
+        if loc is None:
+            return self.lookup(s)
+        else:
+            return loc
 
     def push(self) -> None:
         self.environments.append({})
