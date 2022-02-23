@@ -1,9 +1,3 @@
-a = 1
-b = 2
+import arith
 
-
-def add(x: int, y: int) -> int:
-    return x + y
-
-
-add(a, b)
+arith.add(1, 5.5)
