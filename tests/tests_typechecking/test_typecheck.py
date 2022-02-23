@@ -118,5 +118,31 @@ class TestTypeCheck(unittest.TestCase):
 
         TypeChecker(get_ast(foo))
 
+    def test_type_alias_int_succeeds(self):
+        def foo():
+            number = int
+
+            def add(x: number, y: number) -> number:
+                return x + y
+
+            add(5, 7)
+
+        TypeChecker(get_ast(foo))
+
+    # FIXME: is this implemented yet?
+    """
+    def test_type_alias_list_int_succeeds(self):
+        def foo():
+            numList = List[int]
+
+            def length(x: numList) -> int:
+                return len(x)
+
+            length([1, 2, 3, 4])
+
+        TypeChecker(get_ast(foo))
+    """
+
+
 if __name__ == '__main__':
     unittest.main()
