@@ -109,6 +109,14 @@ class TestTypeCheck(unittest.TestCase):
     def test_can_downcast_given_float_any_succeeds(self):
         self.assertTrue(can_downcast_to(Any, int))
 
+    def test_system_calls_are_ok(self):
+        def foo():
+            def print_me(x):
+                print(x)
+
+            print_me("foo")
+
+        TypeChecker(get_ast(foo))
 
 if __name__ == '__main__':
     unittest.main()

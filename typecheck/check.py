@@ -27,6 +27,7 @@ def is_a(obj):
     print(obj, 'is a', type(obj))
 
 
+
 class UnionError(Exception):
     ...
 
@@ -170,7 +171,9 @@ class TypeChecker(NodeVisitor):
             self.visit(stmt)
 
     def visit_FunctionDef(self, node: FunctionDef) -> None:
-        expected_return_type: type = Any if not node.returns else locate(self.visit(node.returns))
+        ret = self.visit(node.returns) if node.returns else None
+        loc_ret = locate(ret) if ret else None
+        expected_return_type: type = loc_ret if loc_ret else Any
         parameter_types: List[Tuple[str, type]] = self.visit(node.args)
         parameter_types = [ty for (_, ty) in parameter_types]
         parameter_types.append(expected_return_type)
@@ -234,7 +237,6 @@ class TypeChecker(NodeVisitor):
         target: str = self.visit(node.targets[0])
         value: type = self.visit(node.value)
         self.bind(target, value)
-
 
     def visit_Subscript(self, node: Subscript) -> Any:
         container_str: str = self.visit(node.value)
