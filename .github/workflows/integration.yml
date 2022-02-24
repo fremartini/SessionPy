@@ -5,10 +5,8 @@ name: CI
 # Controls when the workflow will run
 on:
   # Triggers the workflow on push or pull request events but only for the main branch
-  push:
-          #branches: [ main ]
   pull_request:
-          #branches: [ main ]
+    branches: [ main ]
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -25,12 +23,13 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
 
-      # Runs a single command using the runners shell
-      - name: run tests
+      - name: install python3.10
         run: |
                 sudo apt update
                 sudo apt upgrade -y
                 sudo apt install software-properties-common -y
                 sudo add-apt-repository ppa:deadsnakes/ppa
                 sudo apt install python3.10
-                make test
+
+      - name: run tests
+        run: make test

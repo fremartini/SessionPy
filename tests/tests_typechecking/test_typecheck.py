@@ -9,16 +9,13 @@ def get_ast(f) -> ast.Module:
 
 
 class TestTypeCheck(unittest.TestCase):
-    def test_fails(self):
-        self.assertTrue(False)
-
     def test_union_int_int_returns_int(self):
         def foo(x: int, y: int) -> int:
             res = x + y
             return res
 
         tc = TypeChecker(get_ast(foo))
-        assert (tc.get_latest_scope()['res'] == int)
+        self.assertEqual(tc.get_latest_scope()['res'], int)
 
     def test_union_int_float_returns_float(self):
         def foo(x: int, y: float) -> float:
@@ -26,7 +23,7 @@ class TestTypeCheck(unittest.TestCase):
             return res
 
         tc = TypeChecker(get_ast(foo))
-        assert (tc.get_latest_scope()['res'] == float)
+        self.assertEqual(tc.get_latest_scope()['res'], float)
 
     def test_union_float_int_returns_float(self):
         def foo(x: float, y: int) -> float:
@@ -34,7 +31,7 @@ class TestTypeCheck(unittest.TestCase):
             return res
 
         tc = TypeChecker(get_ast(foo))
-        assert (tc.get_latest_scope()['res'] == float)
+        self.assertEqual(tc.get_latest_scope()['res'], float)
 
     def test_union_float_float_returns_float(self):
         def foo(x: float, y: float) -> float:
@@ -42,7 +39,7 @@ class TestTypeCheck(unittest.TestCase):
             return res
 
         tc = TypeChecker(get_ast(foo))
-        assert (tc.get_latest_scope()['res'] == float)
+        self.assertEqual(tc.get_latest_scope()['res'], float)
 
     def test_function_call_matching_argument_type_succeeds(self):
         def foo():
