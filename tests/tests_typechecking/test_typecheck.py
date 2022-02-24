@@ -9,6 +9,9 @@ def get_ast(f) -> ast.Module:
 
 
 class TestTypeCheck(unittest.TestCase):
+    def test_fails(self):
+        self.assertTrue(False)
+
     def test_union_int_int_returns_int(self):
         def foo(x: int, y: int) -> int:
             res = x + y
