@@ -38,6 +38,9 @@ def union(t1: Typ, t2: Typ) -> Typ:
 
             union(int, str)                 => Error - unrelated hierarchies       
     """
+    if t1 == Any: return t2
+    if t2 == Any: return t1
+
     if t1 == t2: return t1
     numerics: List[type] = [float, complex, int, bool, Any]  # from high to low
     sequences: List[type] = [str, tuple, bytes, list, bytearray, Any]
