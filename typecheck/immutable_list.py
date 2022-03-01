@@ -33,6 +33,9 @@ class ImmutableList:
     def items(self) -> List:
         return self.internal_list
 
+    def __len__(self):
+        return self.len()
+
     def __eq__(self, other):
         for v, v1 in zip(self.internal_list, other.internal_list):
             if v != v1:

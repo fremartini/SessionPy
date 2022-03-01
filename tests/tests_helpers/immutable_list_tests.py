@@ -16,9 +16,21 @@ class TestTypeCheck(unittest.TestCase):
         hd = ImmutableList(lst=[1, 2, 3, 4, 5]).head()
         self.assertEqual(hd, 1)
 
-    def test_tails_returns_rest(self):
+    def test_head_does_not_alter_list(self):
+        l = ImmutableList(lst=[1, 2, 3, 4, 5])
+        hd = l.head()
+        self.assertEqual(hd, 1)
+        self.assertEqual(l.len(), 5)
+
+    def test_tail_returns_rest(self):
         tl = ImmutableList(lst=[1, 2, 3, 4, 5]).tail()
         self.assertEqual(tl, ImmutableList(lst=[2, 3, 4, 5]))
+
+    def test_tail_does_not_alter_list(self):
+        l = ImmutableList(lst=[1, 2, 3, 4, 5])
+        tl = l.tail()
+        self.assertEqual(tl, ImmutableList(lst=[2, 3, 4, 5]))
+        self.assertEqual(l, ImmutableList(lst=[1, 2, 3, 4, 5]))
 
     def test_lists_are_equal(self):
         one = ImmutableList(lst=[1, 1, 1])

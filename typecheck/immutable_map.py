@@ -34,5 +34,8 @@ class ImmutableMap:
     def items(self) -> List:
         return self.internal_map
 
+    def __len__(self):
+        return self.len()
+
     def __eq__(self, other):
         return self.internal_map == other.internal_map
