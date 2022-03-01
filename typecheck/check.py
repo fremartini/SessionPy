@@ -1,101 +1,14 @@
 import sys
-import ast
-import typing  # for accessing _GenericAlias
 from ast import *
 from typing import *
 from pydoc import locate
-
-
-# For interopability with typing, our type must be all of the following
-Typ = Union[type, List[type], typing._GenericAlias]
-
-def _read_src_from_file(file) -> str:
-    with open(file, "r") as f:
-        return f.read()
-
-
-def dump_ast(s, node) -> None:
-    print(f'{s}\n', dump(node, indent=4))
-
-
-
-class UnionError(Exception):
-    ...
-
-
-def union(t1: Typ, t2: Typ) -> Typ:
-    if t1 == t2: return t1
-    numerics: List[type] = [float, complex, int, bool, Any]  # from high to low
-    sequences: List[type] = [str, tuple, bytes, list, bytearray, Any]
-    if t1 in numerics and t2 in sequences or t1 in sequences and t2 in numerics:
-        raise TypeError(f'cannot merge different hierarchies of {t1} and {t2}')
-    for typ_hierarchy in [numerics, sequences]:
-        if t1 in typ_hierarchy and t2 in typ_hierarchy:
-            for typ in typ_hierarchy:
-                if t1 == typ or t2 == typ:
-                    return typ
-    # Check if from typing module, i.e. List, Sequence, Tuple, etc.
-    if isinstance(t1, typing._GenericAlias) and isinstance(t2, typing._GenericAlias):
-        if t1._name != t2._name:
-            raise TypeError("cannot union different typing constructs")
-
-        if t1._name == 'Tuple':
-            res = []
-            for typ1, typ2 in zip(t1.__args__, t2.__args__):
-                res.append(union(typ1, typ2))
-            return Tuple[res[0], res[1]]
-        elif t1._name == 'List':
-            t1, t2 = t1.__args__[0], t2.__args__[0]
-            return List[union(t1, t2)]
-        else:
-            raise TypeError(f"cannot union {t1._name} yet")
-
-        # TODO: Extend with other collections 
-    else:
-        if issubclass(t1, t2):
-            return t2
-        elif issubclass(t2, t1):
-            return t1
-        else:
-            raise TypeError(f"exhausted: could not union {t1} with {t2}")
-
-
-def fail_if(e: bool, msg: str) -> None:
-    if e:
-        raise Exception(msg)
-
-
-def op_to_str(op):
-    match type(op):
-        case ast.Add:
-            return "__add__"
-        case ast.Sub:
-            return "__sub__"
-        case ast.Mult:
-            return "__mul__"
-
-
-def can_upcast_to(t1: type, t2: type):
-    if t2 == Any:
-        return True
-
-    #FIXME: issubclass is broken => issubclass(int, float) -> false. Find better solution
-    return False
-
-
-def can_downcast_to(t1: type, t2: type):
-    if t1 == Any:
-        return True
-
-    # FIXME: issubclass is broken => issubclass(int, float) -> false. Find better solution
-    return False
-
+from check_debug import *
+from check_lib import *
 
 class TypeChecker(NodeVisitor):
 
-
     def __init__(self, tree) -> None:
-        self.environments: List[Dict[str, Typ]] = [{}]
+        self.environments: List[Environment] = [{}]
         self.visit(tree)
 
     def visit_Module(self, node: Module) -> None:
@@ -180,11 +93,6 @@ class TypeChecker(NodeVisitor):
         self.bind(target, ann_type)
 
     def visit_BinOp(self, node: BinOp) -> type:
-        # op_str = op_to_str(node.op)
-        # if not hasattr(node.left, op_str):
-        #    raise Exception(f"left operand does not support {op_str}")
-        # if not hasattr(node.right, op_str):
-        #    raise Exception(f"right operand does not support {op_str}")
         match node.left:
             case left if isinstance(left, Name):
                 l = self.lookup(self.visit(left))
@@ -274,7 +182,7 @@ class TypeChecker(NodeVisitor):
         fail_if(key not in latest_scope, f'{key} was not found in {latest_scope}')
         return latest_scope[key]
 
-    def get_latest_scope(self) -> Dict[str, Typ]:
+    def get_latest_scope(self) -> Environment:
         return self.environments[len(self.environments) - 1]
 
     def bind(self, var: str, typ: type) -> None:
@@ -286,10 +194,9 @@ class TypeChecker(NodeVisitor):
 
 
 def typecheck_file(file) -> None:
-    src = _read_src_from_file(file)
+    src = read_src_from_file(file)
     tree = parse(src)
     TypeChecker(tree)
-
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
