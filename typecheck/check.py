@@ -3,6 +3,8 @@ from ast import *
 from pydoc import locate
 from check_debug import *
 from check_lib import *
+from functools import reduce
+
 
 
 def last_elem(lst: List[Any]) -> Any:
@@ -86,8 +88,18 @@ class TypeChecker(NodeVisitor):
                 value: type = self.visit(node.value)
 
         self.bind(target, value)
-
+    
+    def visit_List(self, node: List) -> None:
+        if DEBUG:
+            print('visit_List', dump(node))
+        if node.elts:
+            list_types: List[Typ] = [self.visit(el) for el in node.elts]
+            return List[reduce(union, list_types)]
+        else:
+            raise Exception("TODO Johan: I assume list contains elts, let's keep this exception for now and investigate if this is thrown...")
     def visit_AnnAssign(self, node: AnnAssign) -> None:
+        if DEBUG:
+            print('visit_AnnAssign', dump(node))
         target: str = self.visit(node.target)
         ann_type: Type = locate(self.visit(node.annotation))
         assert (type(ann_type) == type)
@@ -153,7 +165,16 @@ class TypeChecker(NodeVisitor):
             case _ if self.lookup(func_name) == ClassDef:
                 return _class_def()
             case _:
-                return _call()
+                _call()
+    
+    def visit_Subscript(self, node: Subscript) -> Any:
+        container_str: str = self.visit(node.value)
+        container_typ: type = locate(container_str.lower())
+        container_typ = to_typing(container_typ)
+        opt_typ = self.visit(node.slice)
+        typ: type = locate(opt_typ) if isinstance(opt_typ, str) else opt_typ
+        res = container_typ[typ] if container_typ else typ
+        return res
 
     def visit_Return(self, node: Return) -> Type:
         match node:
@@ -190,6 +211,8 @@ class TypeChecker(NodeVisitor):
         return last_elem(self.environments)
 
     def bind(self, var: str, typ: type) -> None:
+        if DEBUG:
+            print(f'bind: binding {var} to {typ}')
         latest_scope: Dict[str, Typ] = self.get_latest_scope()
         latest_scope[var] = typ
 

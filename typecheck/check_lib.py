@@ -1,6 +1,7 @@
 from typing import *
 import typing
 from types import GenericAlias
+from check_debug import DEBUG
 
 FunctionTyp = list  # of types
 ContainerType = Union[typing._GenericAlias, GenericAlias]
@@ -38,9 +39,10 @@ def union(t1: Typ, t2: Typ) -> Typ:
 
             union(int, str)                 => Error - unrelated hierarchies       
     """
+    if DEBUG:
+        print(f'union: called with {t1} and {t2}')
     if t1 == Any: return t2
     if t2 == Any: return t1
-
     if t1 == t2: return t1
     numerics: List[type] = [float, complex, int, bool, Any]  # from high to low
     sequences: List[type] = [str, tuple, bytes, list, bytearray, Any]
@@ -53,6 +55,7 @@ def union(t1: Typ, t2: Typ) -> Typ:
                     return typ
     # Check if from typing module, i.e. List, Sequence, Tuple, etc.
     if isinstance(t1, ContainerType) and isinstance(t2, ContainerType):
+        
         if t1._name != t2._name:
             raise TypeError("cannot union different typing constructs")
 
@@ -77,3 +80,15 @@ def union(t1: Typ, t2: Typ) -> Typ:
             raise TypeError(f"exhausted: could not union {t1} with {t2}")
 
 
+def to_typing(typ: type):
+    """
+        Idea: convert lowercase types of type GenericAlias to typing types:
+
+        Examples:
+            list    => List
+            dict    => Dict
+    """
+    if typ == list:
+        return List
+    else:
+        return Exception(f'unsupported built-in type: {typ}')
