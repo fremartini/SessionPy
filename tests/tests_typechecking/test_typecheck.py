@@ -4,7 +4,6 @@ from textwrap import dedent
 from context import *
 
 
-
 def get_ast(f) -> ast.Module:
     return ast.parse(dedent(inspect.getsource(f)))
 
@@ -143,6 +142,32 @@ class TestTypeCheck(unittest.TestCase):
 
         TypeChecker(get_ast(foo))
     """
+
+    def test_recursion_sum(self):
+        def foo():
+            def recurse(x: int) -> int:
+                if x == 0:
+                    return 0
+
+                return x + recurse(x - 1)
+
+            recurse(5)
+
+        TypeChecker(get_ast(foo))
+
+    def test_recursion_fib(self):
+        def foo():
+            def fib(n):
+                if n == 0:
+                    return 0
+                elif n == 1 or n == 2:
+                    return 1
+                else:
+                    return fib(n - 1) + fib(n - 2)
+
+            fib(5)
+
+        TypeChecker(get_ast(foo))
 
 
 if __name__ == '__main__':

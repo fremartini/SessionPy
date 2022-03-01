@@ -1,9 +1,13 @@
 import sys
 from ast import *
-from typing import *
 from pydoc import locate
 from check_debug import *
 from check_lib import *
+
+
+def last_elem(lst: List[Any]) -> Any:
+    return lst[len(lst) - 1]
+
 
 class TypeChecker(NodeVisitor):
 
@@ -27,7 +31,7 @@ class TypeChecker(NodeVisitor):
         self.dup()
 
         args = self.visit(node.args)
-        for (v,t) in args:
+        for (v, t) in args:
             self.bind(v, t)
 
         for stmt in node.body:
@@ -58,7 +62,7 @@ class TypeChecker(NodeVisitor):
             case node if node.annotation:
                 ann: str = self.visit(node.annotation)
                 ann_typ: type = self.locate_or_lookup(ann)
-                assert(type(ann_typ) == type)
+                assert (type(ann_typ) == type)
                 return node.arg, ann_typ
             case _:
                 return node.arg, Any
@@ -86,7 +90,7 @@ class TypeChecker(NodeVisitor):
     def visit_AnnAssign(self, node: AnnAssign) -> None:
         target: str = self.visit(node.target)
         ann_type: Type = locate(self.visit(node.annotation))
-        assert(type(ann_type) == type)
+        assert (type(ann_type) == type)
         rhs_type: Type = self.visit(node.value)
         fail_if(not ann_type == rhs_type, f'annotated type {ann_type} does not match inferred type {rhs_type}')
 
@@ -126,9 +130,9 @@ class TypeChecker(NodeVisitor):
                         args_types.append(self.visit(arg))
 
             expected_args: List[Typ] = self.lookup(name)
-            return_type: Typ = expected_args.pop()
+            return_type: Typ = last_elem(expected_args)
 
-            fail_if(not len(args_types) == len(expected_args),
+            fail_if(not len(args_types) == len(expected_args) - 1,
                     f'function {name} expected {len(expected_args)} got {len(args_types)}')
 
             for actual_type, expected_type in zip(args_types, expected_args):
@@ -137,7 +141,9 @@ class TypeChecker(NodeVisitor):
 
                 fail_if(types_differ and not can_upcast,
                         f'function {name} expected {expected_args}, got {args_types}')
+
             return return_type
+
         func_name = self.visit(node.func)
         builtin = locate(func_name)
         if builtin:
@@ -149,7 +155,7 @@ class TypeChecker(NodeVisitor):
             case _ if self.lookup(func_name) == ClassDef:
                 return _class_def()
             case _:
-                _call()
+                return _call()
 
     def visit_Return(self, node: Return) -> Type:
         match node:
@@ -183,7 +189,7 @@ class TypeChecker(NodeVisitor):
         return latest_scope[key]
 
     def get_latest_scope(self) -> Environment:
-        return self.environments[len(self.environments) - 1]
+        return last_elem(self.environments)
 
     def bind(self, var: str, typ: type) -> None:
         latest_scope: Dict[str, Typ] = self.get_latest_scope()
@@ -197,6 +203,7 @@ def typecheck_file(file) -> None:
     src = read_src_from_file(file)
     tree = parse(src)
     TypeChecker(tree)
+
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
