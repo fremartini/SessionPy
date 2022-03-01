@@ -1,6 +1,6 @@
 from ast import dump
 
-DEBUG = True
+DEBUG = not True
 
 def dump_ast(s, node) -> None:
     print(f'{s}\n', dump(node, indent=4))

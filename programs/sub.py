@@ -1,6 +1,8 @@
-from typing import List
+from typing import List, Dict, Tuple
 
 def f():
     return 42
 
-xs : List[float] = [f(), f() + 1, 3.1415]
+v : Tuple[int, str, float, str] = (True, "hi", 4.12, "cool")
+
+xs : List[int] = [1,2,3]

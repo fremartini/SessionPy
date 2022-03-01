@@ -1,6 +1,6 @@
 from typing import *
 import typing
-from types import GenericAlias
+from types import GenericAlias, BuiltinFunctionType
 from check_debug import DEBUG
 
 FunctionTyp = list  # of types
@@ -59,11 +59,11 @@ def union(t1: Typ, t2: Typ) -> Typ:
         if t1._name != t2._name:
             raise TypeError("cannot union different typing constructs")
 
-        if t1._name == 'Tuple':
+        if t1._name in ['Tuple', 'Dict']:
             res = []
             for typ1, typ2 in zip(t1.__args__, t2.__args__):
                 res.append(union(typ1, typ2))
-            return Tuple[res[0], res[1]]
+            return Tuple[res[0], res[1]] if t1._name == 'Tuple' else Dict[res[0], res[1]]
         elif t1._name == 'List':
             t1, t2 = t1.__args__[0], t2.__args__[0]
             return List[union(t1, t2)]
@@ -90,5 +90,19 @@ def to_typing(typ: type):
     """
     if typ == list:
         return List
+    elif typ == dict:
+        return Dict
+    elif typ == tuple:
+        return Tuple
     else:
-        return Exception(f'unsupported built-in type: {typ}')
+        raise Exception(f'unsupported built-in type: {typ}')
+
+def pack_type(container: Typ, types: List[Typ]):
+    if DEBUG:
+        print('pack_type', container, types)
+    match len(types):
+        case 1: return container[types[0]]
+        case 2: return container[types[0], types[1]]
+        case 3: return container[types[0], types[1], types[2]]
+        case 4: return container[types[0], types[1], types[2], types[3]]
+        case _: raise Exception(f"pack_type: supporting up to four types now; {container}[{types}] needs support")

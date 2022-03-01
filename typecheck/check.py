@@ -5,11 +5,8 @@ from check_debug import *
 from check_lib import *
 from functools import reduce
 
-
-
 def last_elem(lst: List[Any]) -> Any:
     return lst[len(lst) - 1]
-
 
 class TypeChecker(NodeVisitor):
 
@@ -23,7 +20,7 @@ class TypeChecker(NodeVisitor):
 
     def visit_FunctionDef(self, node: FunctionDef) -> None:
         ret = self.visit(node.returns) if node.returns else None
-        loc_ret = locate(ret) if ret else None
+        loc_ret = ret
         expected_return_type: type = loc_ret if loc_ret else Any
         parameter_types: List[Tuple[str, type]] = self.visit(node.args)
         parameter_types = [ty for (_, ty) in parameter_types]
@@ -62,19 +59,22 @@ class TypeChecker(NodeVisitor):
     def visit_arg(self, node: arg) -> Tuple[str, type]:
         match node:
             case node if node.annotation:
-                ann: str = self.visit(node.annotation)
-                ann_typ: type = self.locate_or_lookup(ann)
-                assert (type(ann_typ) == type)
-                return node.arg, ann_typ
+                ann: Typ = self.visit(node.annotation)
+                return node.arg, ann
             case _:
                 return node.arg, Any
 
     def visit_Name(self, node: Name) -> str:
         # TODO: consider return (node.id, lookup(node.id)) to easily pass types around
-        return node.id
+        if DEBUG:
+            print('visit_Name', dump(node))
+        opt_lang_primitive = locate(node.id)
+        return opt_lang_primitive if opt_lang_primitive else node.id
 
     def visit_Assign(self, node: Assign) -> None:
         # FIXME: handle case where node.targets > 1
+        if DEBUG:
+            print('visit_Assign', dump(node))
         assert (len(node.targets) == 1)
 
         target: str = self.visit(node.targets[0])
@@ -83,12 +83,18 @@ class TypeChecker(NodeVisitor):
             case _ if isinstance(node.value, Name):
                 # number = int
                 # number = x
-                value: type = self.locate_or_lookup(self.visit(node.value))
+                value: type = self.visit(node.value)
             case _:
                 value: type = self.visit(node.value)
 
         self.bind(target, value)
     
+    def visit_Tuple(self, node: Tuple) -> None:
+        if DEBUG:
+            print('visit_Tuple', dump(node))
+        assert(node.elts)
+        return pack_type(Tuple, [self.visit(el) for el in node.elts])
+
     def visit_List(self, node: List) -> None:
         if DEBUG:
             print('visit_List', dump(node))
@@ -97,16 +103,22 @@ class TypeChecker(NodeVisitor):
             return List[reduce(union, list_types)]
         else:
             raise Exception("TODO Johan: I assume list contains elts, let's keep this exception for now and investigate if this is thrown...")
+        
     def visit_AnnAssign(self, node: AnnAssign) -> None:
         if DEBUG:
             print('visit_AnnAssign', dump(node))
         target: str = self.visit(node.target)
-        ann_type: Type = locate(self.visit(node.annotation))
-        assert (type(ann_type) == type)
-        rhs_type: Type = self.visit(node.value)
-        fail_if(not ann_type == rhs_type, f'annotated type {ann_type} does not match inferred type {rhs_type}')
+        name_or_type = self.visit(node.annotation)
+        rhs_type = self.visit(node.value)
+        if is_type(name_or_type):
+            self.bind(target, union(name_or_type, rhs_type if rhs_type else Any))
+        else:
+            ann_type: Type = locate(name_or_type)
+            assert (type(ann_type) == type)
+            rhs_type: Type = self.visit(node.value)
+            fail_if(not ann_type == rhs_type, f'annotated type {ann_type} does not match inferred type {rhs_type}')
+            self.bind(target, ann_type)
 
-        self.bind(target, ann_type)
 
     def visit_BinOp(self, node: BinOp) -> type:
         match node.left:
@@ -126,6 +138,10 @@ class TypeChecker(NodeVisitor):
         return type(node.value)
 
     def visit_Call(self, node: Call) -> Typ:
+        if DEBUG: print('visit_Call', dump(node))
+        func = self.visit(node.func)
+        if isinstance(func, BuiltinFunctionType):
+            return BuiltinFunctionType
         def _class_def():
             self.bind(self.visit(node.func), ClassVar)
             return ClassVar
@@ -154,27 +170,33 @@ class TypeChecker(NodeVisitor):
                 fail_if(types_differ and not can_upcast,
                         f'function {name} expected {expected_args}, got {args_types}')
             return return_type
-        func_name = self.visit(node.func)
-        builtin = locate(func_name)
+        builtin = locate(func)
         if builtin:
             if type(builtin) == type:
                 return builtin
             else:
                 return type(builtin)
         match node:
-            case _ if self.lookup(func_name) == ClassDef:
+            case _ if self.lookup(func) == ClassDef:
                 return _class_def()
             case _:
-                _call()
+                return _call()
+
+    def visit_Dict(self, node: Dict) -> Tuple[Typ, Typ]:
+        if DEBUG:
+            print('visit_Dict', dump(node))
+        key_typ = reduce(union, ((self.visit(k)) for k in node.keys))
+        val_typ = reduce(union, ((self.visit(v)) for v in node.values))
+        return Tuple[key_typ, val_typ]
     
     def visit_Subscript(self, node: Subscript) -> Any:
+        if DEBUG:
+            print('visit_Subscript', dump(node))
         container_str: str = self.visit(node.value)
         container_typ: type = locate(container_str.lower())
         container_typ = to_typing(container_typ)
         opt_typ = self.visit(node.slice)
-        typ: type = locate(opt_typ) if isinstance(opt_typ, str) else opt_typ
-        res = container_typ[typ] if container_typ else typ
-        return res
+        return opt_typ
 
     def visit_Return(self, node: Return) -> Type:
         match node:
@@ -185,13 +207,6 @@ class TypeChecker(NodeVisitor):
 
     def visit_ClassDef(self, node: ClassDef) -> None:
         self.bind(node.name, ClassDef)
-
-    def locate_or_lookup(self, s: str) -> Type:
-        loc: Type = locate(s)
-        if loc is None:
-            return self.lookup(s)
-        else:
-            return loc
 
     def push(self) -> None:
         self.environments.append({})

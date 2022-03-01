@@ -5,6 +5,7 @@ type_check_dir = typecheck/
 
 test:
 	python3.10 $(type_checking_tests)/test_typecheck.py
+	python3.10 $(type_checking_tests)/test_paramtypes.py
 	python3.10 $(type_checking_tests)/test_union.py
 
 #usage: make check file=test.py
