@@ -28,6 +28,8 @@ def can_downcast_to(t1: type, t2: type):
 
     # FIXME: issubclass is broken => issubclass(int, float) -> false. Find better solution
     return False
+
+
 def union(t1: Typ, t2: Typ) -> Typ:
     """
         Unionises two types based on their hierachical structure/class relation.
@@ -60,10 +62,7 @@ def union(t1: Typ, t2: Typ) -> Typ:
             raise TypeError("cannot union different typing constructs")
 
         if t1._name in ['Tuple', 'Dict']:
-            res = []
-            for typ1, typ2 in zip(t1.__args__, t2.__args__):
-                res.append(union(typ1, typ2))
-            return Tuple[res[0], res[1]] if t1._name == 'Tuple' else Dict[res[0], res[1]]
+            return pack_type(Tuple if t1._name == 'Tuple' else Dict, [union(t1,t2) for t1,t2 in zip(t1.__args__, t2.__args__)])
         elif t1._name == 'List':
             t1, t2 = t1.__args__[0], t2.__args__[0]
             return List[union(t1, t2)]
@@ -94,8 +93,10 @@ def to_typing(typ: type):
         return Dict
     elif typ == tuple:
         return Tuple
+    elif typ == any:
+        return Any
     else:
-        raise Exception(f'unsupported built-in type: {typ}')
+        raise Exception(f'to_typing: unsupported built-in type: {typ}')
 
 def pack_type(container: Typ, types: List[Typ]):
     if DEBUG:

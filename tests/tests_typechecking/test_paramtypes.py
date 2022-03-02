@@ -10,8 +10,9 @@ def get_ast(f) -> ast.Module:
 
 class TestParamTypes(unittest.TestCase):
     def test_annotated_list_ints_is_ok(self):
-        xs : List[int] = [1, 4, 12, 100, 2000]
-        TypeChecker(get_ast(xs))
+        def foo():
+            xs : List[int] = [1, 4, 12, 100, 2000]
+        TypeChecker(get_ast(foo))
 
 
 if __name__ == '__main__':

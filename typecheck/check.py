@@ -65,11 +65,13 @@ class TypeChecker(NodeVisitor):
                 return node.arg, Any
 
     def visit_Name(self, node: Name) -> str:
-        # TODO: consider return (node.id, lookup(node.id)) to easily pass types around
         if DEBUG:
             print('visit_Name', dump(node))
-        opt_lang_primitive = locate(node.id)
-        return opt_lang_primitive if opt_lang_primitive else node.id
+        opt = locate(node.id)
+        opt_lower = locate(node.id.lower())
+        if not opt and opt_lower: # special case when from typing
+            return to_typing(opt_lower)
+        return opt or node.id
 
     def visit_Assign(self, node: Assign) -> None:
         # FIXME: handle case where node.targets > 1
@@ -93,16 +95,18 @@ class TypeChecker(NodeVisitor):
         if DEBUG:
             print('visit_Tuple', dump(node))
         assert(node.elts)
-        return pack_type(Tuple, [self.visit(el) for el in node.elts])
+        elems = [self.visit(el) for el in node.elts]
+        res =  pack_type(Tuple, elems)
+        return res
 
     def visit_List(self, node: List) -> None:
         if DEBUG:
             print('visit_List', dump(node))
         if node.elts:
             list_types: List[Typ] = [self.visit(el) for el in node.elts]
-            return List[reduce(union, list_types)]
-        else:
-            raise Exception("TODO Johan: I assume list contains elts, let's keep this exception for now and investigate if this is thrown...")
+            res = reduce(union, list_types)
+            return res
+        else: return Any
         
     def visit_AnnAssign(self, node: AnnAssign) -> None:
         if DEBUG:
@@ -111,7 +115,7 @@ class TypeChecker(NodeVisitor):
         name_or_type = self.visit(node.annotation)
         rhs_type = self.visit(node.value)
         if is_type(name_or_type):
-            self.bind(target, union(name_or_type, rhs_type if rhs_type else Any))
+            self.bind(target, union(rhs_type, name_or_type))
         else:
             ann_type: Type = locate(name_or_type)
             assert (type(ann_type) == type)
@@ -159,14 +163,13 @@ class TypeChecker(NodeVisitor):
 
             expected_args: List[Typ] = self.lookup(name)
             return_type: Typ = last_elem(expected_args)
-
             fail_if(not len(args_types) == len(expected_args) - 1,
                     f'function {name} expected {len(expected_args)} got {len(args_types)}')
-
             for actual_type, expected_type in zip(args_types, expected_args):
+                if isinstance(expected_type, str): # alias
+                    expected_type = self.lookup(expected_type)
                 types_differ: bool = expected_type != actual_type
                 can_upcast: bool = can_upcast_to(actual_type, expected_type)
-
                 fail_if(types_differ and not can_upcast,
                         f'function {name} expected {expected_args}, got {args_types}')
             return return_type
@@ -187,14 +190,13 @@ class TypeChecker(NodeVisitor):
             print('visit_Dict', dump(node))
         key_typ = reduce(union, ((self.visit(k)) for k in node.keys))
         val_typ = reduce(union, ((self.visit(v)) for v in node.values))
-        return Tuple[key_typ, val_typ]
+        res = Tuple[key_typ, val_typ]
+        return res
     
     def visit_Subscript(self, node: Subscript) -> Any:
         if DEBUG:
             print('visit_Subscript', dump(node))
-        container_str: str = self.visit(node.value)
-        container_typ: type = locate(container_str.lower())
-        container_typ = to_typing(container_typ)
+        # container_typ: Typ = self.visit(node.value)
         opt_typ = self.visit(node.slice)
         return opt_typ
 
@@ -218,6 +220,7 @@ class TypeChecker(NodeVisitor):
         self.environments.pop()
 
     def lookup(self, key) -> type | List[type]:
+        if DEBUG: print(f'lookup: searching for key="{key}" in {self.get_latest_scope()}')
         latest_scope: Dict[str, Typ] = self.get_latest_scope()
         fail_if(key not in latest_scope, f'{key} was not found in {latest_scope}')
         return latest_scope[key]
