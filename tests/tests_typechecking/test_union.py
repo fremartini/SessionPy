@@ -46,7 +46,11 @@ class TestTypeCheck(unittest.TestCase):
 
         with self.assertRaises(TypeError):
             union(Tuple[any, any], List[any])
-    # TODO: More cases
+    
+    def test_union_four_elements_succeeds(self):
+        t1 = Tuple[int, str, float, float]
+        t2 = Tuple[float, str, float, int]
+        self.assertEqual(union(t1,t2), Tuple[float, str, float, float])
 
 
 if __name__ == '__main__':
