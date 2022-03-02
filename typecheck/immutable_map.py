@@ -11,10 +11,9 @@ class ImmutableMap:
         return len(self.internal_map)
 
     def add(self, k, v):
-        old_ref = self.internal_map
-        new_ref = old_ref.copy()
-        new_ref[k] = v
-        return ImmutableMap(new_ref)
+        c = self.internal_map.copy()
+        c[k] = v
+        return ImmutableMap(c)
 
     def contains(self, k):
         return k in self.internal_map

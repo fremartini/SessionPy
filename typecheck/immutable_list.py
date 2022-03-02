@@ -11,10 +11,9 @@ class ImmutableList:
         return len(self.internal_list)
 
     def add(self, e):
-        old_ref = self.internal_list
-        new_ref = old_ref.copy()
-        new_ref.append(e)
-        return ImmutableList(new_ref)
+        c = self.internal_list.copy()
+        c.append(e)
+        return ImmutableList(c)
 
     def head(self):
         if len(self.internal_list) == 0:
@@ -25,10 +24,9 @@ class ImmutableList:
         if len(self.internal_list) == 0:
             raise Exception('Cannot take tail of empty list')
 
-        old_ref = self.internal_list
-        new_ref = old_ref.copy()
-        new_ref.pop(0)
-        return ImmutableList(new_ref)
+        c = self.internal_list.copy()
+        c.pop(0)
+        return ImmutableList(c)
 
     def items(self) -> List:
         return self.internal_list
