@@ -188,8 +188,8 @@ class TypeChecker(NodeVisitor):
     def visit_Dict(self, node: Dict) -> Tuple[Typ, Typ]:
         if DEBUG:
             print('visit_Dict', dump(node))
-        key_typ = reduce(union, ((self.visit(k)) for k in node.keys))
-        val_typ = reduce(union, ((self.visit(v)) for v in node.values))
+        key_typ = reduce(union, ((self.visit(k)) for k in node.keys)) if node.keys else Any
+        val_typ = reduce(union, ((self.visit(v)) for v in node.values)) if node.values else Any
         res = Tuple[key_typ, val_typ]
         return res
     
