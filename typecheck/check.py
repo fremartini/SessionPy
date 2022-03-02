@@ -13,6 +13,7 @@ class TypeChecker(NodeVisitor):
 
     def __init__(self, tree) -> None:
         self.environments: List[Environment] = [{}]
+        self.currentFunc: Union[FunctionDef | None] = None
         self.visit(tree)
 
     def visit_Module(self, node: Module) -> None:

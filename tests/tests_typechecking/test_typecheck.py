@@ -168,7 +168,27 @@ class TestTypeCheck(unittest.TestCase):
             fib(5)
 
         TypeChecker(get_ast(foo))
+    """
+    #FIXME
+    def test_nested_return_statement_succeeds(self):
+        def foo(n) -> int:
+            if n == 0:
+                return 0
+            else:
+                return 1
 
+        TypeChecker(get_ast(foo))
+
+    def test_nested_return_statement_fails(self):
+        def foo(n) -> str:
+            if n == 0:
+                return 0
+            else:
+                return 1
+
+        with self.assertRaises(Exception):
+            TypeChecker(get_ast(foo))
+    """
 
 if __name__ == '__main__':
     unittest.main()
