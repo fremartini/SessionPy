@@ -1,26 +1,30 @@
 from typing import *
 import typing
 from types import GenericAlias, BuiltinFunctionType
-from check_debug import DEBUG
+
+from typecheck.debug import debug_print
 
 FunctionTyp = list  # of types
 ContainerType = Union[typing._GenericAlias, GenericAlias]
 Typ = Union[type, FunctionTyp, ContainerType]
 Environment = dict[str, Typ]
 
+
 def is_type(opt_typ):
-    return isinstance(opt_typ, Typ) 
+    return isinstance(opt_typ, Typ)
 
 
 def read_src_from_file(file) -> str:
     with open(file, "r") as f:
         return f.read()
 
+
 def can_upcast_to(t1: type, t2: type):
     if t2 == Any:
         return True
-    #FIXME: issubclass is broken => issubclass(int, float) -> false. Find better solution
+    # FIXME: issubclass is broken => issubclass(int, float) -> false. Find better solution
     return False
+
 
 def can_downcast_to(t1: type, t2: type):
     if t1 == Any:
@@ -41,8 +45,7 @@ def union(t1: Typ, t2: Typ) -> Typ:
 
             union(int, str)                 => Error - unrelated hierarchies       
     """
-    if DEBUG:
-        print(f'union: called with {t1} and {t2}')
+    debug_print(f'union: called with {t1} and {t2}')
     if t1 == Any: return t2
     if t2 == Any: return t1
     if t1 == t2: return t1
@@ -57,12 +60,13 @@ def union(t1: Typ, t2: Typ) -> Typ:
                     return typ
     # Check if from typing module, i.e. List, Sequence, Tuple, etc.
     if isinstance(t1, ContainerType) and isinstance(t2, ContainerType):
-        
+
         if t1._name != t2._name:
             raise TypeError("cannot union different typing constructs")
 
         if t1._name in ['Tuple', 'Dict']:
-            return pack_type(Tuple if t1._name == 'Tuple' else Dict, [union(t1,t2) for t1,t2 in zip(t1.__args__, t2.__args__)])
+            return pack_type(Tuple if t1._name == 'Tuple' else Dict,
+                             [union(t1, t2) for t1, t2 in zip(t1.__args__, t2.__args__)])
         elif t1._name == 'List':
             t1, t2 = t1.__args__[0], t2.__args__[0]
             return List[union(t1, t2)]
@@ -98,12 +102,17 @@ def to_typing(typ: type):
     else:
         raise Exception(f'to_typing: unsupported built-in type: {typ}')
 
+
 def pack_type(container: Typ, types: List[Typ]):
-    if DEBUG:
-        print('pack_type', container, types)
+    debug_print('pack_type', container, types)
     match len(types):
-        case 1: return container[types[0]]
-        case 2: return container[types[0], types[1]]
-        case 3: return container[types[0], types[1], types[2]]
-        case 4: return container[types[0], types[1], types[2], types[3]]
-        case _: raise Exception(f"pack_type: supporting up to four types now; {container}[{types}] needs support")
+        case 1:
+            return container[types[0]]
+        case 2:
+            return container[types[0], types[1]]
+        case 3:
+            return container[types[0], types[1], types[2]]
+        case 4:
+            return container[types[0], types[1], types[2], types[3]]
+        case _:
+            raise Exception(f"pack_type: supporting up to four types now; {container}[{types}] needs support")
