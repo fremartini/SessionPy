@@ -13,12 +13,17 @@ class TypeChecker(NodeVisitor):
 
     def __init__(self, tree) -> None:
         self.environments: List[Environment] = [{}]
-        self.currentFunc: List[FunctionDef | None] = ImmutableList()
+        self.currentFunc: List[FunctionDef] = ImmutableList()
+        self.currentClass: List[ClassDef] = ImmutableList()
+        self.methods: List[dict[str, Environment]] = ImmutableList().add({})
         self.visit(tree)
 
     def visit_Module(self, node: Module) -> None:
         for stmt in node.body:
             self.visit(stmt)
+
+        self.print_envs()
+        self.print_methods()
 
     def visit_FunctionDef(self, node: FunctionDef) -> None:
         self.currentFunc = self.currentFunc.add(node)
@@ -27,7 +32,13 @@ class TypeChecker(NodeVisitor):
         parameter_types: List[Tuple[str, type]] = self.visit(node.args)
         parameter_types = [ty for (_, ty) in parameter_types]
         parameter_types.append(expected_return_type)
-        self.bind(node.name, parameter_types)
+
+        if self.currentClass.len() == 0:
+            self.bind(node.name, parameter_types)
+        else:
+            c = self.currentClass.last().name
+            env = {node.name: parameter_types}
+            self.bind_class_func(c, env)
 
         self.dup()
 
@@ -162,6 +173,13 @@ class TypeChecker(NodeVisitor):
             return ClassVar
 
         def _call():
+            builtin = locate(func)
+            if builtin:
+                if type(builtin) == type:
+                    return builtin
+                else:
+                    return type(builtin)
+
             name: str = self.visit(node.func)
 
             args_types: List[Typ] = []
@@ -185,15 +203,19 @@ class TypeChecker(NodeVisitor):
                         f'function {name} expected {expected_args}, got {args_types}')
             return return_type
 
-        builtin = locate(func)
-        if builtin:
-            if type(builtin) == type:
-                return builtin
-            else:
-                return type(builtin)
+        def _method():
+            ...
+            #dump_ast('METHOD', node)
+            #self.print_envs()
+
         match node:
+
+            case _ if isinstance(node.func, Attribute):
+                return _method()
+
             case _ if self.lookup(func) == ClassDef:
                 return _class_def()
+
             case _:
                 return _call()
 
@@ -220,7 +242,13 @@ class TypeChecker(NodeVisitor):
         return self.compare_type_to_latest_func_return_type(return_type)
 
     def visit_ClassDef(self, node: ClassDef) -> None:
+        self.currentClass = self.currentClass.add(node)
         self.bind(node.name, ClassDef)
+
+        for stmt in node.body:
+            self.visit(stmt)
+
+        self.currentClass = self.currentClass.tail()
 
     def compare_type_to_latest_func_return_type(self, return_type: Typ):
         expected_return_type = self.get_current_function_return_type()
@@ -261,6 +289,14 @@ class TypeChecker(NodeVisitor):
     def get_latest_scope(self) -> Environment:
         return last_elem(self.environments)
 
+    def bind_class_func(self, var: str, typ: Union[type | List[type]]) -> None:
+        latest_scope = self.methods.last()
+
+        if var in latest_scope:
+            latest_scope[var] = latest_scope[var] | typ
+        else:
+            latest_scope[var] = typ
+
     def bind(self, var: str, typ: Union[type | List[type]]) -> None:
         debug_print(f'bind: binding {var} to {typ}')
         latest_scope: Dict[str, Typ] = self.get_latest_scope()
@@ -268,6 +304,9 @@ class TypeChecker(NodeVisitor):
 
     def print_envs(self) -> None:
         print(self.environments)
+
+    def print_methods(self):
+        print(self.methods)
 
 
 def typecheck_file(file) -> None:
