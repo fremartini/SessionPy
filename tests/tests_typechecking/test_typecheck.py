@@ -202,5 +202,27 @@ class TestTypeCheck(unittest.TestCase):
             TypeChecker(get_ast(foo))
     """
 
+    def test_for_each_loop(self):
+        def OK_1():
+            for elem in ["hello", "world"]:
+                print(elem)
+        def OK_2():
+            xs = ["a", "bee", "c"]
+            for x in xs:
+                print(x)
+        def FAIL_1():
+            for elem in ["hello", 42, "world"]:
+                print(elem)
+        def FAIL_2():
+            xs = ["a", "bee", "c", False]
+            for x in xs:
+                print(x)
+        for f in [OK_1, OK_2]:
+            TypeChecker(get_ast(f))
+        for f in [FAIL_1, FAIL_2]:
+            with self.assertRaises(TypeError):
+                TypeChecker(get_ast(f))
+
+
 if __name__ == '__main__':
     unittest.main()

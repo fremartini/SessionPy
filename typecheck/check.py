@@ -72,14 +72,12 @@ class TypeChecker(NodeVisitor):
         assert (len(node.targets) == 1)
 
         target: str = self.visit(node.targets[0])
+        value = self.visit(node.value)
+        opt_exists = self.safe_lookup(target)
+        
+        if opt_exists and opt_exists != value: # TODO: Should probably unionise modified type
+            raise TypeError(f'assign: trying to rebind <{target}> from {opt_exists} to {value}')
 
-        match node.value:
-            case _ if isinstance(node.value, Name):
-                # number = int
-                # number = x
-                value: type = self.visit(node.value)
-            case _:
-                value: type = self.visit(node.value)
 
         self.bind(target, value)
 
@@ -135,6 +133,8 @@ class TypeChecker(NodeVisitor):
         func = self.visit(node.func)
         if isinstance(func, BuiltinFunctionType):
             return BuiltinFunctionType
+        elif func == range: # TODO: (Johan) BIG HACK, investigate how to extract type information from built-ins
+            return int
 
         def _class_def():
             self.bind(self.visit(node.func), ClassVar)
@@ -175,6 +175,20 @@ class TypeChecker(NodeVisitor):
                 return _class_def()
             case _:
                 return _call()
+
+    def visit_While(self, node: While) -> Any:
+        debug_print('visit_While', dump(node))
+        self.visit(node.test)
+        for stmt in node.body:
+            self.visit(stmt)
+
+    def visit_For(self, node: For) -> Any:
+        target = self.visit(node.target)
+        ite = self.visit(node.iter)
+        self.bind(target, ite)
+        for stmt in node.body:
+            self.visit(stmt)
+
 
     def visit_Dict(self, node: Dict) -> Tuple[Typ, Typ]:
         debug_print('visit_Dict', dump(node))
@@ -236,10 +250,16 @@ class TypeChecker(NodeVisitor):
         fail_if(key not in latest_scope, f'{key} was not found in {latest_scope}')
         return latest_scope[key]
 
+    def safe_lookup(self, key):
+        try:
+            return self.lookup(key)
+        except:
+            return None
+
     def get_latest_scope(self) -> Environment:
         return last_elem(self.environments)
 
-    def bind(self, var: str, typ: Union[type | List[type]]) -> None:
+    def bind(self, var: str, typ: Union[type, List[type]]) -> None:
         debug_print(f'bind: binding {var} to {typ}')
         latest_scope: Dict[str, Typ] = self.get_latest_scope()
         latest_scope[var] = typ
