@@ -1,3 +1,4 @@
+import ast
 import sys
 from ast import *
 from pydoc import locate
@@ -43,6 +44,34 @@ class TypeChecker(NodeVisitor):
 
         self.pop()
         self.currentFunc = self.currentFunc.tail()
+
+    def visit_Compare(self, node: Compare) -> None:
+        left = self.lookup_or_self(self.visit(node.left))
+        right = self.lookup_or_self(self.visit(node.comparators[0]))
+
+        types_differ = left != right
+        can_downcast: bool = can_downcast_to(left, right)
+        can_upcast: bool = can_upcast_to(left, right)
+
+        fail_if(types_differ and not (can_upcast or can_downcast), f"{left} did not equal {right}")
+
+    def visit_Match(self, node: ast.Match) -> None:
+        subj = self.visit(node.subject)
+        for case in node.cases:
+            self.dup()
+            case: ast.match_case = case
+            p = self.visit(case.pattern)
+
+            self.bind(p, self.lookup_or_self(subj))
+            if case.guard:
+                self.visit(case.guard)
+
+            for s in case.body:
+                self.visit(s)
+            self.pop()
+
+    def visit_MatchAs(self, node: ast.MatchAs) -> Union[str | None]:
+        return node.name if node.name else None
 
     def visit_arguments(self, node: arguments) -> List[Tuple[str, type]]:
         arguments: List[type] = []
@@ -225,7 +254,7 @@ class TypeChecker(NodeVisitor):
         self.environments.append({})
 
     def dup(self) -> None:
-        self.environments.append(self.get_latest_scope())
+        self.environments.append(self.get_latest_scope().copy())
 
     def pop(self) -> None:
         self.environments.pop()
@@ -235,6 +264,13 @@ class TypeChecker(NodeVisitor):
         latest_scope: Dict[str, Typ] = self.get_latest_scope()
         fail_if(key not in latest_scope, f'{key} was not found in {latest_scope}')
         return latest_scope[key]
+
+    def lookup_or_self(self, key):
+        latest_scope: Dict[str, Typ] = self.get_latest_scope()
+        if key in latest_scope:
+            return latest_scope[key]
+        else:
+            return key
 
     def get_latest_scope(self) -> Environment:
         return last_elem(self.environments)
