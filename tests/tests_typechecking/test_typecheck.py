@@ -90,6 +90,18 @@ class TestTypeCheck(unittest.TestCase):
 
         TypeChecker(get_ast(foo))
 
+    def test_function_call_with_any_return_type_str_succeeds(self):
+        def foo(x: Any) -> str:
+            return x
+
+        TypeChecker(get_ast(foo))
+
+    def test_function_call_with_any_return_type_int_succeeds(self):
+        def foo(x: Any) -> int:
+            return x
+
+        TypeChecker(get_ast(foo))
+
     def test_can_upcast_to_given_int_any_succeeds(self):
         self.assertTrue(can_upcast_to(int, Any))
 

@@ -28,8 +28,8 @@ class ImmutableList:
         c.pop(0)
         return ImmutableList(c)
 
-    def items(self) -> List:
-        return self.internal_list
+    def last(self):
+        return self.internal_list[len(self.internal_list) - 1]
 
     def __len__(self):
         return self.len()
@@ -39,3 +39,6 @@ class ImmutableList:
             if v != v1:
                 return False
         return True
+
+    def __str__(self):
+        return f"{self.internal_list}"

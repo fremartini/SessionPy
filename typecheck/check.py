@@ -5,6 +5,8 @@ from debug import *
 from lib import *
 from functools import reduce
 
+from immutable_list import ImmutableList
+
 
 def last_elem(lst: List[Any]) -> Any:
     return lst[len(lst) - 1]
@@ -14,7 +16,7 @@ class TypeChecker(NodeVisitor):
 
     def __init__(self, tree) -> None:
         self.environments: List[Environment] = [{}]
-        self.currentFunc: Union[FunctionDef | None] = None
+        self.currentFunc: List[FunctionDef | None] = ImmutableList()
         self.visit(tree)
 
     def visit_Module(self, node: Module) -> None:
@@ -22,9 +24,9 @@ class TypeChecker(NodeVisitor):
             self.visit(stmt)
 
     def visit_FunctionDef(self, node: FunctionDef) -> None:
-        ret = self.visit(node.returns) if node.returns else None
-        loc_ret = ret
-        expected_return_type: type = loc_ret if loc_ret else Any
+        self.currentFunc = self.currentFunc.add(node)
+
+        expected_return_type: type = self.get_return_type(node)
         parameter_types: List[Tuple[str, type]] = self.visit(node.args)
         parameter_types = [ty for (_, ty) in parameter_types]
         parameter_types.append(expected_return_type)
@@ -37,21 +39,10 @@ class TypeChecker(NodeVisitor):
             self.bind(v, t)
 
         for stmt in node.body:
-            match stmt:
-                case _ if isinstance(stmt, Return):
-                    actual_return_type = self.visit(stmt)
-                    if expected_return_type == Any and actual_return_type and actual_return_type != Any:
-                        parameter_types.pop()
-                        parameter_types.append(actual_return_type)
-                        self.bind(node.name, parameter_types)
-                    types_differ: bool = actual_return_type != expected_return_type
-                    can_downcast: bool = can_downcast_to(expected_return_type, actual_return_type)
-                    fail_if(types_differ and not can_downcast,
-                            f'expected return type {expected_return_type} got {actual_return_type}')
-                case _:
-                    self.visit(stmt)
+            self.visit(stmt)
 
         self.pop()
+        self.currentFunc = self.currentFunc.tail()
 
     def visit_arguments(self, node: arguments) -> List[Tuple[str, type]]:
         arguments: List[type] = []
@@ -201,12 +192,34 @@ class TypeChecker(NodeVisitor):
     def visit_Return(self, node: Return) -> Type:
         match node:
             case _ if isinstance(node.value, Name):
-                return self.lookup(self.visit(node.value))
+                return_type = self.lookup(self.visit(node.value))
             case _:
-                return self.visit(node.value)
+                return_type = self.visit(node.value)
+
+        return self.compare_type_to_latest_func_return_type(return_type)
 
     def visit_ClassDef(self, node: ClassDef) -> None:
         self.bind(node.name, ClassDef)
+
+    def compare_type_to_latest_func_return_type(self, return_type: Typ):
+        expected_return_type = self.get_current_function_return_type()
+
+        types_differ: bool = return_type != expected_return_type
+        can_downcast: bool = can_downcast_to(return_type, expected_return_type)  # any -> int
+        can_upcast: bool = can_upcast_to(return_type, expected_return_type)  # int -> any
+
+        if types_differ and not (can_upcast or can_downcast):
+            raise TypeError(f'return type {return_type} did not match {expected_return_type}')
+
+        return return_type
+
+    def get_return_type(self, node: FunctionDef):
+        return self.visit(node.returns) if node.returns else Any
+
+    def get_current_function_return_type(self):
+        current_function: FunctionDef = self.currentFunc.last()
+        ty = self.get_return_type(current_function)
+        return ty
 
     def push(self) -> None:
         self.environments.append({})
@@ -226,7 +239,7 @@ class TypeChecker(NodeVisitor):
     def get_latest_scope(self) -> Environment:
         return last_elem(self.environments)
 
-    def bind(self, var: str, typ: type) -> None:
+    def bind(self, var: str, typ: Union[type | List[type]]) -> None:
         debug_print(f'bind: binding {var} to {typ}')
         latest_scope: Dict[str, Typ] = self.get_latest_scope()
         latest_scope[var] = typ

@@ -38,3 +38,6 @@ class ImmutableMap:
 
     def __eq__(self, other):
         return self.internal_map == other.internal_map
+
+    def __str__(self):
+        return f"{self.internal_map}"

@@ -2,7 +2,7 @@ from typing import *
 import typing
 from types import GenericAlias, BuiltinFunctionType
 
-from typecheck.debug import debug_print
+from debug import debug_print
 
 FunctionTyp = list  # of types
 ContainerType = Union[typing._GenericAlias, GenericAlias]
