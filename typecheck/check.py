@@ -9,10 +9,6 @@ from functools import reduce
 from immutable_list import ImmutableList
 
 
-def last_elem(lst: List[Any]) -> Any:
-    return lst[len(lst) - 1]
-
-
 class TypeChecker(NodeVisitor):
 
     def __init__(self, tree) -> None:
@@ -49,11 +45,7 @@ class TypeChecker(NodeVisitor):
         left = self.lookup_or_self(self.visit(node.left))
         right = self.lookup_or_self(self.visit(node.comparators[0]))
 
-        types_differ = left != right
-        can_downcast: bool = can_downcast_to(left, right)
-        can_upcast: bool = can_upcast_to(left, right)
-
-        fail_if(types_differ and not (can_upcast or can_downcast), f"{left} did not equal {right}")
+        fail_if_cannot_cast(left, right, f"{left} did not equal {right}")
 
     def visit_Match(self, node: ast.Match) -> None:
         subj = self.visit(node.subject)
@@ -232,14 +224,8 @@ class TypeChecker(NodeVisitor):
 
     def compare_type_to_latest_func_return_type(self, return_type: Typ):
         expected_return_type = self.get_current_function_return_type()
-
-        types_differ: bool = return_type != expected_return_type
-        can_downcast: bool = can_downcast_to(return_type, expected_return_type)  # any -> int
-        can_upcast: bool = can_upcast_to(return_type, expected_return_type)  # int -> any
-
-        if types_differ and not (can_upcast or can_downcast):
-            raise TypeError(f'return type {return_type} did not match {expected_return_type}')
-
+        fail_if_cannot_cast(return_type, expected_return_type,
+                            f'return type {return_type} did not match {expected_return_type}')
         return return_type
 
     def get_return_type(self, node: FunctionDef):

@@ -25,6 +25,4 @@ def is_a(obj):
     print(obj, 'is a', type(obj))
 
 
-def fail_if(e: bool, msg: str) -> None:
-    if e:
-        raise Exception(msg)
+
