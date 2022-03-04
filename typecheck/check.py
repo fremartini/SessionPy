@@ -69,7 +69,7 @@ class TypeChecker(NodeVisitor):
                 self.visit(s)
             self.pop()
 
-    def visit_MatchAs(self, node: ast.MatchAs) -> Union[str | None]:
+    def visit_MatchAs(self, node: ast.MatchAs) -> Union[str, None]:
         return node.name if node.name else None
 
     def visit_arguments(self, node: arguments) -> List[Tuple[str, type]]:
@@ -98,17 +98,8 @@ class TypeChecker(NodeVisitor):
         # FIXME: handle case where node.targets > 1
         debug_print('visit_Assign', dump(node))
         assert (len(node.targets) == 1)
-
         target: str = self.visit(node.targets[0])
-
-        match node.value:
-            case _ if isinstance(node.value, Name):
-                # number = int
-                # number = x
-                value: type = self.visit(node.value)
-            case _:
-                value: type = self.visit(node.value)
-
+        value = self.visit(node.value)
         self.bind(target, value)
 
     def visit_Tuple(self, node: Tuple) -> None:
@@ -225,12 +216,29 @@ class TypeChecker(NodeVisitor):
         match node:
             case _ if isinstance(func, BuiltinFunctionType):
                 return BuiltinFunctionType
+            case _ if func == range:
+            # TODO: (Johan) BIG HACK, investigate how to extract type information from built-ins
+                return int
             case _ if isinstance(node.func, Attribute):
                 return _method()
             case _ if self.lookup(func) == ClassDef:
                 return _class_def()
             case _:
                 return _call()
+
+    def visit_While(self, node: While) -> Any:
+        debug_print('visit_While', dump(node))
+        self.visit(node.test)
+        for stmt in node.body:
+            self.visit(stmt)
+
+    def visit_For(self, node: For) -> Any:
+        target = self.visit(node.target)
+        ite = self.visit(node.iter)
+        self.bind(target, ite)
+        for stmt in node.body:
+            self.visit(stmt)
+
 
     def visit_Dict(self, node: Dict) -> Tuple[Typ, Typ]:
         debug_print('visit_Dict', dump(node))
@@ -302,7 +310,7 @@ class TypeChecker(NodeVisitor):
     def get_latest_scope(self) -> Environment:
         return last_elem(self.environments)
 
-    def bind_class_func(self, var: str, typ: Union[type | List[type]]) -> None:
+    def bind_class_func(self, var: str, typ: Union[type, List[type]]) -> None:
         latest_scope = self.get_latest_scope()
         key = f"class_{var}"
 
@@ -311,7 +319,7 @@ class TypeChecker(NodeVisitor):
         else:
             latest_scope[key] = typ
 
-    def bind(self, var: str, typ: Union[type | List[type]]) -> None:
+    def bind(self, var: str, typ: Union[type, List[type]]) -> None:
         debug_print(f'bind: binding {var} to {typ}')
         latest_scope: Dict[str, Typ] = self.get_latest_scope()
         latest_scope[var] = typ
