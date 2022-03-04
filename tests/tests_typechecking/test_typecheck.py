@@ -272,6 +272,49 @@ class TestTypeCheck(unittest.TestCase):
         with self.assertRaises(Exception):
             TypeChecker(get_ast(foo))
 
+    def test_method_call_succeeds(self):
+        def foo():
+            class A:
+                def say_hello(self):
+                    print("hello")
+            i = A()
+            i.say_hello()
+
+        TypeChecker(get_ast(foo))
+
+    def test_missing_method_fails(self):
+        def foo():
+            class A:
+                def say_hello(self):
+                    print("hello")
+            i = A()
+            i.do_not_exist()
+
+        with self.assertRaises(Exception):
+            TypeChecker(get_ast(foo))
+
+    def test_method_call_with_parameters_correct_type_succeeds(self):
+        def foo():
+            class A:
+                def dup(self, st : str):
+                    print(st)
+                    print(st)
+            i = A()
+            i.dup("hello!")
+
+        TypeChecker(get_ast(foo))
+
+    def test_method_call_with_parameters_incorrect_type_fails(self):
+        def foo():
+            class A:
+                def dup(self, st : str):
+                    print(st)
+                    print(st)
+            i = A()
+            i.dup(5)
+        with self.assertRaises(Exception):
+            TypeChecker(get_ast(foo))
+
 
 if __name__ == '__main__':
     unittest.main()
