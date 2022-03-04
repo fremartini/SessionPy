@@ -344,7 +344,7 @@ class TestTypeCheck(unittest.TestCase):
             while i < "bad":
                 print(i)
                 i = i + 1        
-        with self.assertRaises(TypeError):
+        with self.assertRaises(Exception):
             TypeChecker(get_ast(fail))
 
 

@@ -271,6 +271,13 @@ class TypeChecker(NodeVisitor):
         except:
             return None
 
+    def lookup_or_self(self, key):
+        latest_scope: Dict[str, Typ] = self.get_latest_scope()
+        if key in latest_scope:
+            return latest_scope[key]
+        else:
+            return key
+
     def get_latest_scope(self) -> Environment:
         return last_elem(self.environments)
 
