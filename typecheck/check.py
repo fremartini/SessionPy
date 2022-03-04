@@ -91,15 +91,8 @@ class TypeChecker(NodeVisitor):
         # FIXME: handle case where node.targets > 1
         debug_print('visit_Assign', dump(node))
         assert (len(node.targets) == 1)
-
         target: str = self.visit(node.targets[0])
         value = self.visit(node.value)
-        opt_exists = self.safe_lookup(target)
-        
-        if opt_exists and opt_exists != value: # TODO: Should probably unionise modified type
-            raise TypeError(f'assign: trying to rebind <{target}> from {opt_exists} to {value}')
-
-
         self.bind(target, value)
 
     def visit_Tuple(self, node: Tuple) -> None:
@@ -264,12 +257,6 @@ class TypeChecker(NodeVisitor):
         latest_scope: Dict[str, Typ] = self.get_latest_scope()
         fail_if(key not in latest_scope, f'{key} was not found in {latest_scope}')
         return latest_scope[key]
-
-    def safe_lookup(self, key):
-        try:
-            return self.lookup(key)
-        except:
-            return None
 
     def lookup_or_self(self, key):
         latest_scope: Dict[str, Typ] = self.get_latest_scope()
