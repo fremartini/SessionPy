@@ -8,6 +8,11 @@ def get_ast(f) -> ast.Module:
     return ast.parse(dedent(inspect.getsource(f)))
 
 
+def get_func_return_type_in_latest_scope(tc, f) -> type:
+    func = tc.get_latest_scope()[f]
+    return func[len(func) - 1]
+
+
 class TestTypeCheck(unittest.TestCase):
     def test_union_int_int_returns_int(self):
         def foo(x: int, y: int) -> int:
@@ -15,7 +20,7 @@ class TestTypeCheck(unittest.TestCase):
             return res
 
         tc = TypeChecker(get_ast(foo))
-        self.assertEqual(tc.get_latest_scope()['res'], int)
+        self.assertEqual(get_func_return_type_in_latest_scope(tc, "foo"), int)
 
     def test_union_int_float_returns_float(self):
         def foo(x: int, y: float) -> float:
@@ -23,7 +28,7 @@ class TestTypeCheck(unittest.TestCase):
             return res
 
         tc = TypeChecker(get_ast(foo))
-        self.assertEqual(tc.get_latest_scope()['res'], float)
+        self.assertEqual(get_func_return_type_in_latest_scope(tc, "foo"), float)
 
     def test_union_float_int_returns_float(self):
         def foo(x: float, y: int) -> float:
@@ -31,7 +36,7 @@ class TestTypeCheck(unittest.TestCase):
             return res
 
         tc = TypeChecker(get_ast(foo))
-        self.assertEqual(tc.get_latest_scope()['res'], float)
+        self.assertEqual(get_func_return_type_in_latest_scope(tc, "foo"), float)
 
     def test_union_float_float_returns_float(self):
         def foo(x: float, y: float) -> float:
@@ -39,7 +44,7 @@ class TestTypeCheck(unittest.TestCase):
             return res
 
         tc = TypeChecker(get_ast(foo))
-        self.assertEqual(tc.get_latest_scope()['res'], float)
+        self.assertEqual(get_func_return_type_in_latest_scope(tc, "foo"), float)
 
     def test_function_call_matching_argument_type_succeeds(self):
         def foo():
@@ -180,8 +185,7 @@ class TestTypeCheck(unittest.TestCase):
             fib(5)
 
         TypeChecker(get_ast(foo))
-    """
-    #FIXME
+
     def test_nested_return_statement_succeeds(self):
         def foo(n) -> int:
             if n == 0:
@@ -200,7 +204,74 @@ class TestTypeCheck(unittest.TestCase):
 
         with self.assertRaises(Exception):
             TypeChecker(get_ast(foo))
-    """
+
+    def test_match_all_return_types_match_succeeds(self):
+        def foo(x: int) -> int:
+            match x:
+                case 1:
+                    return 42
+                case 2:
+                    return 43
+                case _:
+                    return 1
+
+        TypeChecker(get_ast(foo))
+
+    def test_match_return_type_mismatch_fails(self):
+        def foo(x: int) -> int:
+            match x:
+                case 1:
+                    return 42
+                case 2:
+                    return 43
+                case _:
+                    return "oh no!"
+
+        with self.assertRaises(Exception):
+            TypeChecker(get_ast(foo))
+
+    def test_match_variable_binding_succeeds(self):
+        def foo(x: str) -> str:
+            match x:
+                case k:
+                    return k
+
+        TypeChecker(get_ast(foo))
+
+    def test_match_guard_succeeds(self):
+        def foo(x: str) -> str:
+            match x:
+                case k if k == "":
+                    return "was empty"
+                case otherwise:
+                    return x
+
+        TypeChecker(get_ast(foo))
+
+    def test_match_guard_given_wrong_type_fails(self):
+        def foo(x: str) -> str:
+            match x:
+                case k if k == 1:
+                    return "was empty"
+                case otherwise:
+                    return x
+
+        with self.assertRaises(Exception):
+            TypeChecker(get_ast(foo))
+
+    def test_compare_given_matching_types_succeeds(self):
+        def foo(a: int, b: int):
+            return a == b
+
+        TypeChecker(get_ast(foo))
+
+    def test_compare_given_not_equal_types_fails(self):
+        def foo(a: str, b: int):
+            return a == b
+
+        with self.assertRaises(Exception):
+            TypeChecker(get_ast(foo))
+
 
     def test_for_each_loop(self):
         def OK_1():

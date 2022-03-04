@@ -1,3 +1,4 @@
+import ast
 import sys
 from ast import *
 from pydoc import locate
@@ -6,10 +7,6 @@ from lib import *
 from functools import reduce
 
 from immutable_list import ImmutableList
-
-
-def last_elem(lst: List[Any]) -> Any:
-    return lst[len(lst) - 1]
 
 
 class TypeChecker(NodeVisitor):
@@ -43,6 +40,30 @@ class TypeChecker(NodeVisitor):
 
         self.pop()
         self.currentFunc = self.currentFunc.tail()
+
+    def visit_Compare(self, node: Compare) -> None:
+        left = self.lookup_or_self(self.visit(node.left))
+        right = self.lookup_or_self(self.visit(node.comparators[0]))
+
+        fail_if_cannot_cast(left, right, f"{left} did not equal {right}")
+
+    def visit_Match(self, node: ast.Match) -> None:
+        subj = self.visit(node.subject)
+        for case in node.cases:
+            self.dup()
+            case: ast.match_case = case
+            p = self.visit(case.pattern)
+
+            self.bind(p, self.lookup_or_self(subj))
+            if case.guard:
+                self.visit(case.guard)
+
+            for s in case.body:
+                self.visit(s)
+            self.pop()
+
+    def visit_MatchAs(self, node: ast.MatchAs) -> Union[str, None]:
+        return node.name if node.name else None
 
     def visit_arguments(self, node: arguments) -> List[Tuple[str, type]]:
         arguments: List[type] = []
@@ -217,14 +238,8 @@ class TypeChecker(NodeVisitor):
 
     def compare_type_to_latest_func_return_type(self, return_type: Typ):
         expected_return_type = self.get_current_function_return_type()
-
-        types_differ: bool = return_type != expected_return_type
-        can_downcast: bool = can_downcast_to(return_type, expected_return_type)  # any -> int
-        can_upcast: bool = can_upcast_to(return_type, expected_return_type)  # int -> any
-
-        if types_differ and not (can_upcast or can_downcast):
-            raise TypeError(f'return type {return_type} did not match {expected_return_type}')
-
+        fail_if_cannot_cast(return_type, expected_return_type,
+                            f'return type {return_type} did not match {expected_return_type}')
         return return_type
 
     def get_return_type(self, node: FunctionDef):
@@ -239,7 +254,7 @@ class TypeChecker(NodeVisitor):
         self.environments.append({})
 
     def dup(self) -> None:
-        self.environments.append(self.get_latest_scope())
+        self.environments.append(self.get_latest_scope().copy())
 
     def pop(self) -> None:
         self.environments.pop()
