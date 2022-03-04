@@ -1,9 +1,6 @@
-a = 1
-b = 2
-
-
-def add(x: int, y: int) -> int:
-    return x + y
-
-
-add(a, b)
+def matcher(node: str) -> str:
+    match 5 + 2:
+        case k if k == 2:
+            return "empty"
+        case _:
+            return "base"

@@ -34,6 +34,23 @@ def can_downcast_to(t1: type, t2: type):
     return False
 
 
+def fail_if(e: bool, msg: str) -> None:
+    if e:
+        raise Exception(msg)
+
+
+def last_elem(lst: List[Any]) -> Any:
+    return lst[len(lst) - 1]
+
+
+def fail_if_cannot_cast(a: type, b: type, err: str) -> None:
+    types_differ = a != b
+    can_downcast: bool = can_downcast_to(a, b)  # any -> int
+    can_upcast: bool = can_upcast_to(a, b)  # int -> any
+
+    fail_if(types_differ and not (can_upcast or can_downcast), err)
+
+
 def union(t1: Typ, t2: Typ) -> Typ:
     """
         Unionises two types based on their hierachical structure/class relation.
