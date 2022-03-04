@@ -1,18 +1,27 @@
-class ImmutableList:
-    def __init__(self, lst=None):
-        if lst is None:
-            lst = []
-        self._internal_list = lst
+from typing import List, Generic, TypeVar
 
-    def len(self):
+T = TypeVar('T')
+
+
+class ImmutableList(Generic[T]):
+    def __init__(self, _list=None):
+        if _list is None:
+            _list = []
+        self._internal_list = _list
+
+    @staticmethod
+    def of_list(elements: List[T]):
+        return ImmutableList(_list=elements)
+
+    def len(self) -> int:
         return len(self._internal_list)
 
     def add(self, e):
         c = self._internal_list.copy()
         c.append(e)
-        return ImmutableList(c)
+        return ImmutableList.of_list(c)
 
-    def head(self):
+    def head(self) -> T:
         if len(self._internal_list) == 0:
             raise Exception('Cannot take head of empty list')
         return self._internal_list[0]
@@ -25,16 +34,22 @@ class ImmutableList:
         c.pop(0)
         return ImmutableList(c)
 
-    def last(self):
+    def last(self) -> T:
         return self._internal_list[len(self._internal_list) - 1]
 
-    def items(self):
+    def items(self) -> List[T]:
         return self._internal_list
 
     def discard_last(self):
         c = self._internal_list.copy()
         c.pop()
-        return ImmutableList(lst=c)
+        return ImmutableList.of_list(c)
+
+    def map(self, f):
+        lst = ImmutableList()
+        for elem in self._internal_list:
+            lst = lst.add(f(elem))
+        return lst
 
     def __len__(self):
         return self.len()
