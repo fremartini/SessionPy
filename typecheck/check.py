@@ -12,8 +12,9 @@ from immutable_list import ImmutableList
 class TypeChecker(NodeVisitor):
 
     def __init__(self, tree) -> None:
-        self.environments: List[Environment] = [{}]
-        self.currentFunc: List[FunctionDef | None] = ImmutableList()
+        self.environments: ImmutableList[Environment] = ImmutableList().add({})
+        self.in_functions: ImmutableList[FunctionDef] = ImmutableList()
+        self.in_classes: ImmutableList[ClassDef] = ImmutableList()
         self.visit(tree)
 
     def visit_Module(self, node: Module) -> None:
@@ -21,13 +22,19 @@ class TypeChecker(NodeVisitor):
             self.visit(stmt)
 
     def visit_FunctionDef(self, node: FunctionDef) -> None:
-        self.currentFunc = self.currentFunc.add(node)
+        self.in_functions = self.in_functions.add(node)
 
         expected_return_type: type = self.get_return_type(node)
-        parameter_types: List[Tuple[str, type]] = self.visit(node.args)
-        parameter_types = [ty for (_, ty) in parameter_types]
-        parameter_types.append(expected_return_type)
-        self.bind(node.name, parameter_types)
+        parameter_types: ImmutableList[Tuple[str, type]] = ImmutableList.of_list(self.visit(node.args))
+        parameter_types = parameter_types.map(lambda tp: tp[1])  # [ty for (_, ty) in parameter_types]
+        parameter_types = parameter_types.add(expected_return_type)
+
+        if self.in_classes.len() == 0:
+            self.bind(node.name, parameter_types.items())
+        else:
+            c = self.in_classes.last().name
+            env = {node.name: parameter_types}
+            self.bind_class_func(c, env)
 
         self.dup()
 
@@ -39,7 +46,7 @@ class TypeChecker(NodeVisitor):
             self.visit(stmt)
 
         self.pop()
-        self.currentFunc = self.currentFunc.tail()
+        self.in_functions = self.in_functions.tail()
 
     def visit_Compare(self, node: Compare) -> None:
         left = self.lookup_or_self(self.visit(node.left))
@@ -62,14 +69,14 @@ class TypeChecker(NodeVisitor):
                 self.visit(s)
             self.pop()
 
-    def visit_MatchAs(self, node: ast.MatchAs) -> Union[str | None]:
+    def visit_MatchAs(self, node: ast.MatchAs) -> Union[str, None]:
         return node.name if node.name else None
 
     def visit_arguments(self, node: arguments) -> List[Tuple[str, type]]:
-        arguments: List[type] = []
+        arguments: ImmutableList[type] = ImmutableList()
         for arg in node.args:
-            arguments.append(self.visit_arg(arg))
-        return arguments
+            arguments = arguments.add(self.visit_arg(arg))
+        return arguments.items()
 
     def visit_arg(self, node: arg) -> Tuple[str, type]:
         match node:
@@ -91,17 +98,8 @@ class TypeChecker(NodeVisitor):
         # FIXME: handle case where node.targets > 1
         debug_print('visit_Assign', dump(node))
         assert (len(node.targets) == 1)
-
         target: str = self.visit(node.targets[0])
-
-        match node.value:
-            case _ if isinstance(node.value, Name):
-                # number = int
-                # number = x
-                value: type = self.visit(node.value)
-            case _:
-                value: type = self.visit(node.value)
-
+        value = self.visit(node.value)
         self.bind(target, value)
 
     def visit_Tuple(self, node: Tuple) -> None:
@@ -151,51 +149,95 @@ class TypeChecker(NodeVisitor):
     def visit_Constant(self, node: Constant) -> type:
         return type(node.value)
 
+    def compare_function_arguments_and_parameters(self, func_name, arguments: ImmutableList, parameters: ImmutableList):
+        fail_if(not len(arguments) == len(parameters),
+                f'function {func_name} expected {len(arguments)} arguments got {len(parameters)}')
+        for actual_type, expected_type in zip(arguments.items(), parameters.items()):
+            if isinstance(expected_type, str):  # alias
+                expected_type = self.lookup(expected_type)
+
+            types_differ: bool = expected_type != actual_type
+            can_upcast: bool = can_upcast_to(actual_type, expected_type)
+            fail_if(types_differ and not can_upcast,
+                    f'function {func_name} expected {arguments}, got {parameters}')
+
+    def get_argument_types(self, args: List[expr]) -> ImmutableList:
+        types = ImmutableList()
+        for arg in args:
+            match arg:
+                case arg if isinstance(arg, Name):
+                    types = types.add(self.lookup(self.visit(arg)))
+                case _:
+                    types = types.add(self.visit(arg))
+        return types
+
     def visit_Call(self, node: Call) -> Typ:
         debug_print('visit_Call', dump(node))
         func = self.visit(node.func)
-        if isinstance(func, BuiltinFunctionType):
-            return BuiltinFunctionType
 
         def _class_def():
-            self.bind(self.visit(node.func), ClassVar)
-            return ClassVar
+            cl = f"class_{func}"
+            self.bind(func, cl)
+            return cl
 
         def _call():
-            name: str = self.visit(node.func)
+            builtin = locate(func)
+            if builtin:
+                if type(builtin) == type:
+                    return builtin
+                else:
+                    return type(builtin)
 
-            args_types: List[Typ] = []
-            for arg in node.args:
-                match arg:
-                    case arg if isinstance(arg, Name):
-                        args_types.append(self.lookup(self.visit(arg)))
-                    case _:
-                        args_types.append(self.visit(arg))
+            func_name: str = self.visit(node.func)
+            arguments: ImmutableList = self.get_argument_types(node.args)
+            function_signature = ImmutableList.of_list(self.lookup(func_name))
+            parameters = function_signature.tail()
 
-            expected_args: List[Typ] = self.lookup(name)
-            return_type: Typ = last_elem(expected_args)
-            fail_if(not len(args_types) == len(expected_args) - 1,
-                    f'function {name} expected {len(expected_args)} got {len(args_types)}')
-            for actual_type, expected_type in zip(args_types, expected_args):
-                if isinstance(expected_type, str):  # alias
-                    expected_type = self.lookup(expected_type)
-                types_differ: bool = expected_type != actual_type
-                can_upcast: bool = can_upcast_to(actual_type, expected_type)
-                fail_if(types_differ and not can_upcast,
-                        f'function {name} expected {expected_args}, got {args_types}')
+            self.compare_function_arguments_and_parameters(func_name, arguments, parameters)
+
+            return_type: Typ = function_signature.last()
             return return_type
 
-        builtin = locate(func)
-        if builtin:
-            if type(builtin) == type:
-                return builtin
-            else:
-                return type(builtin)
+        def _method():
+            attr: Attribute = node.func
+            class_object = self.lookup(self.visit(attr.value))  # class_A
+            class_methods = self.lookup(class_object)  # {func1 : [Any -> Any], func2: ...}
+            method_type = class_methods[attr.attr]  # [Any -> Any]
+            return_type = method_type.last()  # get return type
+            method_type = method_type.discard_last()  # remove return type
+            method_type = method_type.tail()  # class object, remove 'self'
+
+            arguments: ImmutableList = self.get_argument_types(node.args)
+
+            self.compare_function_arguments_and_parameters(attr.attr, arguments, method_type)
+
+            return return_type
+
         match node:
+            case _ if isinstance(func, BuiltinFunctionType):
+                return BuiltinFunctionType
+            case _ if func == range:
+                # TODO: (Johan) BIG HACK, investigate how to extract type information from built-ins
+                return int
+            case _ if isinstance(node.func, Attribute):
+                return _method()
             case _ if self.lookup(func) == ClassDef:
                 return _class_def()
             case _:
                 return _call()
+
+    def visit_While(self, node: While) -> Any:
+        debug_print('visit_While', dump(node))
+        self.visit(node.test)
+        for stmt in node.body:
+            self.visit(stmt)
+
+    def visit_For(self, node: For) -> Any:
+        target = self.visit(node.target)
+        ite = self.visit(node.iter)
+        self.bind(target, ite)
+        for stmt in node.body:
+            self.visit(stmt)
 
     def visit_Dict(self, node: Dict) -> Tuple[Typ, Typ]:
         debug_print('visit_Dict', dump(node))
@@ -206,7 +248,6 @@ class TypeChecker(NodeVisitor):
 
     def visit_Subscript(self, node: Subscript) -> Any:
         debug_print('visit_Subscript', dump(node))
-        # container_typ: Typ = self.visit(node.value)
         opt_typ = self.visit(node.slice)
         return opt_typ
 
@@ -220,7 +261,13 @@ class TypeChecker(NodeVisitor):
         return self.compare_type_to_latest_func_return_type(return_type)
 
     def visit_ClassDef(self, node: ClassDef) -> None:
+        self.in_classes = self.in_classes.add(node)
         self.bind(node.name, ClassDef)
+
+        for stmt in node.body:
+            self.visit(stmt)
+
+        self.in_classes = self.in_classes.tail()
 
     def compare_type_to_latest_func_return_type(self, return_type: Typ):
         expected_return_type = self.get_current_function_return_type()
@@ -232,18 +279,18 @@ class TypeChecker(NodeVisitor):
         return self.visit(node.returns) if node.returns else Any
 
     def get_current_function_return_type(self):
-        current_function: FunctionDef = self.currentFunc.last()
+        current_function: FunctionDef = self.in_functions.last()
         ty = self.get_return_type(current_function)
         return ty
 
     def push(self) -> None:
-        self.environments.append({})
+        self.environments = self.environments.add({})
 
     def dup(self) -> None:
-        self.environments.append(self.get_latest_scope().copy())
+        self.environments = self.environments.add(self.get_latest_scope().copy())
 
     def pop(self) -> None:
-        self.environments.pop()
+        self.environments = self.environments.discard_last()
 
     def lookup(self, key) -> type | List[type]:
         debug_print(f'lookup: searching for key="{key}" in {self.get_latest_scope()}')
@@ -259,9 +306,18 @@ class TypeChecker(NodeVisitor):
             return key
 
     def get_latest_scope(self) -> Environment:
-        return last_elem(self.environments)
+        return self.environments.last()
 
-    def bind(self, var: str, typ: Union[type | List[type]]) -> None:
+    def bind_class_func(self, var: str, typ: Union[type, List[type]]) -> None:
+        latest_scope = self.get_latest_scope()
+        key = f"class_{var}"
+
+        if key in latest_scope:
+            latest_scope[key] = latest_scope[key] | typ
+        else:
+            latest_scope[key] = typ
+
+    def bind(self, var: str, typ: Union[type, List[type]]) -> None:
         debug_print(f'bind: binding {var} to {typ}')
         latest_scope: Dict[str, Typ] = self.get_latest_scope()
         latest_scope[var] = typ

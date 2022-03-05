@@ -272,6 +272,139 @@ class TestTypeCheck(unittest.TestCase):
         with self.assertRaises(Exception):
             TypeChecker(get_ast(foo))
 
+    def test_method_call_succeeds(self):
+        def foo():
+            class A:
+                def say_hello(self):
+                    print("hello")
+
+            i = A()
+            i.say_hello()
+
+        TypeChecker(get_ast(foo))
+
+    def test_missing_method_fails(self):
+        def foo():
+            class A:
+                def say_hello(self):
+                    print("hello")
+
+            i = A()
+            i.do_not_exist()
+
+        with self.assertRaises(Exception):
+            TypeChecker(get_ast(foo))
+
+    def test_method_call_with_parameters_correct_type_succeeds(self):
+        def foo():
+            class A:
+                def dup(self, st: str):
+                    print(st)
+                    print(st)
+
+            i = A()
+            i.dup("hello!")
+
+        TypeChecker(get_ast(foo))
+
+    def test_method_call_with_parameters_incorrect_type_fails(self):
+        def foo():
+            class A:
+                def dup(self, st: str):
+                    print(st)
+                    print(st)
+
+            i = A()
+            i.dup(5)
+
+        with self.assertRaises(Exception):
+            TypeChecker(get_ast(foo))
+
+    def test_for_each_loop(self):
+        def OK_1():
+            for elem in ["hello", "world"]:
+                print(elem)
+
+        def OK_2():
+            xs = ["a", "bee", "c"]
+            for x in xs:
+                print(x)
+
+        def FAIL_1():
+            for elem in ["hello", 42, "world"]:
+                print(elem)
+
+        def FAIL_2():
+            xs = ["a", "bee", "c", False]
+            for x in xs:
+                print(x)
+
+        for f in [OK_1, OK_2]:
+            TypeChecker(get_ast(f))
+        for f in [FAIL_1, FAIL_2]:
+            with self.assertRaises(TypeError):
+                TypeChecker(get_ast(f))
+
+    def test_for_each_loop_binds_correctly(self):
+        def ok_1():
+            for elem in ["hello", "world"]:
+                print(elem)
+
+        TypeChecker(get_ast(ok_1))
+
+    def test_for_each_loop_binds_correctly_from_variable(self):
+        def ok_2():
+            xs = ["a", "bee", "c"]
+            for x in xs:
+                print(x)
+
+        TypeChecker(get_ast(ok_2))
+
+    def test_for_each_loop_bad_list_fails(self):
+        def fail_1():
+            for elem in ["hello", 42, "world"]:
+                print(elem)
+
+        with self.assertRaises(TypeError):
+            TypeChecker(get_ast(fail_1))
+
+    def test_for_each_loop_bad_list_var_fails(self):
+        def fail_2():
+            xs = ["a", "bee", "c", False]
+            for x in xs:
+                print(x)
+
+        with self.assertRaises(TypeError):
+            TypeChecker(get_ast(fail_2))
+
+    def test_while_comp_test_ok(self):
+        def ok():
+            i = 0
+            while i < 100:
+                print(i)
+                i = i + 1
+
+        TypeChecker(get_ast(ok))
+
+    def test_while_list_test_ok(self):
+        def ok():
+            xs = [1, 2, 3]
+            while xs:
+                print(xs.pop())
+
+        TypeChecker(get_ast(ok))
+
+    # TODO: Should work after impl. of comparisons 
+    def test_while_comp_test_bad(self):
+        def fail():
+            i = 0
+            while i < "bad":
+                print(i)
+                i = i + 1
+
+        with self.assertRaises(Exception):
+            TypeChecker(get_ast(fail))
+
 
 if __name__ == '__main__':
     unittest.main()
