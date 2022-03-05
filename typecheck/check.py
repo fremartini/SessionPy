@@ -5,17 +5,20 @@ from pydoc import locate
 from debug import *
 from lib import *
 from functools import reduce
+from pydoc import safeimport
 
 from immutable_list import ImmutableList
 
 
 class TypeChecker(NodeVisitor):
 
-    def __init__(self, tree) -> None:
+    def __init__(self, tree, ignore_imports=False) -> None:
         self.environments: ImmutableList[Environment] = ImmutableList().add({})
         self.in_functions: ImmutableList[FunctionDef] = ImmutableList()
         self.in_classes: ImmutableList[ClassDef] = ImmutableList()
         self.visit(tree)
+        if not ignore_imports:
+            self.import_envs: Environment = {}
 
     def visit_Module(self, node: Module) -> None:
         for stmt in node.body:
@@ -268,6 +271,43 @@ class TypeChecker(NodeVisitor):
             self.visit(stmt)
 
         self.in_classes = self.in_classes.tail()
+
+    def visit_ImportFrom(self, node: ImportFrom) -> Any:
+        if self.ignore_imports:
+            return
+        mod_name = node.module
+        module = safeimport(mod_name)
+        if self.is_py_lib(mod_name):
+            return
+        print('module', mod_name, 'path=', module.__file__)
+
+        typed_file : TypeChecker = typecheck_file(module.__file__, ignore_imports=True)
+        merging_env = typed_file.get_latest_scope()
+        import_names : Set[str] = {alias.name for alias in node.names}
+        print('import names', import_names)
+        print('merging env', merging_env)
+        for k in list(merging_env):
+            if k not in import_names:
+                del merging_env[k]
+        print('merging env', merging_env)
+        self.environments[0] |= merging_env
+
+    def visit_Import(self, node: Import) -> Any:
+        if self.ignore_imports:
+            return
+        print(ast.dump(node))
+        print(os.getcwd())
+        for module in node.names:
+            module_name = module.name
+            dir_path = os.path.dirname(os.path.realpath(__file__))
+            print('dir_path', dir_path)
+            if self.is_py_lib(module_name):
+                continue
+            module = safeimport(module_name)
+            typed_file = typecheck_file(module.__file__, ignore_imports=True)
+            env = typed_file.get_latest_scope()
+            self.import_envs[module_name] = env
+
 
     def compare_type_to_latest_func_return_type(self, return_type: Typ):
         expected_return_type = self.get_current_function_return_type()
