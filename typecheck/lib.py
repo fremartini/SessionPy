@@ -1,6 +1,7 @@
 from typing import *
 import typing
 from types import GenericAlias, BuiltinFunctionType
+import os
 
 from debug import debug_print
 
@@ -133,3 +134,7 @@ def pack_type(container: Typ, types: List[Typ]):
             return container[types[0], types[1], types[2], types[3]]
         case _:
             raise Exception(f"pack_type: supporting up to four types now; {container}[{types}] needs support")
+
+
+def get_dir(path: str):
+    return os.path.dirname(os.path.realpath(path))
