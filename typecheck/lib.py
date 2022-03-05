@@ -39,10 +39,6 @@ def fail_if(e: bool, msg: str) -> None:
         raise Exception(msg)
 
 
-def last_elem(lst: List[Any]) -> Any:
-    return lst[len(lst) - 1]
-
-
 def fail_if_cannot_cast(a: type, b: type, err: str) -> None:
     types_differ = a != b
     can_downcast: bool = can_downcast_to(a, b)  # any -> int
