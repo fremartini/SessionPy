@@ -1,3 +1,3 @@
-from math import addition
+import my_math
 
-addition(41, 1)
+my_math.addition(1,2)

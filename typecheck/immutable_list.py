@@ -62,3 +62,6 @@ class ImmutableList(Generic[T]):
 
     def __str__(self):
         return f"{self._internal_list}"
+
+    def __iter__(self):
+        return iter(self._internal_list)

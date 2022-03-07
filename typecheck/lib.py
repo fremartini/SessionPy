@@ -2,13 +2,15 @@ from typing import *
 import typing
 from types import GenericAlias, BuiltinFunctionType
 import os
+from enum import Enum
 
 from debug import debug_print
+
 
 FunctionTyp = list  # of types
 ContainerType = Union[typing._GenericAlias, GenericAlias]
 Typ = Union[type, FunctionTyp, ContainerType]
-Environment = dict[str, Typ]
+
 
 
 def is_type(opt_typ):
@@ -16,7 +18,7 @@ def is_type(opt_typ):
 
 
 def read_src_from_file(file) -> str:
-    with open(file, "r") as f:
+    with open(file, 'r') as f:
         return f.read()
 
 

@@ -8,4 +8,11 @@ def fib(n) -> int:
         return fib(n - 1) + fib(n - 2)
 
 
-print(fib(9))
+class A:
+
+    def f(self):
+        return 42
+
+
+a = A()
+a.f()
