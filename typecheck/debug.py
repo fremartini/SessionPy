@@ -2,7 +2,7 @@ from ast import dump
 
 
 def debug_print(*args) -> None:
-    DEBUG = not True
+    DEBUG = True
 
     if DEBUG:
         print(args)

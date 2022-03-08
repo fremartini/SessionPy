@@ -7,11 +7,17 @@ from enum import Enum
 from debug import debug_print
 
 
+
 FunctionTyp = list  # of types
 ContainerType = Union[typing._GenericAlias, GenericAlias]
 Typ = Union[type, FunctionTyp, ContainerType]
 
+class ReturnType():
+    def __init__(self, retType : Typ =None):
+        self.retType = retType
 
+    def getReturnType(self):
+        return self.retType
 
 def is_type(opt_typ):
     return isinstance(opt_typ, Typ)
@@ -65,6 +71,10 @@ def union(t1: Typ, t2: Typ) -> Typ:
     if t1 == Any: return t2
     if t2 == Any: return t1
     if t1 == t2: return t1
+    if isinstance(t1, ReturnType):
+        t1 = t1.getReturnType()
+    if isinstance(t2, ReturnType):
+        t2 = t2.getReturnType()
     numerics: List[type] = [float, complex, int, bool, Any]  # from high to low
     sequences: List[type] = [str, tuple, bytes, list, bytearray, Any]
     if t1 in numerics and t2 in sequences or t1 in sequences and t2 in numerics:
@@ -136,3 +146,17 @@ def pack_type(container: Typ, types: List[Typ]):
 
 def get_dir(path: str):
     return os.path.dirname(os.path.realpath(path))
+
+def ch_to_mod_dir(mod_name: str):
+    """
+    Localises module given as string in any subdirectory recursively, and changes to this.
+    Raises exception if module cannot be located.
+    """
+    target_dir = None
+    for cur_dir, _, files in os.walk('.'):
+        if mod_name in files:
+            target_dir = cur_dir
+            break
+    if not target_dir:
+        raise ModuleNotFoundError(f"imported module {mod_name} couldn't be located in any subdirectories")
+    os.chdir(target_dir)
