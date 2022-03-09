@@ -3,9 +3,8 @@ from ast import dump
 
 def debug_print(*args) -> None:
     DEBUG = not True
-
     if DEBUG:
-        print(args)
+        print(*args)
 
 
 def dump_ast(s, node) -> None:

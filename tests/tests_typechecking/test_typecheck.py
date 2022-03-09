@@ -2,6 +2,7 @@ import inspect
 from textwrap import dedent
 
 from context import *
+from typecheck.environment import Category
 
 
 def get_ast(f) -> ast.Module:
@@ -9,7 +10,7 @@ def get_ast(f) -> ast.Module:
 
 
 def get_func_return_type_in_latest_scope(tc, f) -> type:
-    func = tc.get_latest_scope()[f]
+    func = tc.lookup_func(f)
     return func[len(func) - 1]
 
 
@@ -166,7 +167,7 @@ class TestTypeCheck(unittest.TestCase):
                 if x == 0:
                     return 0
 
-                return x + recurse(x - 1)
+                return recurse(x - 1) + x
 
             recurse(5)
 

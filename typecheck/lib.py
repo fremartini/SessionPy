@@ -1,21 +1,23 @@
 from typing import *
 import typing
 from types import GenericAlias, BuiltinFunctionType
+import os
+from enum import Enum
 
 from debug import debug_print
+
+
 
 FunctionTyp = list  # of types
 ContainerType = Union[typing._GenericAlias, GenericAlias]
 Typ = Union[type, FunctionTyp, ContainerType]
-Environment = dict[str, Typ]
-
 
 def is_type(opt_typ):
     return isinstance(opt_typ, Typ)
 
 
 def read_src_from_file(file) -> str:
-    with open(file, "r") as f:
+    with open(file, 'r') as f:
         return f.read()
 
 
@@ -78,11 +80,13 @@ def union(t1: Typ, t2: Typ) -> Typ:
             raise TypeError("cannot union different typing constructs")
 
         if t1._name in ['Tuple', 'Dict']:
-            return pack_type(Tuple if t1._name == 'Tuple' else Dict,
+            res = pack_type(Tuple if t1._name == 'Tuple' else Dict,
                              [union(t1, t2) for t1, t2 in zip(t1.__args__, t2.__args__)])
+            return res
         elif t1._name == 'List':
             t1, t2 = t1.__args__[0], t2.__args__[0]
-            return List[union(t1, t2)]
+            res = List[union(t1, t2)]
+            return res
         else:
             raise TypeError(f"cannot union {t1._name} yet")
 
@@ -129,3 +133,21 @@ def pack_type(container: Typ, types: List[Typ]):
             return container[types[0], types[1], types[2], types[3]]
         case _:
             raise Exception(f"pack_type: supporting up to four types now; {container}[{types}] needs support")
+
+
+def get_dir(path: str):
+    return os.path.dirname(os.path.realpath(path))
+
+def ch_to_mod_dir(mod_name: str):
+    """
+    Localises module given as string in any subdirectory recursively, and changes to this.
+    Raises exception if module cannot be located.
+    """
+    target_dir = None
+    for cur_dir, _, files in os.walk('.'):
+        if mod_name in files:
+            target_dir = cur_dir
+            break
+    if not target_dir:
+        raise ModuleNotFoundError(f"imported module {mod_name} couldn't be located in any subdirectories")
+    os.chdir(target_dir)
