@@ -27,3 +27,7 @@ class Choose(SessionType, Generic[ST, ST1]):
 
 class End(SessionType):
     ...
+
+class Loop(SessionType):
+    ...
+    

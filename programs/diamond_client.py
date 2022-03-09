@@ -1,4 +1,4 @@
-from channel import *
+import channel
 from sessiontype import *
 from typechecking import verify_channels
 from diamond_util import *
