@@ -1,35 +1,24 @@
-
-# Channel[ Choice[
-#             Send[int, End], 
-#             Recv[str, Choice[
-#                             Send[int, End], 
-#                             Loop[Recv[str,End]]
-#                         ]
-#                 ]
-#             ]
-#         ]
-
-# Channel [Send[int, Recv[str, End]]]
-
-# Channel [Loop[Send[int, End]]]
-
 from ast import *
 
 from typing import TypeVar, Generic, Any
 from sessiontype import Send, Recv, End
 from channel import Channel
 from pydoc import locate
+import copy
 
 A = TypeVar('A')
 
 class TSend(Generic[A]):
-    ...
+    def __str__(self) -> str:
+        return f'[send]'
 
 class TRecv(Generic[A]):
-    ...
+    def __str__(self) -> str:
+        return f'[recv]'
 
-class TEnd():
-    ...
+class TEnd:
+    def __str__(self) -> str:
+        return '[end]'
 
 
 _ID = 0
@@ -38,35 +27,28 @@ def get_id() -> int:
     id = _ID
     _ID += 1
     return id
+
+def wrap_parens(s: str) -> str:
+    return f'({s})'
+
     
 class Node:
-    def __init__(self, terminal: bool=False, transitions = {}) -> None:
+    def __init__(self, accepting_state: bool=False, transitions={}) -> None:
         self.id = get_id()
-        self.terminal = terminal
+        self.accepting = accepting_state
         self.transitions = transitions
 
+
     def __str__(self) -> str:
-        res = f'Node #{self.id}, terminal = {self.terminal} '
+        res = f's{self.id} '
         if self.transitions:
-            res += '{'
             for key in self.transitions:
-                res += f'  {key} -> {self.transitions[key]}'
-            res += '}'
+                if not key: continue
+                transition = str(key).split('.')[1]
+                value = wrap_parens(str(self.transitions[key])) if self.accepting else str(self.transitions[key])
+                res += f'--[{transition}]--> {value}'
         return res
         
-"""
-
-{
-    TSend[int]: Node at 0000x123
-    TSend[bool]: Node at 0000x124
-}
-
-"""
-
-def read_src_from_file(file) -> str:
-    with open(file, 'r') as f:
-        return f.read()
-
 
 class SMBuilder(NodeVisitor):
     
@@ -81,26 +63,15 @@ class SMBuilder(NodeVisitor):
     def indents(self) -> str:
         return "  " * self.indent
 
-    # Subscript(expr value, expr slice, expr_context)
-    # Subscript(value=Name(id='Channel', ctx=Load()),
-            # slice=Subscript(value=Name(id='Send', ctx=Load()),
-                # slice=Tuple(elts=[Name(id='int', ctx=Load()),
-                    # Subscript(value=Name(id='Recv', ctx=Load()),
-                        # slice=Tuple(elts=[Name(id='str', ctx=Load()),
-                            # Name(id='End', ctx=Load())], ctx=Load()),
-                        # ctx=Load())], ctx=Load()), ctx=Load()), ctx=Load())
 
-    # Can be any of: Channel, Send, Recv, int, str, ...
     def visit_Name(self, node: Name) -> Any:
         match node.id.lower():
-            case 'send': return TSend()
-            case 'recv': return TRecv()
-            case 'end': return TEnd()
+            case 'send': return TSend
+            case 'recv': return TRecv
+            case 'end': return TEnd
+            case 'channel': return Channel
             case x: return locate(x)
         
-        
-        
-    # Tuple(expr* elts, expr_context ctx)
     def visit_Tuple(self, node: Tuple) -> Any:
         if self.debug: print(self.indents(), '<TUPLE>')
         self.indent += 1
@@ -112,24 +83,30 @@ class SMBuilder(NodeVisitor):
         self.indent -= 1
         return processed_elems
     
+# sm : SMBuilder = SMBuilder("Channel[Send[int, Recv[str, End]]]")
     def visit_Subscript(self, node: Subscript) -> Any:
         # print(dump(node))
         if self.debug: print(self.indents(), '<SUBSCRIPT>')
         self.indent += 1
-        self.current_node = Node()
         value = self.visit(node.value)
         if self.debug: print(self.indents(), 'value=', value)
         slc = self.visit(node.slice)
         if self.debug: print(self.indents(), 'slice=', slc)
-        if isinstance(value, TSend):
+        if value in [TSend, TRecv]:
             assert type(slc[0]) == type
-            print('TRANSITION', value[slc[0]])
-        print('subcript value', value)
-        match value:
-            case TEnd:
-                self.current_node.is_terminal = True
+            next_node = Node(slc[1] == TEnd) # Is accepting state if Slice has End
+            transition = value[slc[0]]
+            self.graph[transition] = copy.deepcopy(next_node)
+            self.graph = next_node.transitions
+        elif value == TEnd:
+            print('subscript: mark current node as DONE')
+
+        else:
+            assert value == Channel
+
         if self.debug: print(self.indents(), '</SUBSCRIPT>')
         self.indent -= 1
+
 
     
         
@@ -138,3 +115,24 @@ class SMBuilder(NodeVisitor):
 
 sm : SMBuilder = SMBuilder("Channel[Send[int, Recv[str, End]]]")
 print(sm.node)
+
+class LinkedList:
+
+    def __init__(self, value) -> None:
+        self.value = value
+        self.next = None
+        pass
+
+    def __str__(self) -> str:
+        res = str(self.value)
+        if self.next:
+            res += ' -> '
+            res += str(self.next)
+        return res
+
+root = LinkedList(1)
+root.next = LinkedList(2)
+next = root.next
+next.next = LinkedList(3)
+
+#print(root)
