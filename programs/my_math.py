@@ -1,5 +1,8 @@
 zero = 0
 
+def squared(x: int) -> int:
+    return x * x
+
 def addition(x: int, y: int) -> int:
     return x + y
 

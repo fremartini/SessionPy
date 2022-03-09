@@ -12,13 +12,6 @@ FunctionTyp = list  # of types
 ContainerType = Union[typing._GenericAlias, GenericAlias]
 Typ = Union[type, FunctionTyp, ContainerType]
 
-class ReturnType():
-    def __init__(self, retType : Typ =None):
-        self.retType = retType
-
-    def getReturnType(self):
-        return self.retType
-
 def is_type(opt_typ):
     return isinstance(opt_typ, Typ)
 
@@ -71,10 +64,6 @@ def union(t1: Typ, t2: Typ) -> Typ:
     if t1 == Any: return t2
     if t2 == Any: return t1
     if t1 == t2: return t1
-    if isinstance(t1, ReturnType):
-        t1 = t1.getReturnType()
-    if isinstance(t2, ReturnType):
-        t2 = t2.getReturnType()
     numerics: List[type] = [float, complex, int, bool, Any]  # from high to low
     sequences: List[type] = [str, tuple, bytes, list, bytearray, Any]
     if t1 in numerics and t2 in sequences or t1 in sequences and t2 in numerics:
@@ -91,11 +80,13 @@ def union(t1: Typ, t2: Typ) -> Typ:
             raise TypeError("cannot union different typing constructs")
 
         if t1._name in ['Tuple', 'Dict']:
-            return pack_type(Tuple if t1._name == 'Tuple' else Dict,
+            res = pack_type(Tuple if t1._name == 'Tuple' else Dict,
                              [union(t1, t2) for t1, t2 in zip(t1.__args__, t2.__args__)])
+            return res
         elif t1._name == 'List':
             t1, t2 = t1.__args__[0], t2.__args__[0]
-            return List[union(t1, t2)]
+            res = List[union(t1, t2)]
+            return res
         else:
             raise TypeError(f"cannot union {t1._name} yet")
 

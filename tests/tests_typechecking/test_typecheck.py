@@ -167,7 +167,7 @@ class TestTypeCheck(unittest.TestCase):
                 if x == 0:
                     return 0
 
-                return x + recurse(x - 1)
+                return recurse(x - 1) + x
 
             recurse(5)
 
