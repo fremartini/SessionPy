@@ -5,7 +5,7 @@ from sessiontype import Send, Recv, End
 from channel import Channel
 from pydoc import locate
 import copy
-
+from collections import deque
 A = TypeVar('A')
 
 class TSend(Generic[A]):
@@ -16,7 +16,12 @@ class TRecv(Generic[A]):
     def __str__(self) -> str:
         return f'[recv]'
 
-class TEnd:
+class TOffer(Generic[A]):
+    def __str__(self) -> str:
+        return f'[offer]'
+
+
+class STEnd:
     def __str__(self) -> str:
         return '[end]'
 
@@ -24,115 +29,183 @@ class TEnd:
 _ID = 0
 def get_id() -> int:
     global _ID
-    id = _ID
+    res = _ID
     _ID += 1
-    return id
-
-def wrap_parens(s: str) -> str:
-    return f'({s})'
+    return res
 
     
 class Node:
-    def __init__(self, accepting_state: bool=False, transitions={}) -> None:
+    def __init__(self, accepting_state: bool=False) -> None:
         self.id = get_id()
         self.accepting = accepting_state
-        self.transitions = transitions
+        self.outgoing = {}
 
 
     def __str__(self) -> str:
-        res = f's{self.id} '
-        if self.transitions:
-            for key in self.transitions:
-                if not key: continue
+        res = f'(s{self.id})' if self.accepting else f's{self.id}'
+        if len(self.outgoing) > 0:
+            for key in self.outgoing:
+                if not key:
+                    continue
                 transition = str(key).split('.')[1]
-                value = wrap_parens(str(self.transitions[key])) if self.accepting else str(self.transitions[key])
-                res += f'--[{transition}]--> {value}'
+                state = str(self.outgoing[key]).strip()
+                value = f'({state})' if self.accepting else state
+                res += f' --[{transition}]--> {value}'
         return res
         
 
+def newNode(*args) -> Node:
+    return copy.deepcopy(Node(*args))
 class SMBuilder(NodeVisitor):
     
     def __init__(self, src) -> None:
         tree = parse(src)
-        self.node = Node()
-        self.graph = self.node.transitions
-        self.indent = 0
-        self.debug = False
+        self.ref = newNode()
+        self.root = self.ref
+        self.type_queue = deque()
+        self.ops = deque()
         self.visit(tree)
-
-    def indents(self) -> str:
-        return "  " * self.indent
+        print('# Finished processing type:')
+        print('operations ->', self.ops)
+        print('types ->', self.type_queue)
+        print("###########################")
 
 
     def visit_Name(self, node: Name) -> Any:
         match node.id.lower():
             case 'send': return TSend
             case 'recv': return TRecv
-            case 'end': return TEnd
-            case 'channel': return Channel
+            case 'end': return STEnd
+            case 'offer': return TOffer
+            case 'channel': return None
             case x: return locate(x)
         
     def visit_Tuple(self, node: Tuple) -> Any:
-        if self.debug: print(self.indents(), '<TUPLE>')
-        self.indent += 1
-        processed_elems = [self.visit(elem) for elem in node.elts]
-        if self.debug:
-            for pe in processed_elems:
-                print(self.indents(), pe)
-            print(self.indents(), '</TUPLE>')
-        self.indent -= 1
-        return processed_elems
-    
-# sm : SMBuilder = SMBuilder("Channel[Send[int, Recv[str, End]]]")
-    def visit_Subscript(self, node: Subscript) -> Any:
-        # print(dump(node))
-        if self.debug: print(self.indents(), '<SUBSCRIPT>')
-        self.indent += 1
-        value = self.visit(node.value)
-        if self.debug: print(self.indents(), 'value=', value)
-        slc = self.visit(node.slice)
-        if self.debug: print(self.indents(), 'slice=', slc)
-        if value in [TSend, TRecv]:
-            assert type(slc[0]) == type
-            next_node = Node(slc[1] == TEnd) # Is accepting state if Slice has End
-            transition = value[slc[0]]
-            self.graph[transition] = copy.deepcopy(next_node)
-            self.graph = next_node.transitions
-        elif value == TEnd:
-            print('subscript: mark current node as DONE')
-
-        else:
-            assert value == Channel
-
-        if self.debug: print(self.indents(), '</SUBSCRIPT>')
-        self.indent -= 1
-
-
-    
+        for elem in node.elts:
+            val = self.visit(elem)
+            if val:
+                self.type_queue.append(val)
         
-"Channel[(Send, int), [(Recv, str), [(End, None)]]]"
-"Channel[Send[int, Recv[str, End]]]"
+    
+    def visit_Subscript(self, node: Subscript) -> Any:
+        slice = self.visit(node.slice)
+        value = self.visit(node.value)
+        if value:
+            # FIXME: Buggy. Need a sane way to add Offers into the data structure
+            # Examples:
+            # Offer[Send[int, End], Recv[str, End]] => [offer, send, recv]
+            # Offer[Offer[Send[bool, Recv[str, End]], Recv[int, Recv[bool, End]]]] => [offer, offer, send, 
+            add = self.ops.appendleft if value in [TOffer] else self.ops.appendleft
+            add(value)
 
-sm : SMBuilder = SMBuilder("Channel[Send[int, Recv[str, End]]]")
-print(sm.node)
+def is_transition(trans):
+    return trans in [TSend, TRecv, TOffer]
 
-class LinkedList:
+send_int_recv_str_end = "Channel[Send[int, Recv[str, End]]]"
+offer___send_int_end___recv_str_end = "Channel[Offer[Send[int, End], Recv[str, End]]]"
+offer___offer___send_int_end___send_bool_end___recv_str_end = "Channel[Offer[Offer[Send[int,End], Send[bool, End]], Recv[str, End]]]"
 
-    def __init__(self, value) -> None:
-        self.value = value
-        self.next = None
-        pass
+sm : SMBuilder = SMBuilder(offer___offer___send_int_end___send_bool_end___recv_str_end)
 
-    def __str__(self) -> str:
-        res = str(self.value)
-        if self.next:
-            res += ' -> '
-            res += str(self.next)
-        return res
+ops, typs = sm.ops, sm.type_queue
 
-root = LinkedList(1)
-root.next = LinkedList(2)
-next = root.next
-next.next = LinkedList(3)
+def build_sm(ops, typs):
+    root = Node()
+    ref: Node = root
 
-#print(root)
+    def go(ops, typs, ref):
+        if not ops:
+            return
+
+        op = ops.popleft()
+
+        if op in [TOffer]:
+            ...
+        elif op in [TSend, TRecv]:
+            typ = typs.popleft()
+            print('typ', typ)
+            transition = op[typ]
+            accepting = typs[0] == STEnd
+            next_node: Node = newNode()
+            ref.outgoing[transition] = next_node
+            ref = next_node
+            if accepting:
+                print('node', ref.id, 'is accepting')
+                print(ref)
+                ref.accepting = accepting
+        go(ops, typs, ref)
+    go(ops, typs, ref)
+    return root
+    ...
+
+
+sm1 = build_sm(ops, typs)
+print(sm1)
+
+ 
+# operations, types = sm.ops, sm.type_queue
+# root = newNode()
+# def build_sm(operations, types):
+#     if not operations:
+#         return (0,0)
+# 
+#     print(operations, types)
+#     if operations[-1] == TOffer:
+#         operations.pop()
+#         transition1, _ = build_sm(operations, types)
+#         transition2, _ = build_sm(operations, types)
+#         n = newNode()
+#         if not operations:
+#             n.accepting = True
+#         root.outgoing[transition1] = n
+#         root.outgoing[transition2] = n
+#         return TOffer, root
+#     elif operations[0] in [TSend, TRecv]:
+#         n = newNode()
+#         op = operations.pop(0)
+#         if not operations:
+#             n.accepting = True
+#         transition, _ = build_sm(operations, types)
+#         root.outgoing[transition] = n
+#         typ = types.get()
+#         return op[typ], root
+#     else:
+#         raise Exception('eh', operations, types)
+# 
+# 
+# 
+#     
+# _,what = build_sm(operations, types) 
+# print(what)
+# 
+# 
+# """
+#     tr = [
+#         (0, TSend[int], 1),
+#         (1, TRecv[str], 2),
+#         (2, End, 2)
+#     ]
+# 
+#     Graph.of_list(tr)
+# 
+#      <SUBSCRIPT>
+#    value= <class 'channel.Channel'>
+#    <SUBSCRIPT>
+#      value= <class '__main__.TSend'>
+#      <TUPLE>
+#        <SUBSCRIPT>
+#          value= <class '__main__.TRecv'>
+#          <TUPLE>
+#            <class 'str'>
+#            <class '__main__.STEnd'>
+#            </TUPLE>
+#          slice= [<class 'str'>, <class '__main__.STEnd'>]
+#          </SUBSCRIPT>
+#        <class 'int'>
+#        None
+#        </TUPLE>
+#      slice= [<class 'int'>, None]
+#      </SUBSCRIPT>
+#    slice= None
+#    </SUBSCRIPT>
+# """
