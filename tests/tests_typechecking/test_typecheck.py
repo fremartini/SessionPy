@@ -406,6 +406,20 @@ class TestTypeCheck(unittest.TestCase):
         with self.assertRaises(Exception):
             TypeChecker(get_ast(fail))
 
+    def test_compound_assignment_same_type_succeeds(self):
+        def foo():
+            x: int = 0
+            x += 1
+
+        TypeChecker(get_ast(foo))
+
+    def test_compound_assignment_different_type_fails(self):
+        def foo():
+            x: int = 0
+            x += "hello"
+
+        with self.assertRaises(Exception):
+            TypeChecker(get_ast(foo))
 
 if __name__ == '__main__':
     unittest.main()

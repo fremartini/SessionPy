@@ -11,12 +11,13 @@ from environment import Environment
 from immutable_list import ImmutableList
 from lib import *
 
+
 class TypeChecker(NodeVisitor):
 
     def __init__(self, tree, inside_class=False) -> None:
         self.inside_class = inside_class
         self.environments: ImmutableList[Environment] = ImmutableList().add(Environment())
-        self.in_functions : ImmutableList[FunctionDef] = ImmutableList()
+        self.in_functions: ImmutableList[FunctionDef] = ImmutableList()
         self.visit(tree)
 
     def visit_Module(self, node: Module) -> None:
@@ -34,9 +35,9 @@ class TypeChecker(NodeVisitor):
             params = params[1:]
         function_type: ImmutableList[Tuple[str, type]] = \
             ImmutableList.of_list(params) \
-            .map(lambda tp: tp[1]) \
-            .add(expected_return_type)
-        
+                .map(lambda tp: tp[1]) \
+                .add(expected_return_type)
+
         self.bind_func(node.name, function_type.items())
         self.dup()
         for (v, t) in params:
@@ -46,7 +47,6 @@ class TypeChecker(NodeVisitor):
             self.visit(stm)
 
         self.pop()
-        
 
         self.in_functions = self.in_functions.tail()
 
@@ -57,6 +57,13 @@ class TypeChecker(NodeVisitor):
         right = self.lookup_or_self(self.visit(node.comparators[0]))
 
         fail_if_cannot_cast(left, right, f"{left} did not equal {right}")
+
+    def visit_AugAssign(self, node: AugAssign) -> None:
+        debug_print('visit_AugAssign', dump(node))
+        target = self.lookup_or_self(self.visit(node.target))
+        value = self.lookup_or_self(self.visit(node.value))
+
+        fail_if_cannot_cast(target, value, f"{target} is not compatible with {value}")
 
     def visit_Match(self, node: ast.Match) -> None:
         subj = self.visit(node.subject)
@@ -96,7 +103,7 @@ class TypeChecker(NodeVisitor):
         opt_lower = locate(node.id.lower())
         if not opt and opt_lower:
             return to_typing(opt_lower)
-        return opt or self.lookup_var_or_default(node.id, self.lookup_func_or_self(node.id)) 
+        return opt or self.lookup_var_or_default(node.id, self.lookup_func_or_self(node.id))
 
     def visit_Tuple(self, node: Tuple) -> None:
         debug_print('visit_Tuple', dump(node))
@@ -116,10 +123,10 @@ class TypeChecker(NodeVisitor):
 
     def visit_Attribute(self, node: Attribute) -> Typ:
         debug_print('attribute', dump(node))
-        value = self.visit(node.value) #A
-        attr = node.attr               #square
+        value = self.visit(node.value)  # A
+        attr = node.attr  # square
         env = self.lookup_nested(value)
-        #return value, attr, env.lookup_func(attr)
+        # return value, attr, env.lookup_func(attr)
         return env.lookup_func(attr)
 
     def visit_Assign(self, node: Assign) -> None:
@@ -180,7 +187,6 @@ class TypeChecker(NodeVisitor):
 
         self.bind_nested(node.name, env)
 
-
     def visit_While(self, node: While) -> None:
         debug_print('visit_While', dump(node))
         self.visit(node.test)
@@ -225,7 +231,6 @@ class TypeChecker(NodeVisitor):
             for stm in node.orelse:
                 self.visit(stm)
 
-
     # def visit_ImportFrom(self, node: ImportFrom) -> Any:
     #     if self.ignore_imports:
     #         return
@@ -244,7 +249,7 @@ class TypeChecker(NodeVisitor):
     #     print('items', items)
     #     current_items = self.environments.items()[0] | merging_env
     #     self.environments = ImmutableList.of_list([current_items])
-    
+
     def visit_Import(self, node: Import) -> Any:
         debug_print('visit_Import', dump(node))
         for module in node.names:
@@ -309,16 +314,16 @@ class TypeChecker(NodeVisitor):
     def lookup_nested(self, f: str) -> Environment:
         return self.get_latest_scope().lookup_nested(f)
 
-    def lookup_or_default(self, k: str, default : Any) -> Union[Typ, dict[str, Typ], str]:
+    def lookup_or_default(self, k: str, default: Any) -> Union[Typ, dict[str, Typ], str]:
         return self.get_latest_scope().lookup_or_default(k, default)
-    
-    def lookup_var_or_default(self, k: str, default : Any) -> Union[Typ, dict[str, Typ], str]:
+
+    def lookup_var_or_default(self, k: str, default: Any) -> Union[Typ, dict[str, Typ], str]:
         return self.get_latest_scope().lookup_var_or_default(k, default)
 
-    def lookup_func_or_default(self, k: str, default : Any) -> Union[Typ, dict[str, Typ], str]:
+    def lookup_func_or_default(self, k: str, default: Any) -> Union[Typ, dict[str, Typ], str]:
         return self.get_latest_scope().lookup_func_or_default(k, default)
 
-    def contains_nested(self, k : str) -> bool:
+    def contains_nested(self, k: str) -> bool:
         return self.get_latest_scope().contains_nested(k)
 
     def is_function(self, key: str) -> bool:
@@ -360,7 +365,7 @@ class TypeChecker(NodeVisitor):
         for env in envs:
             print(f'Env #{i}:', envs[i])
             i += 1
-            
+
 
 def typechecker_from_path(file) -> TypeChecker:
     src = read_src_from_file(file)
