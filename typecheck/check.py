@@ -231,24 +231,31 @@ class TypeChecker(NodeVisitor):
             for stm in node.orelse:
                 self.visit(stm)
 
-    # def visit_ImportFrom(self, node: ImportFrom) -> Any:
-    #     if self.ignore_imports:
-    #         return
-    #     mod_name = f'{node.module}.py'
-    #     if mod_name in sys.builtin_module_names:
-    #         return
-    #     ch_to_mod_dir(mod_name)
-    #     typed_file : TypeChecker = typechecker_from_path(mod_name, True)
-    #     merging_env = typed_file.get_latest_scope()
-    #     import_names : Set[str] = {alias.name for alias in node.names}
-    #     for env_typ in merging_env.environment.keys():
-    #         for k in import_names:
-    #             if k not in merging_env[env_typ]:
-    #                 del merging_env[env_typ][k]
-    #     items = self.environments.items()
-    #     print('items', items)
-    #     current_items = self.environments.items()[0] | merging_env
-    #     self.environments = ImmutableList.of_list([current_items])
+    def visit_ImportFrom(self, node: ImportFrom) -> Any:
+        debug_print('visit_ImportFrom', dump(node))
+        mod_name = f'{node.module}.py'
+        if mod_name in sys.builtin_module_names:
+            return
+        ch_to_mod_dir(mod_name)
+        typed_file = typechecker_from_path(mod_name)
+        import_env = typed_file.get_latest_scope()
+        """
+        Category.VARIABLE={'zero': <class 'int'>}  
+        Category.FUNCTION=
+            {'squared': [<class 'int'>, <class 'int'>], 'addition': [<class 'int'>, <class 'int'>, <class 'int'>], 'multiplication': [<class 'int'>, <class 'int'>, <class 'int'>]}  
+        Category.NESTED={}  }
+        """
+        to_import: Set[str] = {alias.name for alias in node.names}  # addition, zero
+        env = Environment()
+
+        for im in to_import:
+            if import_env.contains_function(im):
+                env.bind_func(im, import_env.lookup_func(im))
+            elif import_env.contains_variable(im):
+                env.bind_func(im, import_env.lookup_var(im))
+
+        self.bind_nested(node.module, env)
+        self.print_envs()
 
     def visit_Import(self, node: Import) -> Any:
         debug_print('visit_Import', dump(node))
@@ -325,6 +332,12 @@ class TypeChecker(NodeVisitor):
 
     def contains_nested(self, k: str) -> bool:
         return self.get_latest_scope().contains_nested(k)
+
+    def contains_function(self, k: str) -> bool:
+        return self.get_latest_scope().contains_function(k)
+
+    def contains_variable(self, k: str) -> bool:
+        return self.get_latest_scope().contains_variable(k)
 
     def is_function(self, key: str) -> bool:
         try:
