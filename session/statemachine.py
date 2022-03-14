@@ -12,18 +12,18 @@ class TSend(Generic[A]):
     def __repr__(self) -> str:
         return self.__str__()
     def __str__(self) -> str:
-        return f'[send]'
+        return f'send'
 class TRecv(Generic[A]):
     def __repr__(self) -> str:
         return self.__str__()
     def __str__(self) -> str:
-        return f'[recv]'
+        return f'recv'
 
 class TLoop(Generic[A]):
     def __repr__(self) -> str:
         return self.__str__()
     def __str__(self) -> str:
-        return f'[loop]'
+        return f'loop'
 
 
 
@@ -31,17 +31,25 @@ class TOffer(Generic[A]):
     def __repr__(self) -> str:
         return self.__str__()
     def __str__(self) -> str:
-        return f'[offer]'
+        return f'offer'
 class TChoice(Generic[A]):
     def __repr__(self) -> str:
         return self.__str__()
     def __str__(self) -> str:
-        return f'[offer]'
+        return f'offer'
 
 
-class STEnd:
+class STEnd():
     def __str__(self) -> str:
-        return '[end]'
+        return 'end'
+    def __repr__(self) -> str:
+        return self.__str__()
+
+class TEps():
+    def __str__(self) -> str:
+        return 'ε'
+    def __repr__(self) -> str:
+        return self.__str__()
 
 
 _ID = 0
@@ -83,14 +91,23 @@ class Node:
 
     def __str__(self) -> str:
         res = f'(s{self.id})' if self.accepting else f's{self.id}'
-        if len(self.outgoing) > 0:
-            for key in self.outgoing:
-                if not key:
-                    continue
-                transition = str(key).split('.')[1]
-                state = str(self.outgoing[key]).strip()
-                value = f'({state})' if self.accepting else state
-                res += f' --[{transition}]--> {value}'
+        keys = list(self.outgoing.keys())
+        def S(key) -> str:
+            transition = str(key).split('.')[1]
+            state = str(self.outgoing[key]).strip()
+            value = f'({state})' if self.accepting else state
+            return f' --[{transition}]--> {value}'
+           
+        if len(keys) > 0:
+            if len(keys) > 1:
+                res += ' -> &[' 
+                i = 0
+                while i < len(keys)-1:
+                    res += f'{S(keys[i])}, '
+                    i += 1
+                res += f'{S(keys[i])}]'
+            else:
+                res += f'{S(keys[0])}'
         return res
         
 
@@ -133,12 +150,12 @@ class SMBuilder(NodeVisitor):
     def visit_Name(self, node: Name) -> Any:
         res = None
         match node.id.lower():
-            case 'send': res = TSend
-            case 'recv': res = TRecv
-            case 'end': res = STEnd
-            case 'offer': res = TOffer
-            case 'choice': res = TChoice 
-            case 'loop': res = TLoop 
+            case 'send': res = TSend()
+            case 'recv': res = TRecv()
+            case 'end': res = STEnd()
+            case 'offer': res = TOffer()
+            case 'choice': res = TChoice() 
+            case 'loop': res = TLoop()
             case 'channel': res = None
             case x: res = locate(x)
         return res
@@ -177,22 +194,40 @@ def pp(st, indent=0):
     else: #[TSend, TRecv, TLoop]
         pp(tail, indent+indent_size)
 
-#(SEND, (int, (recv, str)))
+# (offer, ((send, (<class 'int'>, end)), (recv, (<class 'str'>, end))))
 def build(st):
     root = new_node()
     ref = root
     def go(st, r):
-        if st == STEnd:
+        if isinstance(st, STEnd):
             r.accepting = True
-            return
+            return r
+        if isinstance(st, TSend | TRecv):
+            return st
         # (send, (int, (recv, (str, end)))
-        action = st[0] # send
-        typ = st[1][0] # int
+        print('st', st)
+        action = st[0] # send, offer, recv
         m = new_node()
-        transition = action[typ]
-        r.outgoing[transition] = m
-        r = m
-        go(st[1][1], r) 
+        if isinstance(action, TSend | TRecv):
+            typ = st[1][0] # int
+            transition = (TSend if isinstance(action, TSend) else TRecv)[typ]
+            r.outgoing[transition] = m
+            r = m
+            return transition, go(st[1][1], r)
+        elif isinstance(action, TOffer | TChoice):
+            # (offer, 1: ( 0: (send, (<class 'int'>, end)), 1: (recv, (<class 'str'>, end))))
+            left = st[1][0]
+            right = st[1][1]
+            t1, st1 = go(left, m)
+            t2, st2 = go(right, m)
+            print('t1, st1', t1, st1)
+            print('t2, st2', t2, st2)
+            assert str(t1()) in ["send", "recv"]
+            assert str(t2()) in ["send", "recv"]
+            r.outgoing[t1] = st1
+            r.outgoing[t2] = st2
+            return t1, st1
+            
     go(st, ref)
     return root
 
@@ -202,10 +237,12 @@ offer___send_int_end___recv_str_end = "Channel[Offer[Send[int, End], Recv[str, E
 offer___offer___send_int_end___send_bool_end___recv_str_end = "Channel[Offer[ Offer[Send[int,End], Send[bool, End]], Recv[str, End]]]"
 offer___loop_start_offer___send_int_end___send_bool_end_loop_end__recv_str_end = "Channel[Offer[ Loop[Offer[Send[int,End], Send[bool, End]]], Recv[str, End]]]"
 
-sm : SMBuilder = SMBuilder(send_int_recv_bool_send_float_recv_str_end)
+
+
+sm : SMBuilder = SMBuilder(offer___send_int_end___recv_str_end)
 
 st = sm.slcs[0], sm.slcs[1]
-#print(st)
+print(st)
 
 nd = build(st)
 print(nd)
