@@ -13,6 +13,7 @@ class TSend(Generic[A]):
         return self.__str__()
     def __str__(self) -> str:
         return f'send'
+
 class TRecv(Generic[A]):
     def __repr__(self) -> str:
         return self.__str__()
@@ -25,19 +26,17 @@ class TLoop(Generic[A]):
     def __str__(self) -> str:
         return f'loop'
 
-
-
 class TOffer(Generic[A]):
     def __repr__(self) -> str:
         return self.__str__()
     def __str__(self) -> str:
         return f'offer'
+
 class TChoice(Generic[A]):
     def __repr__(self) -> str:
         return self.__str__()
     def __str__(self) -> str:
         return f'offer'
-
 
 class STEnd():
     def __str__(self) -> str:
@@ -52,41 +51,17 @@ class TEps():
         return self.__str__()
 
 
-_ID = 0
-def get_id() -> int:
-    global _ID
-    res = _ID
-    _ID += 1
-    return res
-
-
-#Node
-# s0
-# accepting
-# outgoing
-# { TSend[int] -> s1 }
-
-#Node
-# s1
-# accepting
-# outgoing
-# { TRecv[str] -> s2 }
-
-
-#Node
-# s2
-# accepting = True
-# outgoing
-# { }
-
-
-
 
 class Node:
-    def __init__(self, accepting_state: bool=False) -> None:
-        self.id = get_id()
+    def __init__(self, id: int, accepting_state: bool=False) -> None:
+        self.id = id
         self.accepting = accepting_state
         self.outgoing = {}
+
+    def get_id(self) -> int:
+        res = self.id
+        self.id += 1
+        return res
 
 
     def __str__(self) -> str:
@@ -117,36 +92,10 @@ def new_node(*args) -> Node:
 class SMBuilder(NodeVisitor):
     
     def __init__(self, src) -> None:
-        self.DEBUG = False # TODO: Remove
-        self.vals = deque()
         self.slcs = deque()
-        self.idents = 0
         tree = parse(src)
-        self.res = self.visit(tree)
-        if self.DEBUG:
-            print('# Parsing done:')
-            print('Values')
-            for val in self.vals:
-                print('  -', val)
-            print('Slices')
-            for val in self.slcs:
-                print('  -', val)
+        self.visit(tree)
                 
-        
-    
-    def P(self, *args):
-        print(self.idents * "  ", end='')
-        for arg in args:
-            print(str(arg), end = ' ')
-        print()
-
-    def push(self):
-        self.idents += 1
-
-    def pop(self):
-        self.idents -= 1
-
-
     def visit_Name(self, node: Name) -> Any:
         res = None
         match node.id.lower():
@@ -166,8 +115,6 @@ class SMBuilder(NodeVisitor):
         t2 = self.visit(node.elts[1])
         return t1, t2
 
-        
-
     def visit_Subscript(self, node: Subscript) -> Any:
         value = self.visit(node.value)
         slice = self.visit(node.slice)
@@ -178,7 +125,6 @@ class SMBuilder(NodeVisitor):
 
 def pp(st, indent=0):
     indent_size = 2
-
     if isinstance(st, type):
         print(' '*indent, st)
         return
@@ -194,115 +140,61 @@ def pp(st, indent=0):
     else: #[TSend, TRecv, TLoop]
         pp(tail, indent+indent_size)
 
-# (offer, ((send, (<class 'int'>, end)), (recv, (<class 'str'>, end))))
 def build(st):
-    root = new_node()
+    global ident
+    ident = 0
+    def next_id():
+        global ident
+        res = ident
+        ident += 1
+        return res
+
+    root = new_node(next_id())
     ref = root
     def go(st, r):
         if isinstance(st, STEnd):
+            print('st1', st)
             r.accepting = True
             return r
-        if isinstance(st, TSend | TRecv):
+        elif isinstance(st, TSend | TRecv):
+            print('st2', st)
             return st
-        # (send, (int, (recv, (str, end)))
-        print('st', st)
         action = st[0] # send, offer, recv
-        m = new_node()
         if isinstance(action, TSend | TRecv):
+            m = new_node(next_id())
             typ = st[1][0] # int
             transition = (TSend if isinstance(action, TSend) else TRecv)[typ]
             r.outgoing[transition] = m
             r = m
-            return transition, go(st[1][1], r)
+            print('transition', transition)
+            res = go(st[1][1], r)
+            print('res', res)
+            return transition, res
         elif isinstance(action, TOffer | TChoice):
-            # (offer, 1: ( 0: (send, (<class 'int'>, end)), 1: (recv, (<class 'str'>, end))))
             left = st[1][0]
             right = st[1][1]
-            t1, st1 = go(left, m)
-            t2, st2 = go(right, m)
-            print('t1, st1', t1, st1)
-            print('t2, st2', t2, st2)
+            t1, st1= go(left, r)
+            t2, st2 = go(right, r)
             assert str(t1()) in ["send", "recv"]
             assert str(t2()) in ["send", "recv"]
             r.outgoing[t1] = st1
             r.outgoing[t2] = st2
-            return t1, st1
-            
+            print('t1', 'st1', t1, st1)
+            print('t2', 'st2', t2, st2)
+            #return t1, st1 # TODO: Investigate
     go(st, ref)
     return root
 
 send_int_recv_str_end = "Channel[Send[int, Recv[str, End]]]"
 send_int_recv_bool_send_float_recv_str_end = "Channel[Send[int, Recv[bool, Send[float, Recv[str, End]]]]]"
+send_int_recv_bool_offer___send_float_recv_str_end___recv_bool_end = "Channel[Send[int, Recv[bool, Offer[ Send[float, Recv[str, End]], Recv[bool, End]]]]]"
 offer___send_int_end___recv_str_end = "Channel[Offer[Send[int, End], Recv[str, End]]]"
 offer___offer___send_int_end___send_bool_end___recv_str_end = "Channel[Offer[ Offer[Send[int,End], Send[bool, End]], Recv[str, End]]]"
 offer___loop_start_offer___send_int_end___send_bool_end_loop_end__recv_str_end = "Channel[Offer[ Loop[Offer[Send[int,End], Send[bool, End]]], Recv[str, End]]]"
 
 
 
-sm : SMBuilder = SMBuilder(offer___send_int_end___recv_str_end)
-
+sm : SMBuilder = SMBuilder(send_int_recv_bool_offer___send_float_recv_str_end___recv_bool_end)
 st = sm.slcs[0], sm.slcs[1]
-print(st)
 
-nd = build(st)
-print(nd)
-"""
-X[Y]
-Module(body=[Expr(value=Subscript(value=Name(id='Channel', ctx=Load()),
-    slice=Subscript(value=Name(id='Send', ctx=Load()),
-        slice=Tuple(elts=[Name(id='int', ctx=Load()),
-            Subscript(value=Name(id='Recv', ctx=Load()),
-                slice=Tuple(elts=[Name(id='str', ctx=Load()), Name(id='End',
-                    ctx=Load())], ctx=Load()), ctx=Load())], ctx=Load()),
-                ctx=Load()), ctx=Load()))], type_ignores=[])
-
-Module(body=[Expr(value=Subscript(value=Name(id='Channel', ctx=Load()),
-    slice=Subscript(value=Name(id='Offer', ctx=Load()),
-        slice=Tuple(elts=[Subscript(value=Name(id='Offer', ctx=Load()),
-            slice=Tuple(elts=[Subscript(value=Name(id='Send', ctx=Load()),
-                slice=Tuple(elts=[Name(id='int', ctx=Load()), Name(id='End',
-                    ctx=Load())], ctx=Load()), ctx=Load()),
-                Subscript(value=Name(id='Send', ctx=Load()),
-                    slice=Tuple(elts=[Name(id='bool', ctx=Load()),
-                        Name(id='End', ctx=Load())], ctx=Load()), ctx=Load())],
-                    ctx=Load()), ctx=Load()), Subscript(value=Name(id='Recv',
-                        ctx=Load()), slice=Tuple(elts=[Name(id='str',
-                            ctx=Load()), Name(id='End', ctx=Load())],
-                            ctx=Load()), ctx=Load())], ctx=Load()),
-                        ctx=Load()), ctx=Load()))], type_ignores=[])
-
-# Offer example
-Subscript
-    Value: "Channel"
-    Slice: 
-        Subscript
-            Value: "Offer"
-            Slice:
-                Tuple
-                    1: Subscript
-                        Value: "Offer"
-                        Slice:
-                            Tuple
-                                1: 
-
-
-# Simple example
-Subscript
-    Value: "Channel"
-    Slice: 
-        Subscript:
-            Value: "Send"
-            Slice:
-                Tuple:
-                    1: "int"
-                    2: Subscript
-                        Value: "Recv"
-                        Slice: 
-                            Tuple:
-                                1: "str"
-                                2: "end"
-
-
-
-
-"""
+print(build(st))
