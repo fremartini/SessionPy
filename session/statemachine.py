@@ -9,14 +9,32 @@ from collections import deque
 A = TypeVar('A')
 
 class TSend(Generic[A]):
+    def __repr__(self) -> str:
+        return self.__str__()
     def __str__(self) -> str:
         return f'[send]'
-
 class TRecv(Generic[A]):
+    def __repr__(self) -> str:
+        return self.__str__()
     def __str__(self) -> str:
         return f'[recv]'
 
+class TLoop(Generic[A]):
+    def __repr__(self) -> str:
+        return self.__str__()
+    def __str__(self) -> str:
+        return f'[loop]'
+
+
+
 class TOffer(Generic[A]):
+    def __repr__(self) -> str:
+        return self.__str__()
+    def __str__(self) -> str:
+        return f'[offer]'
+class TChoice(Generic[A]):
+    def __repr__(self) -> str:
+        return self.__str__()
     def __str__(self) -> str:
         return f'[offer]'
 
@@ -33,7 +51,29 @@ def get_id() -> int:
     _ID += 1
     return res
 
-    
+
+#Node
+# s0
+# accepting
+# outgoing
+# { TSend[int] -> s1 }
+
+#Node
+# s1
+# accepting
+# outgoing
+# { TRecv[str] -> s2 }
+
+
+#Node
+# s2
+# accepting = True
+# outgoing
+# { }
+
+
+
+
 class Node:
     def __init__(self, accepting_state: bool=False) -> None:
         self.id = get_id()
@@ -54,158 +94,178 @@ class Node:
         return res
         
 
-def newNode(*args) -> Node:
+def new_node(*args) -> Node:
     return copy.deepcopy(Node(*args))
+
 class SMBuilder(NodeVisitor):
     
     def __init__(self, src) -> None:
+        self.DEBUG = False # TODO: Remove
+        self.vals = deque()
+        self.slcs = deque()
+        self.idents = 0
         tree = parse(src)
-        self.ref = newNode()
-        self.root = self.ref
-        self.type_queue = deque()
-        self.ops = deque()
-        self.visit(tree)
-        print('# Finished processing type:')
-        print('operations ->', self.ops)
-        print('types ->', self.type_queue)
-        print("###########################")
+        self.res = self.visit(tree)
+        if self.DEBUG:
+            print('# Parsing done:')
+            print('Values')
+            for val in self.vals:
+                print('  -', val)
+            print('Slices')
+            for val in self.slcs:
+                print('  -', val)
+                
+        
+    
+    def P(self, *args):
+        print(self.idents * "  ", end='')
+        for arg in args:
+            print(str(arg), end = ' ')
+        print()
+
+    def push(self):
+        self.idents += 1
+
+    def pop(self):
+        self.idents -= 1
 
 
     def visit_Name(self, node: Name) -> Any:
+        res = None
         match node.id.lower():
-            case 'send': return TSend
-            case 'recv': return TRecv
-            case 'end': return STEnd
-            case 'offer': return TOffer
-            case 'channel': return None
-            case x: return locate(x)
+            case 'send': res = TSend
+            case 'recv': res = TRecv
+            case 'end': res = STEnd
+            case 'offer': res = TOffer
+            case 'choice': res = TChoice 
+            case 'loop': res = TLoop 
+            case 'channel': res = None
+            case x: res = locate(x)
+        return res
         
     def visit_Tuple(self, node: Tuple) -> Any:
-        for elem in node.elts:
-            val = self.visit(elem)
-            if val:
-                self.type_queue.append(val)
-        
-    
-    def visit_Subscript(self, node: Subscript) -> Any:
-        slice = self.visit(node.slice)
-        value = self.visit(node.value)
-        if value:
-            # FIXME: Buggy. Need a sane way to add Offers into the data structure
-            # Examples:
-            # Offer[Send[int, End], Recv[str, End]] => [offer, send, recv]
-            # Offer[Offer[Send[bool, Recv[str, End]], Recv[int, Recv[bool, End]]]] => [offer, offer, send, 
-            add = self.ops.appendleft if value in [TOffer] else self.ops.appendleft
-            add(value)
+        assert len(node.elts) == 2
+        t1 = self.visit(node.elts[0])
+        t2 = self.visit(node.elts[1])
+        return t1, t2
 
-def is_transition(trans):
-    return trans in [TSend, TRecv, TOffer]
+        
+
+    def visit_Subscript(self, node: Subscript) -> Any:
+        value = self.visit(node.value)
+        slice = self.visit(node.slice)
+        assert isinstance(slice, tuple)
+        self.slcs.appendleft(slice[1])
+        self.slcs.appendleft(slice[0])
+        return value, slice
+
+def pp(st, indent=0):
+    indent_size = 2
+
+    if isinstance(st, type):
+        print(' '*indent, st)
+        return
+    head = st[0]
+    tail = st[1]
+    print(' '*indent, head)
+    if head in [TOffer, TChoice]:
+        indent = indent_size + indent
+        print(' '*indent, 'left')
+        pp(tail[0], indent)
+        print(' '*indent, 'right')
+        pp(tail[1], indent)
+    else: #[TSend, TRecv, TLoop]
+        pp(tail, indent+indent_size)
+
+#(SEND, (int, (recv, str)))
+def build(st):
+    root = new_node()
+    ref = root
+    def go(st, r):
+        if st == STEnd:
+            r.accepting = True
+            return
+        # (send, (int, (recv, (str, end)))
+        action = st[0] # send
+        typ = st[1][0] # int
+        m = new_node()
+        transition = action[typ]
+        r.outgoing[transition] = m
+        r = m
+        go(st[1][1], r) 
+    go(st, ref)
+    return root
 
 send_int_recv_str_end = "Channel[Send[int, Recv[str, End]]]"
+send_int_recv_bool_send_float_recv_str_end = "Channel[Send[int, Recv[bool, Send[float, Recv[str, End]]]]]"
 offer___send_int_end___recv_str_end = "Channel[Offer[Send[int, End], Recv[str, End]]]"
-offer___offer___send_int_end___send_bool_end___recv_str_end = "Channel[Offer[Offer[Send[int,End], Send[bool, End]], Recv[str, End]]]"
+offer___offer___send_int_end___send_bool_end___recv_str_end = "Channel[Offer[ Offer[Send[int,End], Send[bool, End]], Recv[str, End]]]"
+offer___loop_start_offer___send_int_end___send_bool_end_loop_end__recv_str_end = "Channel[Offer[ Loop[Offer[Send[int,End], Send[bool, End]]], Recv[str, End]]]"
 
-sm : SMBuilder = SMBuilder(offer___offer___send_int_end___send_bool_end___recv_str_end)
+sm : SMBuilder = SMBuilder(send_int_recv_bool_send_float_recv_str_end)
 
-ops, typs = sm.ops, sm.type_queue
+st = sm.slcs[0], sm.slcs[1]
+#print(st)
 
-def build_sm(ops, typs):
-    root = Node()
-    ref: Node = root
+nd = build(st)
+print(nd)
+"""
+X[Y]
+Module(body=[Expr(value=Subscript(value=Name(id='Channel', ctx=Load()),
+    slice=Subscript(value=Name(id='Send', ctx=Load()),
+        slice=Tuple(elts=[Name(id='int', ctx=Load()),
+            Subscript(value=Name(id='Recv', ctx=Load()),
+                slice=Tuple(elts=[Name(id='str', ctx=Load()), Name(id='End',
+                    ctx=Load())], ctx=Load()), ctx=Load())], ctx=Load()),
+                ctx=Load()), ctx=Load()))], type_ignores=[])
 
-    def go(ops, typs, ref):
-        if not ops:
-            return
+Module(body=[Expr(value=Subscript(value=Name(id='Channel', ctx=Load()),
+    slice=Subscript(value=Name(id='Offer', ctx=Load()),
+        slice=Tuple(elts=[Subscript(value=Name(id='Offer', ctx=Load()),
+            slice=Tuple(elts=[Subscript(value=Name(id='Send', ctx=Load()),
+                slice=Tuple(elts=[Name(id='int', ctx=Load()), Name(id='End',
+                    ctx=Load())], ctx=Load()), ctx=Load()),
+                Subscript(value=Name(id='Send', ctx=Load()),
+                    slice=Tuple(elts=[Name(id='bool', ctx=Load()),
+                        Name(id='End', ctx=Load())], ctx=Load()), ctx=Load())],
+                    ctx=Load()), ctx=Load()), Subscript(value=Name(id='Recv',
+                        ctx=Load()), slice=Tuple(elts=[Name(id='str',
+                            ctx=Load()), Name(id='End', ctx=Load())],
+                            ctx=Load()), ctx=Load())], ctx=Load()),
+                        ctx=Load()), ctx=Load()))], type_ignores=[])
 
-        op = ops.popleft()
-
-        if op in [TOffer]:
-            ...
-        elif op in [TSend, TRecv]:
-            typ = typs.popleft()
-            print('typ', typ)
-            transition = op[typ]
-            accepting = typs[0] == STEnd
-            next_node: Node = newNode()
-            ref.outgoing[transition] = next_node
-            ref = next_node
-            if accepting:
-                print('node', ref.id, 'is accepting')
-                print(ref)
-                ref.accepting = accepting
-        go(ops, typs, ref)
-    go(ops, typs, ref)
-    return root
-    ...
+# Offer example
+Subscript
+    Value: "Channel"
+    Slice: 
+        Subscript
+            Value: "Offer"
+            Slice:
+                Tuple
+                    1: Subscript
+                        Value: "Offer"
+                        Slice:
+                            Tuple
+                                1: 
 
 
-sm1 = build_sm(ops, typs)
-print(sm1)
+# Simple example
+Subscript
+    Value: "Channel"
+    Slice: 
+        Subscript:
+            Value: "Send"
+            Slice:
+                Tuple:
+                    1: "int"
+                    2: Subscript
+                        Value: "Recv"
+                        Slice: 
+                            Tuple:
+                                1: "str"
+                                2: "end"
 
- 
-# operations, types = sm.ops, sm.type_queue
-# root = newNode()
-# def build_sm(operations, types):
-#     if not operations:
-#         return (0,0)
-# 
-#     print(operations, types)
-#     if operations[-1] == TOffer:
-#         operations.pop()
-#         transition1, _ = build_sm(operations, types)
-#         transition2, _ = build_sm(operations, types)
-#         n = newNode()
-#         if not operations:
-#             n.accepting = True
-#         root.outgoing[transition1] = n
-#         root.outgoing[transition2] = n
-#         return TOffer, root
-#     elif operations[0] in [TSend, TRecv]:
-#         n = newNode()
-#         op = operations.pop(0)
-#         if not operations:
-#             n.accepting = True
-#         transition, _ = build_sm(operations, types)
-#         root.outgoing[transition] = n
-#         typ = types.get()
-#         return op[typ], root
-#     else:
-#         raise Exception('eh', operations, types)
-# 
-# 
-# 
-#     
-# _,what = build_sm(operations, types) 
-# print(what)
-# 
-# 
-# """
-#     tr = [
-#         (0, TSend[int], 1),
-#         (1, TRecv[str], 2),
-#         (2, End, 2)
-#     ]
-# 
-#     Graph.of_list(tr)
-# 
-#      <SUBSCRIPT>
-#    value= <class 'channel.Channel'>
-#    <SUBSCRIPT>
-#      value= <class '__main__.TSend'>
-#      <TUPLE>
-#        <SUBSCRIPT>
-#          value= <class '__main__.TRecv'>
-#          <TUPLE>
-#            <class 'str'>
-#            <class '__main__.STEnd'>
-#            </TUPLE>
-#          slice= [<class 'str'>, <class '__main__.STEnd'>]
-#          </SUBSCRIPT>
-#        <class 'int'>
-#        None
-#        </TUPLE>
-#      slice= [<class 'int'>, None]
-#      </SUBSCRIPT>
-#    slice= None
-#    </SUBSCRIPT>
-# """
+
+
+
+"""
