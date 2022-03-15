@@ -51,12 +51,13 @@ class TEps():
         return self.__str__()
 
 
+Transition = TSend | TRecv | TChoice | TOffer
 
 class Node:
     def __init__(self, id: int, accepting_state: bool=False) -> None:
         self.id = id
         self.accepting = accepting_state
-        self.outgoing = {}
+        self.outgoing: dict[TSend | TRecv, Node] = {}
 
     def get_id(self) -> int:
         res = self.id
@@ -140,6 +141,42 @@ def pp(st, indent=0):
     else: #[TSend, TRecv, TLoop]
         pp(tail, indent+indent_size)
 
+"""
+
+1: (offer, ((s1,s2)))
+head: "offer"
+tail: tuple
+=>
+
+r.outgoing:
+    sendint: m [defined by s1]
+    resvstr: n [defined by s2]
+
+
+
+2: (send, s)
+head: "send"
+val: int
+tail: sessiontype (here, end)
+=>
+r --send int--> m
+^
+
+
+
+(offer, 
+    
+    (
+        (send, (<class 'int'>, end)), 
+        (recv, (<class 'str'>, end))
+    )
+    
+)
+
+
+"""
+
+
 def build(st):
     global ident
     ident = 0
@@ -151,37 +188,53 @@ def build(st):
 
     root = new_node(next_id())
     ref = root
-    def go(st, r):
+
+    First = type | Transition
+    Second = tuple | STEnd
+
+    def go(st: STEnd | tuple[First, Second], r: Node):
+     
         if isinstance(st, STEnd):
-            print('st1', st)
             r.accepting = True
-            return r
-        elif isinstance(st, TSend | TRecv):
-            print('st2', st)
-            return st
-        action = st[0] # send, offer, recv
-        if isinstance(action, TSend | TRecv):
+            return
+      
+        assert isinstance(st, tuple), st
+        
+        head = st[0]
+        tail = st[1]
+
+        assert isinstance(head, First), head
+        assert isinstance(tail, Second), tail
+
+        if tail == STEnd:
+            r.accepting = True
+            return
+        
+        if isinstance(head, TSend | TRecv):
+            assert isinstance(tail, tuple), tail
             m = new_node(next_id())
-            typ = st[1][0] # int
-            transition = (TSend if isinstance(action, TSend) else TRecv)[typ]
+            typ = tail[0]
+            transition = (TSend if isinstance(head, TSend) else TRecv)[typ]
             r.outgoing[transition] = m
             r = m
-            print('transition', transition)
-            res = go(st[1][1], r)
-            print('res', res)
-            return transition, res
-        elif isinstance(action, TOffer | TChoice):
-            left = st[1][0]
-            right = st[1][1]
-            t1, st1= go(left, r)
-            t2, st2 = go(right, r)
-            assert str(t1()) in ["send", "recv"]
-            assert str(t2()) in ["send", "recv"]
-            r.outgoing[t1] = st1
-            r.outgoing[t2] = st2
-            print('t1', 'st1', t1, st1)
-            print('t2', 'st2', t2, st2)
-            #return t1, st1 # TODO: Investigate
+            go(tail[1], r)
+            return transition, r
+        elif isinstance(head, TOffer | TChoice):
+            assert isinstance(tail, tuple), tail
+            
+            left = tail[0]
+            right = tail[1]
+
+            assert isinstance(left, tuple), left
+            assert isinstance(right, tuple), right
+
+            t1, m = go(left, r)
+            t2, n = go(right, r)
+            assert str(t1()) in ["send", "recv"], t1
+            assert str(t2()) in ["send", "recv"], t2
+            r.outgoing[t1] = m
+            r.outgoing[t2] = n
+            return t1, t2# TODO: Investigate
     go(st, ref)
     return root
 
@@ -190,11 +243,12 @@ send_int_recv_bool_send_float_recv_str_end = "Channel[Send[int, Recv[bool, Send[
 send_int_recv_bool_offer___send_float_recv_str_end___recv_bool_end = "Channel[Send[int, Recv[bool, Offer[ Send[float, Recv[str, End]], Recv[bool, End]]]]]"
 offer___send_int_end___recv_str_end = "Channel[Offer[Send[int, End], Recv[str, End]]]"
 offer___offer___send_int_end___send_bool_end___recv_str_end = "Channel[Offer[ Offer[Send[int,End], Send[bool, End]], Recv[str, End]]]"
-offer___loop_start_offer___send_int_end___send_bool_end_loop_end__recv_str_end = "Channel[Offer[ Loop[Offer[Send[int,End], Send[bool, End]]], Recv[str, End]]]"
+#offer___loop_start_offer___send_int_end___send_bool_end_loop_end__recv_str_end = "Channel[Offer[ Loop[Offer[Send[int,End], Send[bool, End]]], Recv[str, End]]]"
 
 
-
-sm : SMBuilder = SMBuilder(send_int_recv_bool_offer___send_float_recv_str_end___recv_bool_end)
-st = sm.slcs[0], sm.slcs[1]
-
-print(build(st))
+sts = [send_int_recv_str_end, send_int_recv_bool_send_float_recv_str_end, offer___send_int_end___recv_str_end, send_int_recv_bool_offer___send_float_recv_str_end___recv_bool_end, offer___offer___send_int_end___send_bool_end___recv_str_end]
+for s in sts:
+    print(s)
+    sm : SMBuilder = SMBuilder(s)
+    st = sm.slcs[0], sm.slcs[1]
+    print(build(st), end='\n\n')
