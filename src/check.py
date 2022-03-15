@@ -1,5 +1,4 @@
 import ast
-from cgitb import lookup
 import copy
 import sys
 from ast import *
@@ -287,7 +286,7 @@ class TypeChecker(NodeVisitor):
         prev_env = copy.deepcopy(self.get_latest_scope())
         self.environments = self.environments.add(prev_env)
 
-    def pop(self) -> None:
+    def pop(self) -> Environment:
         latest_scope = self.get_latest_scope()
         self.environments = self.environments.discard_last()
         return latest_scope

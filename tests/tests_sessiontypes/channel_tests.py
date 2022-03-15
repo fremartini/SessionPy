@@ -1,8 +1,5 @@
 import unittest
-from channel import Branch, Channel
-from sessiontype import *
-
-from typechecking import verify_channels
+from context import *
 
 class TestVerifyChannels(unittest.TestCase):
 

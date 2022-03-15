@@ -1,16 +1,14 @@
 from typing import *
 import typing
-from types import GenericAlias, BuiltinFunctionType
+from types import GenericAlias
 import os
-from enum import Enum
 
 from debug import debug_print
-
-
 
 FunctionTyp = list  # of types
 ContainerType = Union[typing._GenericAlias, GenericAlias]
 Typ = Union[type, FunctionTyp, ContainerType]
+
 
 def is_type(opt_typ):
     return isinstance(opt_typ, Typ)
@@ -81,7 +79,7 @@ def union(t1: Typ, t2: Typ) -> Typ:
 
         if t1._name in ['Tuple', 'Dict']:
             res = pack_type(Tuple if t1._name == 'Tuple' else Dict,
-                             [union(t1, t2) for t1, t2 in zip(t1.__args__, t2.__args__)])
+                            [union(t1, t2) for t1, t2 in zip(t1.__args__, t2.__args__)])
             return res
         elif t1._name == 'List':
             t1, t2 = t1.__args__[0], t2.__args__[0]
@@ -138,6 +136,7 @@ def pack_type(container: Typ, types: List[Typ]):
 def get_dir(path: str):
     return os.path.dirname(os.path.realpath(path))
 
+
 def ch_to_mod_dir(mod_name: str):
     """
     Localises module given as string in any subdirectory recursively, and changes to this.
@@ -151,3 +150,27 @@ def ch_to_mod_dir(mod_name: str):
     if not target_dir:
         raise ModuleNotFoundError(f"imported module {mod_name} couldn't be located in any subdirectories")
     os.chdir(target_dir)
+
+
+def channels_str(channels):
+    res = ''
+    for ch_name in channels:
+        res += f'"{ch_name}": {channels[ch_name]}\n'
+    return res
+
+
+def str_to_typ(s):
+    match s:
+        case 'int':
+            return int
+        case 'str':
+            return str
+        case 'bool':
+            return bool
+        case _:
+            raise Exception(f"unknown type {s}")
+
+
+def assert_eq(expected, actual):
+    if not expected == actual:
+        raise Exception("expected " + str(expected) + ", found " + str(actual))
