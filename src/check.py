@@ -37,7 +37,7 @@ class TypeChecker(NodeVisitor):
                 .map(lambda tp: tp[1]) \
                 .add(expected_return_type)
 
-        self.bind_func(node.name, function_type.items())
+        self.get_latest_scope().bind_func(node.name, function_type.items())
         self.dup()
         for (v, t) in params:
             self.bind_var(v, t)
@@ -102,7 +102,9 @@ class TypeChecker(NodeVisitor):
         opt_lower = locate(node.id.lower())
         if not opt and opt_lower:
             return to_typing(opt_lower)
-        return opt or self.lookup_var_or_default(node.id, self.lookup_func_or_self(node.id))
+        return opt or self.get_latest_scope().lookup_var_or_default(node.id,
+                                                                    self.get_latest_scope().lookup_func_or_default(
+                                                                        node.id, node.id))
 
     def visit_Tuple(self, node: Tuple) -> None:
         debug_print('visit_Tuple', dump(node))
@@ -124,8 +126,7 @@ class TypeChecker(NodeVisitor):
         debug_print('attribute', dump(node))
         value = self.visit(node.value)  # A
         attr = node.attr  # square
-        env = self.lookup_nested(value)
-        # return value, attr, env.lookup_func(attr)
+        env = self.get_latest_scope().lookup_nested(value)
         return env.lookup_func(attr)
 
     def visit_Assign(self, node: Assign) -> None:
@@ -184,7 +185,7 @@ class TypeChecker(NodeVisitor):
         self.inside_class = False
         env = self.pop()
 
-        self.bind_nested(node.name, env)
+        self.get_latest_scope().bind_nested(node.name, env)
 
     def visit_While(self, node: While) -> None:
         debug_print('visit_While', dump(node))
@@ -242,7 +243,7 @@ class TypeChecker(NodeVisitor):
 
         for im in to_import:
             if import_env.contains_function(im):
-                self.bind_func(im, import_env.lookup_func(im))
+                self.get_latest_scope().bind_func(im, import_env.lookup_func(im))
             elif import_env.contains_variable(im):
                 self.bind_var(im, import_env.lookup_var(im))
 
@@ -256,14 +257,14 @@ class TypeChecker(NodeVisitor):
             ch_to_mod_dir(mod_name)
             typed_file = typechecker_from_path(mod_name)
             env = typed_file.get_latest_scope()
-            self.bind_nested(module_name, env)
+            self.get_latest_scope().bind_nested(module_name, env)
 
     def compare_function_arguments_and_parameters(self, func_name, arguments: ImmutableList, parameters: ImmutableList):
         fail_if(not len(arguments) == len(parameters),
                 f'function {func_name} expected {len(parameters)} argument{"s" if len(parameters) > 1 else ""} got {len(arguments)}')
         for actual_type, expected_type in zip(arguments.items(), parameters.items()):
             if isinstance(expected_type, str):  # alias
-                _, expected_type = self.lookup(expected_type)
+                _, expected_type = self.get_latest_scope().lookup(expected_type)
 
             types_differ: bool = expected_type != actual_type
             can_upcast: bool = can_upcast_to(actual_type, expected_type)
@@ -299,73 +300,16 @@ class TypeChecker(NodeVisitor):
         ty = self.get_return_type(current_function)
         return ty
 
-    # HACK SECTION
-
-    def lookup_var(self, v: str) -> Typ:
-        return self.get_latest_scope().lookup_var(v)
-
-    def lookup_func(self, f: str) -> Typ:
-        return self.get_latest_scope().lookup_func(f)
-
-    def lookup_nested(self, f: str) -> Environment:
-        return self.get_latest_scope().lookup_nested(f)
-
-    def lookup_or_default(self, k: str, default: Any) -> Union[Typ, dict[str, Typ], str]:
-        return self.get_latest_scope().lookup_or_default(k, default)
-
-    def lookup_var_or_default(self, k: str, default: Any) -> Union[Typ, dict[str, Typ], str]:
-        return self.get_latest_scope().lookup_var_or_default(k, default)
-
-    def lookup_func_or_default(self, k: str, default: Any) -> Union[Typ, dict[str, Typ], str]:
-        return self.get_latest_scope().lookup_func_or_default(k, default)
-
-    def contains_nested(self, k: str) -> bool:
-        return self.get_latest_scope().contains_nested(k)
-
-    def contains_function(self, k: str) -> bool:
-        return self.get_latest_scope().contains_function(k)
-
-    def contains_variable(self, k: str) -> bool:
-        return self.get_latest_scope().contains_variable(k)
-
-    def is_function(self, key: str) -> bool:
-        try:
-            self.get_latest_scope().lookup_func(key)
-            return True
-        except:
-            return False
+    def lookup_or_self(self, k):
+        return self.get_latest_scope().lookup_or_default(k, k)
 
     def bind_var(self, var: str, typ: Typ) -> None:
         self.get_latest_scope().bind_var(var, typ)
 
-    def bind_func(self, f: str, typ: Typ):
-        self.get_latest_scope().bind_func(f, typ)
-
-    def bind_nested(self, f: str, env: Environment):
-        self.get_latest_scope().bind_nested(f, env)
-
-    def lookup(self, key: str) -> Typ:
-        return key, self.get_latest_scope().lookup(key)
-
-    def lookup_or_self(self, k):
-        return self.lookup_or_default(k, k)
-
-    def lookup_var_or_self(self, k):
-        return self.lookup_var_or_default(k, k)
-
-    def lookup_func_or_self(self, k):
-        return self.lookup_func_or_default(k, k)
-
-    def try_find(self, key):
-        return self.get_latest_scope().try_find(key)
-
-    # HACK SECTION END
-
     def print_envs(self) -> None:
         i = 0
-        envs = self.environments.items()
-        for env in envs:
-            print(f'Env #{i}:', envs[i])
+        for env in self.environments.items():
+            print(f'Env #{i}:', env)
             i += 1
 
 
@@ -374,10 +318,6 @@ def typechecker_from_path(file) -> TypeChecker:
     tree = parse(src)
     tc = TypeChecker(tree)
     return tc
-
-
-def typechecker_from_ast(ast: AST) -> TypeChecker:
-    return TypeChecker(ast)
 
 
 if __name__ == '__main__':

@@ -9,7 +9,7 @@ def get_ast(f) -> ast.Module:
 
 
 def get_func_return_type_in_latest_scope(tc, f) -> type:
-    func = tc.lookup_func(f)
+    func = tc.get_latest_scope().lookup_func(f)
     return func[len(func) - 1]
 
 
