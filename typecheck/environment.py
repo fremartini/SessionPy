@@ -58,6 +58,12 @@ class Environment():
 
     def contains_nested(self, k : str) -> bool:
         return k in self.environment[Category.NESTED]
+
+    def contains_function(self, f: str) -> bool:
+        return f in self.environment[Category.FUNCTION]
+
+    def contains_variable(self, v: str) -> bool:
+        return v in self.environment[Category.VARIABLE]
     
     def bind_var(self, var: str, typ: Typ) -> None:
         self.environment[Category.VARIABLE][var] = typ
