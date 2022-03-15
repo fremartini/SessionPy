@@ -2,7 +2,6 @@ import inspect
 from textwrap import dedent
 
 from context import *
-from typecheck.environment import Category
 
 
 def get_ast(f) -> ast.Module:

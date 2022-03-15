@@ -1,9 +1,10 @@
 from __future__ import annotations
+
 from enum import Enum
-from operator import mod
+
 from lib import *
 from debug import debug_print
-from typing import Union, List
+from typing import Union
 
 
 class Category(Enum):
@@ -16,29 +17,28 @@ def empty() -> dict:
     return {env_typ: {} for env_typ in list(Category)}
 
 
-class Environment():
+class Environment:
     def __init__(self, env=None):
-        if env == None:
+        if env is None:
             env = empty()
         self.environment = env
-        
+
     def lookup_var(self, v: str) -> Typ:
         if v in self.environment[Category.VARIABLE]:
-            return self.environment[Category.VARIABLE][v] 
+            return self.environment[Category.VARIABLE][v]
         else:
             raise EnvironmentError(f'{v} not found in {self.environment[Category.VARIABLE]}')
 
     def lookup_func(self, key: str) -> Typ:
         if key in self.environment[Category.FUNCTION]:
-            return self.environment[Category.FUNCTION][key] 
+            return self.environment[Category.FUNCTION][key]
         else:
             raise EnvironmentError(f'{key} not found in {self.environment[Category.FUNCTION]}')
-
 
     def lookup_nested(self, f: str) -> Environment:
         return self.environment[Category.NESTED][f]
 
-    def lookup_or_default(self, k: str, default : Any) -> Union[Typ, dict[str, Typ], str]:
+    def lookup_or_default(self, k: str, default: Any) -> Union[Typ, dict[str, Typ], str]:
         try:
             return self.lookup(k)
         except EnvironmentError:
@@ -50,13 +50,13 @@ class Environment():
         except EnvironmentError:
             return default
 
-    def lookup_func_or_default(self, k : str, default : Any) -> Union[Typ, dict[str, Typ], str]:
+    def lookup_func_or_default(self, k: str, default: Any) -> Union[Typ, dict[str, Typ], str]:
         try:
             return self.lookup_func(k)
         except EnvironmentError:
             return default
 
-    def contains_nested(self, k : str) -> bool:
+    def contains_nested(self, k: str) -> bool:
         return k in self.environment[Category.NESTED]
 
     def contains_function(self, f: str) -> bool:
@@ -64,17 +64,17 @@ class Environment():
 
     def contains_variable(self, v: str) -> bool:
         return v in self.environment[Category.VARIABLE]
-    
+
     def bind_var(self, var: str, typ: Typ) -> None:
         self.environment[Category.VARIABLE][var] = typ
 
-    def bind_func(self, f : str, typ: Typ) -> None:
+    def bind_func(self, f: str, typ: Typ) -> None:
         self.environment[Category.FUNCTION][f] = typ
 
     def bind_nested(self, key: str, env: Environment) -> None:
         self.environment[Category.NESTED][key] = env
-        
-    def lookup(self, key : str) -> Typ:
+
+    def lookup(self, key: str) -> Typ:
         debug_print(f'lookup: searching for key="{key}" in {self.environment}')
         priority = [Category.VARIABLE, Category.FUNCTION, Category.NESTED]
         for env_cat in priority:
