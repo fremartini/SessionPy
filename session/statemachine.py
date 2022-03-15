@@ -141,42 +141,6 @@ def pp(st, indent=0):
     else: #[TSend, TRecv, TLoop]
         pp(tail, indent+indent_size)
 
-"""
-
-1: (offer, ((s1,s2)))
-head: "offer"
-tail: tuple
-=>
-
-r.outgoing:
-    sendint: m [defined by s1]
-    resvstr: n [defined by s2]
-
-
-
-2: (send, s)
-head: "send"
-val: int
-tail: sessiontype (here, end)
-=>
-r --send int--> m
-^
-
-
-
-(offer, 
-    
-    (
-        (send, (<class 'int'>, end)), 
-        (recv, (<class 'str'>, end))
-    )
-    
-)
-
-
-"""
-
-
 def build(st):
     global ident
     ident = 0
@@ -238,17 +202,18 @@ def build(st):
     go(st, ref)
     return root
 
-send_int_recv_str_end = "Channel[Send[int, Recv[str, End]]]"
-send_int_recv_bool_send_float_recv_str_end = "Channel[Send[int, Recv[bool, Send[float, Recv[str, End]]]]]"
-send_int_recv_bool_offer___send_float_recv_str_end___recv_bool_end = "Channel[Send[int, Recv[bool, Offer[ Send[float, Recv[str, End]], Recv[bool, End]]]]]"
-offer___send_int_end___recv_str_end = "Channel[Offer[Send[int, End], Recv[str, End]]]"
-offer___offer___send_int_end___send_bool_end___recv_str_end = "Channel[Offer[ Offer[Send[int,End], Send[bool, End]], Recv[str, End]]]"
-#offer___loop_start_offer___send_int_end___send_bool_end_loop_end__recv_str_end = "Channel[Offer[ Loop[Offer[Send[int,End], Send[bool, End]]], Recv[str, End]]]"
+def _driver_code():
+    send_int_recv_str_end = "Channel[Send[int, Recv[str, End]]]"
+    send_int_recv_bool_send_float_recv_str_end = "Channel[Send[int, Recv[bool, Send[float, Recv[str, End]]]]]"
+    send_int_recv_bool_offer___send_float_recv_str_end___recv_bool_end = "Channel[Send[int, Recv[bool, Offer[ Send[float, Recv[str, End]], Recv[bool, End]]]]]"
+    offer___send_int_end___recv_str_end = "Channel[Offer[Send[int, End], Recv[str, End]]]"
+    offer___offer___send_int_end___send_bool_end___recv_str_end = "Channel[Offer[ Offer[Send[int,End], Send[bool, End]], Recv[str, End]]]"
+    #offer___loop_start_offer___send_int_end___send_bool_end_loop_end__recv_str_end = "Channel[Offer[ Loop[Offer[Send[int,End], Send[bool, End]]], Recv[str, End]]]"
 
 
-sts = [send_int_recv_str_end, send_int_recv_bool_send_float_recv_str_end, offer___send_int_end___recv_str_end, send_int_recv_bool_offer___send_float_recv_str_end___recv_bool_end, offer___offer___send_int_end___send_bool_end___recv_str_end]
-for s in sts:
-    print(s)
-    sm : SMBuilder = SMBuilder(s)
-    st = sm.slcs[0], sm.slcs[1]
-    print(build(st), end='\n\n')
+    sts = [send_int_recv_str_end, send_int_recv_bool_send_float_recv_str_end, offer___send_int_end___recv_str_end, send_int_recv_bool_offer___send_float_recv_str_end___recv_bool_end, offer___offer___send_int_end___send_bool_end___recv_str_end]
+    for s in sts:
+        print(s)
+        sm : SMBuilder = SMBuilder(s)
+        st = sm.slcs[0], sm.slcs[1]
+        print(build(st), end='\n\n')
