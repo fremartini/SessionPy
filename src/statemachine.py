@@ -94,7 +94,6 @@ class SMBuilder(NodeVisitor):
 
     def __init__(self, tree) -> None:
         self.slcs = deque()
-        print(dump(tree, indent=2))
         self.visit(tree)
         self.st = (self.slcs[0], self.slcs[1])
 
