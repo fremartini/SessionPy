@@ -9,6 +9,7 @@ from debug import *
 from environment import Environment
 from immutable_list import ImmutableList
 from lib import *
+from statemachine import SMBuilder
 
 
 class TypeChecker(NodeVisitor):
@@ -19,12 +20,7 @@ class TypeChecker(NodeVisitor):
         self.in_functions: ImmutableList[FunctionDef] = ImmutableList()
         self.visit(tree)
 
-    def visit_Module(self, node: Module) -> None:
-        for stm in node.body:
-            self.visit(stm)
-
     def visit_FunctionDef(self, node: FunctionDef) -> Typ:
-
         self.in_functions = self.in_functions.add(node)
 
         expected_return_type: type = self.get_return_type(node)
@@ -133,23 +129,32 @@ class TypeChecker(NodeVisitor):
         # FIXME: handle case where node.targets > 1
         debug_print('visit_Assign', dump(node))
         assert (len(node.targets) == 1)
-        target = self.visit(node.targets[0])
-        value = self.visit(node.value)
-        self.bind_var(target, value)
+
+        if self.is_session_type(node.value):
+            graph = SMBuilder(node.value).build()
+        else:
+            target = self.visit(node.targets[0])
+            value = self.visit(node.value)
+
+            self.bind_var(target, value)
 
     def visit_AnnAssign(self, node: AnnAssign) -> None:
         debug_print('visit_AnnAssign', dump(node))
-        target: str = self.visit(node.target)
-        name_or_type = self.visit(node.annotation)
-        rhs_type = self.visit(node.value)
-        if is_type(name_or_type):
-            self.bind_var(target, union(rhs_type, name_or_type))
+
+        if self.is_session_type(node.value):
+            graph = SMBuilder(node.value).build()
         else:
-            ann_type: Type = locate(name_or_type)
-            assert (type(ann_type) == type)
-            rhs_type: Type = self.visit(node.value)
-            fail_if(not ann_type == rhs_type, f'annotated type {ann_type} does not match inferred type {rhs_type}')
-            self.bind_var(target, ann_type)
+            target: str = self.visit(node.target)
+            name_or_type = self.visit(node.annotation)
+            rhs_type = self.visit(node.value)
+            if is_type(name_or_type):
+                self.bind_var(target, union(rhs_type, name_or_type))
+            else:
+                ann_type: Type = locate(name_or_type)
+                assert (type(ann_type) == type)
+                rhs_type: Type = self.visit(node.value)
+                fail_if(not ann_type == rhs_type, f'annotated type {ann_type} does not match inferred type {rhs_type}')
+                self.bind_var(target, ann_type)
 
     def visit_BinOp(self, node: BinOp) -> type:
         debug_print('visit_BinOp', dump(node))
@@ -276,6 +281,9 @@ class TypeChecker(NodeVisitor):
         fail_if_cannot_cast(return_type, expected_return_type,
                             f'return type {return_type} did not match {expected_return_type}')
         return return_type
+
+    def is_session_type(self, node):
+        return isinstance(node, Subscript) and isinstance(node.value, Name) and node.value.id == 'Channel'
 
     def get_return_type(self, node: FunctionDef):
         return self.visit(node.returns) if node.returns else Any
