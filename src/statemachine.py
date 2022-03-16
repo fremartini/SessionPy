@@ -48,7 +48,7 @@ class TChoice(Generic[A]):
         return f'offer'
 
 
-class STEnd():
+class STEnd:
     def __str__(self) -> str:
         return 'end'
 
@@ -56,27 +56,12 @@ class STEnd():
         return self.__str__()
 
 
-class TEps():
-    def __str__(self) -> str:
-        return 'ε'
-
-    def __repr__(self) -> str:
-        return self.__str__()
-
-
-Transition = TSend | TRecv | TChoice | TOffer
-
 
 class Node:
     def __init__(self, id: int, accepting_state: bool = False) -> None:
         self.id = id
         self.accepting = accepting_state
         self.outgoing: dict[TSend | TRecv, Node] = {}
-
-    def get_id(self) -> int:
-        res = self.id
-        self.id += 1
-        return res
 
     def __str__(self) -> str:
         res = f'(s{self.id})' if self.accepting else f's{self.id}'
@@ -107,13 +92,77 @@ def new_node(*args) -> Node:
 
 class SMBuilder(NodeVisitor):
 
-    def __init__(self, src) -> None:
+    def __init__(self, tree) -> None:
         self.slcs = deque()
-        tree = parse(src)
+        print(dump(tree, indent=2))
         self.visit(tree)
+        self.st = (self.slcs[0], self.slcs[1])
+
+    def build(self):
+        global ident
+        ident = 0
+
+        def next_id():
+            global ident
+            res = ident
+            ident += 1
+            return res
+
+        root = new_node(next_id())
+        ref = root
+
+        transition = TSend | TRecv | TChoice | TOffer
+        first = type | transition
+        second = tuple | STEnd
+
+        def go(st: STEnd | tuple[first, second], r: Node):
+
+            if isinstance(st, STEnd):
+                r.accepting = True
+                return
+
+            assert isinstance(st, tuple), st
+
+            head = st[0]
+            tail = st[1]
+
+            assert isinstance(head, first), head
+            assert isinstance(tail, second), tail
+
+            if tail == STEnd:
+                r.accepting = True
+                return
+
+            if isinstance(head, TSend | TRecv):
+                assert isinstance(tail, tuple), tail
+                m = new_node(next_id())
+                typ = tail[0]
+                tr = (TSend if isinstance(head, TSend) else TRecv)[typ]
+                r.outgoing[tr] = m
+                r = m
+                go(tail[1], r)
+                return tr, r
+            elif isinstance(head, TOffer | TChoice):
+                assert isinstance(tail, tuple), tail
+
+                left = tail[0]
+                right = tail[1]
+
+                assert isinstance(left, tuple), left
+                assert isinstance(right, tuple), right
+
+                t1, m = go(left, r)
+                t2, n = go(right, r)
+                assert str(t1()) in ["send", "recv"], t1
+                assert str(t2()) in ["send", "recv"], t2
+                r.outgoing[t1] = m
+                r.outgoing[t2] = n
+                return t1, t2  # TODO: Investigate
+
+        go(self.st, ref)
+        return root
 
     def visit_Name(self, node: Name) -> Any:
-        res = None
         match node.id.lower():
             case 'send':
                 res = TSend()
@@ -147,87 +196,25 @@ class SMBuilder(NodeVisitor):
         self.slcs.appendleft(slice[0])
         return value, slice
 
+    def pp(self):
+        def aux(st, indent=0):
+            indent_size = 2
+            if isinstance(st, type):
+                print(' ' * indent, st)
+                return
+            head = st[0]
+            tail = st[1]
+            print(' ' * indent, head)
+            if head in [TOffer, TChoice]:
+                indent = indent_size + indent
+                print(' ' * indent, 'left')
+                aux(tail[0], indent)
+                print(' ' * indent, 'right')
+                aux(tail[1], indent)
+            else:  # [TSend, TRecv, TLoop]
+                aux(tail, indent + indent_size)
 
-def pp(st, indent=0):
-    indent_size = 2
-    if isinstance(st, type):
-        print(' ' * indent, st)
-        return
-    head = st[0]
-    tail = st[1]
-    print(' ' * indent, head)
-    if head in [TOffer, TChoice]:
-        indent = indent_size + indent
-        print(' ' * indent, 'left')
-        pp(tail[0], indent)
-        print(' ' * indent, 'right')
-        pp(tail[1], indent)
-    else:  # [TSend, TRecv, TLoop]
-        pp(tail, indent + indent_size)
-
-
-def build(st):
-    global ident
-    ident = 0
-
-    def next_id():
-        global ident
-        res = ident
-        ident += 1
-        return res
-
-    root = new_node(next_id())
-    ref = root
-
-    First = type | Transition
-    Second = tuple | STEnd
-
-    def go(st: STEnd | tuple[First, Second], r: Node):
-
-        if isinstance(st, STEnd):
-            r.accepting = True
-            return
-
-        assert isinstance(st, tuple), st
-
-        head = st[0]
-        tail = st[1]
-
-        assert isinstance(head, First), head
-        assert isinstance(tail, Second), tail
-
-        if tail == STEnd:
-            r.accepting = True
-            return
-
-        if isinstance(head, TSend | TRecv):
-            assert isinstance(tail, tuple), tail
-            m = new_node(next_id())
-            typ = tail[0]
-            transition = (TSend if isinstance(head, TSend) else TRecv)[typ]
-            r.outgoing[transition] = m
-            r = m
-            go(tail[1], r)
-            return transition, r
-        elif isinstance(head, TOffer | TChoice):
-            assert isinstance(tail, tuple), tail
-
-            left = tail[0]
-            right = tail[1]
-
-            assert isinstance(left, tuple), left
-            assert isinstance(right, tuple), right
-
-            t1, m = go(left, r)
-            t2, n = go(right, r)
-            assert str(t1()) in ["send", "recv"], t1
-            assert str(t2()) in ["send", "recv"], t2
-            r.outgoing[t1] = m
-            r.outgoing[t2] = n
-            return t1, t2  # TODO: Investigate
-
-    go(st, ref)
-    return root
+        aux(self.st, 0)
 
 
 def _driver_code():
@@ -238,11 +225,12 @@ def _driver_code():
     offer___offer___send_int_end___send_bool_end___recv_str_end = "Channel[Offer[ Offer[Send[int,End], Send[bool, End]], Recv[str, End]]]"
     # offer___loop_start_offer___send_int_end___send_bool_end_loop_end__recv_str_end = "Channel[Offer[ Loop[Offer[Send[int,End], Send[bool, End]]], Recv[str, End]]]"
 
-    sts = [send_int_recv_str_end, send_int_recv_bool_send_float_recv_str_end, offer___send_int_end___recv_str_end,
-           send_int_recv_bool_offer___send_float_recv_str_end___recv_bool_end,
-           offer___offer___send_int_end___send_bool_end___recv_str_end]
+    sts = [send_int_recv_str_end]
     for s in sts:
-        print(s)
-        sm: SMBuilder = SMBuilder(s)
-        st = sm.slcs[0], sm.slcs[1]
-        print(build(st), end='\n\n')
+        a = parse(s)
+        graph = SMBuilder(a).build()
+        print(graph, end='\n\n')
+
+
+if __name__ == '__main__':
+    _driver_code()
