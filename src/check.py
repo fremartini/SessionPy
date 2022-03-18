@@ -9,7 +9,7 @@ from debug import *
 from environment import Environment
 from immutable_list import ImmutableList
 from lib import *
-from statemachine import SMBuilder
+from statemachine import STParser, Node
 
 
 class TypeChecker(NodeVisitor):
@@ -19,6 +19,7 @@ class TypeChecker(NodeVisitor):
         self.environments: ImmutableList[Environment] = ImmutableList().add(Environment())
         self.in_functions: ImmutableList[FunctionDef] = ImmutableList()
         self.visit(tree)
+        self.print_envs()
 
     def visit_FunctionDef(self, node: FunctionDef) -> Typ:
         self.in_functions = self.in_functions.add(node)
@@ -29,9 +30,7 @@ class TypeChecker(NodeVisitor):
             fail_if(params[0][0] != 'self', "a class function must have self as first parameter")
             params = params[1:]
         function_type: ImmutableList[Tuple[str, type]] = \
-            ImmutableList.of_list(params) \
-                .map(lambda tp: tp[1]) \
-                .add(expected_return_type)
+            ImmutableList.of_list(params).map(lambda tp: tp[1]).add(expected_return_type)
 
         self.get_latest_scope().bind_func(node.name, function_type.items())
         self.dup()
@@ -122,18 +121,26 @@ class TypeChecker(NodeVisitor):
         debug_print('attribute', dump(node))
         value = self.visit(node.value)  # A
         attr = node.attr  # square
-        env = self.get_latest_scope().lookup_nested(value)
-        return env.lookup_func(attr)
+
+        def is_session_type_operation(op: str):
+            return str.lower(op) in ['recv', 'send', 'offer', 'branch', 'loop']
+
+        if is_session_type_operation(attr):
+            return value
+        else:
+            env = self.get_latest_scope().lookup_nested(value)
+            return env.lookup_func(attr)
 
     def visit_Assign(self, node: Assign) -> None:
         # FIXME: handle case where node.targets > 1
         debug_print('visit_Assign', dump(node))
         assert (len(node.targets) == 1)
 
+        target = self.visit(node.targets[0])
         if self.is_session_type(node.value):
-            graph = SMBuilder(node.value).build()
+            graph = STParser(node.value).build()
+            self.bind_var(target, graph)
         else:
-            target = self.visit(node.targets[0])
             value = self.visit(node.value)
 
             self.bind_var(target, value)
@@ -141,10 +148,11 @@ class TypeChecker(NodeVisitor):
     def visit_AnnAssign(self, node: AnnAssign) -> None:
         debug_print('visit_AnnAssign', dump(node))
 
+        target: str = self.visit(node.target)
         if self.is_session_type(node.value):
-            graph = SMBuilder(node.value).build()
+            graph = STParser(node.value).build()
+            self.bind_var(target, graph)
         else:
-            target: str = self.visit(node.target)
             name_or_type = self.visit(node.annotation)
             rhs_type = self.visit(node.value)
             if is_type(name_or_type):
@@ -169,12 +177,38 @@ class TypeChecker(NodeVisitor):
         debug_print('visit_Call', dump(node))
         expected_signature = self.visit(node.func)
 
-        if isinstance(expected_signature, FunctionTyp):
+        if isinstance(expected_signature, Node):
+            args = self.get_function_args(node.args)
+            edges = expected_signature.outgoing
+            op = node.func.attr
+            v = node.func.value.id
+
+            print('---------')
+            print('args', args)
+            print('edges', edges)
+            print('op', op)
+            print('---------')
+
+            dump_ast('HERE', node)
+
+            match str.lower(op):
+                case 'recv':
+                    fail_if(not expected_signature.is_valid_transition(op), f'unexpected session type {op}')
+                    self.bind_var(v, expected_signature.get_edge(op, None))
+                case 'send':
+                    fail_if(not expected_signature.is_valid_transition(op, args.head()), f'unexpected session type {op} {args.head()}')
+                    self.bind_var(v, expected_signature.get_edge(op, args.head()))
+                case 'offer':
+                    ...
+                case 'branch':
+                    ...
+
+        elif isinstance(expected_signature, FunctionTyp):
             signature = ImmutableList.of_list(expected_signature)
             return_type = signature.last()
             expected_signature = signature.discard_last()
 
-            provided_args = ImmutableList.of_list([self.visit(arg) for arg in node.args])
+            provided_args = self.get_function_args(node.args)
             self.compare_function_arguments_and_parameters("your method", provided_args, expected_signature)
             return return_type
 
@@ -287,6 +321,9 @@ class TypeChecker(NodeVisitor):
 
     def get_return_type(self, node: FunctionDef):
         return self.visit(node.returns) if node.returns else Any
+
+    def get_function_args(self, args) -> ImmutableList:
+        return ImmutableList.of_list([self.visit(arg) for arg in args])
 
     def push(self) -> None:
         self.environments = self.environments.add(Environment())
