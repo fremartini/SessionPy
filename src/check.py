@@ -189,7 +189,6 @@ class TypeChecker(NodeVisitor):
             print('op', op)
             print('---------')
 
-            dump_ast('HERE', node)
 
             match str.lower(op):
                 case 'recv':
