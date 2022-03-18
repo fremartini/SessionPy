@@ -1,8 +1,7 @@
 from ast import *
 
-from typing import TypeVar, Generic, Any, Union
+from typing import TypeVar, Generic, Any
 from sessiontype import Send, Recv, Loop, Offer, Choose, End
-from channel import Channel
 from pydoc import locate
 import copy
 from collections import deque
@@ -50,7 +49,7 @@ class TChoose(Generic[A]):
         return f'offer'
 
 
-class STEnd():
+class STEnd:
     def __str__(self) -> str:
         return 'end'
 
@@ -58,7 +57,7 @@ class STEnd():
         return self.__str__()
 
 
-class TEps():
+class TEps:
     def __str__(self) -> str:
         return 'ε'
 
@@ -75,40 +74,33 @@ class Node:
         self.accepting = accepting_state
         self.outgoing: dict[TSend | TRecv, Node] = {}
 
-    def get_id(self) -> int:
-        res = self.id
-        self.id += 1
-        return res
-
     def __str__(self) -> str:
         state = f'(s{self.id})' if self.accepting else f's{self.id}'
         return state
-    # def __str__(self) -> str:
-    #     state = f'(s{self.id})' if self.accepting else f's{self.id}'
-    #     res = state
-    #     keys = list(self.outgoing.keys())
-    #     def S(key) -> str:
-    #         transition = str(key).split('.')[1]
-    #         state = str(self.outgoing[key]).strip()
-    #         value = f'({state})' if self.accepting else state
-    #         return f' --[{transition}]--> {value}'
 
-    #     if len(keys) > 0:
-    #         if len(keys) > 1:
-    #             res += ' -> &['
-    #             i = 0
-    #             while i < len(keys)-1:
-    #                 res += f'{state}{S(keys[i])}, '
-    #                 i += 1
-    #             res += f'{state}{S(keys[i])}]'
-    #         else:
-    #             key = keys[0]
-    #             if self.outgoing[key].id == self.id:
-    #                 transition = str(key).split('.')[1]
-    #                 res += f' --[{transition}]--> {state}'
-    #             else:
-    #                 res += f'{S(key)}'
-    #     return res
+    def is_valid_transition(self, op : str, typ: type = None) -> bool:
+
+        op = get_op(op)
+        if typ is None:
+            return op[int] in self.outgoing or op[str] in self.outgoing or op[bool] in self.outgoing
+        else:
+            return op[typ] in self.outgoing
+
+    def get_edge(self, op, typ = None):
+        op = get_op(op)
+        if typ is None:
+            if op[int] in self.outgoing :
+                 typ = int
+            elif op[str] in self.outgoing:
+                typ = str
+            elif op[bool] in self.outgoing:
+                typ = bool
+
+            return self.outgoing[op[typ]]
+
+        else:
+            return self.outgoing[op[typ]]
+
 
 
 def new_node(*args) -> Node:
@@ -126,28 +118,26 @@ class STParser(NodeVisitor):
         self.slcs = deque()
         tree = parse(src)
         self.visit(tree)
-        self.res = self.slcs[0], self.slcs[1]
+        self.session_type = self.slcs[0], self.slcs[1]
 
     def visit_Name(self, node: Name) -> Any:
-        res = None
         match node.id.lower():
             case 'send':
-                res = TSend()
+                return TSend()
             case 'recv':
-                res = TRecv()
+                return TRecv()
             case 'end':
-                res = STEnd()
+                return STEnd()
             case 'offer':
-                res = TOffer()
+                return TOffer()
             case 'choice':
-                res = TChoose()
+                return TChoose()
             case 'loop':
-                res = TLoop()
+                return TLoop()
             case 'channel':
-                res = None
+                return None
             case x:
-                res = locate(x)
-        return res
+                return locate(x)
 
     def visit_Tuple(self, node: Tuple) -> Any:
         assert len(node.elts) == 2
@@ -163,112 +153,103 @@ class STParser(NodeVisitor):
         self.slcs.appendleft(slice[0])
         return value, slice
 
+    def build(self):
+        global ident
+        ident = 0
 
-def pp(st, indent=0):
-    indent_size = 2
-    if isinstance(st, type):
-        print(' ' * indent, st)
-        return
-    head = st[0]
-    tail = st[1]
-    print(' ' * indent, head)
-    if head in [TOffer, TChoose]:
-        indent = indent_size + indent
-        print(' ' * indent, 'left')
-        pp(tail[0], indent)
-        print(' ' * indent, 'right')
-        pp(tail[1], indent)
-    else:  # [TSend, TRecv, TLoop]
-        pp(tail, indent + indent_size)
+        def next_id():
+            global ident
+            res = ident
+            ident += 1
+            return res
 
+        root = new_node(next_id())
+        ref = root
 
-def sessiontype_from_tuple(t):
+        # (recv, (<class 'str'>, (offer, ((send, (<class 'bool'>, end)), (loop, (send, (<class 'int'>, end)))))))
+        def go(tup, node: Node):
+            if isinstance(tup, STEnd):
+                node.accepting = True
+                return node, None
+            head, tail = tup[0], tup[1]
+            head = head.__class__
+            if head in [TRecv, TSend]:
+                typ = tail[0]
+                assert isinstance(typ, type), typ
+                nd = new_node(next_id())
+                key = head[typ]
+                go(tail[1], nd)
+                node.outgoing[key] = nd
+                return nd, key
+            elif head in [TOffer, TChoose]:
+                st1, st2 = tail[0], tail[1]
+                n1, k1 = go(st1, node)
+                n2, k2 = go(st2, node)
+                node.outgoing[k1] = n1
+                node.outgoing[k2] = n2
+                return None
+            elif head in [TLoop]:
+                _, key = go(tail, node)
+                node.outgoing[key] = node
+                return node, key
+            else:
+                assert head == STEnd, head
+                node.accepting = True
+                return node, None
+
+        go(self.session_type, ref)
+        return root
+
+    def pp(self):
+        def aux(st, indent=0):
+            indent_size = 2
+            if isinstance(st, type):
+                print(' ' * indent, st)
+                return
+            head = st[0]
+            tail = st[1]
+            print(' ' * indent, head)
+            if head in [TOffer, TChoose]:
+                indent = indent_size + indent
+                print(' ' * indent, 'left')
+                aux(tail[0], indent)
+                print(' ' * indent, 'right')
+                aux(tail[1], indent)
+            else:  # [TSend, TRecv, TLoop]
+                aux(tail, indent + indent_size)
+
+        aux(self.session_type, 0)
+
+def get_op(op : str):
+    match str.lower(op):
+        case 'recv':
+            return TRecv
+        case 'send':
+            return TSend
+        case x:
+            raise Exception(f'unsupported type {x}')
+
+def session_type_from_tuple(t):
     if isinstance(t, tuple):
         head, tail = t[0], t[1]
         head = head.__class__
         if head == TLoop:
-            st = sessiontype_from_tuple(tail)
+            st = session_type_from_tuple(tail)
             return Loop[st]
         elif head in [TSend, TRecv]:
             typ = tail[0]
             assert isinstance(typ, type)
-            st = sessiontype_from_tuple(tail[1])
+            st = session_type_from_tuple(tail[1])
             return (Send if head == TSend else Recv)[typ, st]
             st1 = sessiontype_from_(tail[0])
-            st1 = sessiontype_from_tuple(tail[0])
-            st2 = sessiontype_from_tuple(tail[1])
+            st1 = session_type_from_tuple(tail[0])
+            st2 = session_type_from_tuple(tail[1])
             return (Offer if head == TOffer else Choose)[st1, st2]
         else:
             raise Exception("unhandled sessiontype:", head)
     else:
         assert isinstance(t, STEnd)
         return End
-
-
-def build(st):
-    global ident
-    ident = 0
-
-    def next_id():
-        global ident
-        res = ident
-        ident += 1
-        return res
-
-    root = new_node(next_id())
-    ref = root
-
-    # (recv, (<class 'str'>, (offer, ((send, (<class 'bool'>, end)), (loop, (send, (<class 'int'>, end)))))))
-    def go(tup, node: Node):
-        if isinstance(tup, STEnd):
-            node.accepting = True
-            return node, None
-        head, tail = tup[0], tup[1]
-        head = head.__class__
-        if head in [TRecv, TSend]:
-            typ = tail[0]
-            assert isinstance(typ, type), typ
-            nd = new_node(next_id())
-            key = head[typ]
-            go(tail[1], nd)
-            node.outgoing[key] = nd
-            return nd, key
-        elif head in [TOffer, TChoose]:
-            st1, st2 = tail[0], tail[1]
-            n1, k1 = go(st1, node)
-            n2, k2 = go(st2, node)
-            node.outgoing[k1] = n1
-            node.outgoing[k2] = n2
-            return None
-        elif head in [TLoop]:
-            _, key = go(tail, node)
-            node.outgoing[key] = node
-            return node, key
-        else:
-            assert head == STEnd, head
-            node.accepting = True
-            return node, None
-
-    go(st, ref)
-    return root
-
-
-def _driver_code():
-    send_int_recv_str_end = "Channel[Send[int, Recv[str, End]]]"
-    send_int_recv_bool_send_float_recv_str_end = "Channel[Send[int, Recv[bool, Send[float, Recv[str, End]]]]]"
-    send_int_recv_bool_offer___send_float_recv_str_end___recv_bool_end = "Channel[Send[int, Recv[bool, Offer[ Send[float, Recv[str, End]], Recv[bool, End]]]]]"
-    offer___send_int_end___recv_str_end = "Channel[Offer[Send[int, End], Recv[str, End]]]"
-    offer___offer___send_int_end___send_bool_end___recv_str_end = "Channel[Offer[ Offer[Send[int,End], Send[bool, End]], Recv[str, End]]]"
-    # offer___loop_start_offer___send_int_end___send_bool_end_loop_end__recv_str_end = "Channel[Offer[ Loop[Offer[Send[int,End], Send[bool, End]]], Recv[str, End]]]"
-
-    sts = [send_int_recv_str_end, send_int_recv_bool_send_float_recv_str_end, offer___send_int_end___recv_str_end,
-           send_int_recv_bool_offer___send_float_recv_str_end___recv_bool_end,
-           offer___offer___send_int_end___send_bool_end___recv_str_end]
-    for s in sts:
-        print(s)
-        sm: STParser = STParser(s)
-        st = sm.slcs[0], sm.slcs[1]
-        print(build(st), end='\n\n')
 
 
 def print_node(n: Node):
@@ -285,21 +266,34 @@ def print_node(n: Node):
             print_node(n1)
 
 
-send_int_recv_str_end = "Channel[Send[int, Send[bool, Recv[str, End]]]]"
-loop_send_int_end = "Channel[Loop[Send[int, End]]]"
-recv_str_offer___send_bool_end___loop_send_int_end = "Channel[Recv[str, Offer[Send[bool, End], Loop[Send[int, End]]]]]"
-offer___send_int_end___recv_str_end = "Channel[Offer[Send[int, End], Recv[str, End]]]"
+if __name__ == '__main__':
+    send_int_recv_str_end = "Channel[Send[int, Recv[str, End]]]"
+    send_int_recv_bool_send_float_recv_str_end = "Channel[Send[int, Recv[bool, Send[float, Recv[str, End]]]]]"
+    send_int_recv_bool_offer___send_float_recv_str_end___recv_bool_end = "Channel[Send[int, Recv[bool, Offer[ Send[float, Recv[str, End]], Recv[bool, End]]]]]"
+    offer___send_int_end___recv_str_end = "Channel[Offer[Send[int, End], Recv[str, End]]]"
+    offer___offer___send_int_end___send_bool_end___recv_str_end = "Channel[Offer[ Offer[Send[int,End], Send[bool, End]], Recv[str, End]]]"
+    # offer___loop_start_offer___send_int_end___send_bool_end_loop_end__recv_str_end = "Channel[Offer[ Loop[Offer[Send[int,End], Send[bool, End]]], Recv[str, End]]]"
 
-builder = STParser(send_int_recv_str_end)
-res = build(builder.res)
-print_node(res)
+    sts = [send_int_recv_str_end, send_int_recv_bool_send_float_recv_str_end, offer___send_int_end___recv_str_end,
+           send_int_recv_bool_offer___send_float_recv_str_end___recv_bool_end,
+           offer___offer___send_int_end___send_bool_end___recv_str_end]
+    for s in sts:
+        print(s)
+        sm: Node = STParser(s).build()
+        print(sm, end='\n\n')
 
-print('-')
-builder = STParser(offer___send_int_end___recv_str_end)
-res = build(builder.res)
-print_node(res)
+    send_int_recv_str_end = "Channel[Send[int, Send[bool, Recv[str, End]]]]"
+    loop_send_int_end = "Channel[Loop[Send[int, End]]]"
+    recv_str_offer___send_bool_end___loop_send_int_end = "Channel[Recv[str, Offer[Send[bool, End], Loop[Send[int, End]]]]]"
+    offer___send_int_end___recv_str_end = "Channel[Offer[Send[int, End], Recv[str, End]]]"
 
-print('-')
-builder = STParser(loop_send_int_end)
-res = build(builder.res)
-print_node(res)
+    res = STParser(send_int_recv_str_end).build()
+    print_node(res)
+
+    print('-')
+    res = STParser(offer___send_int_end___recv_str_end).build()
+    print_node(res)
+
+    print('-')
+    builder = STParser(loop_send_int_end).build()
+    print_node(res)
