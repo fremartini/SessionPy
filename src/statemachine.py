@@ -1,5 +1,4 @@
 from ast import *
-
 from typing import TypeVar, Generic, Any
 from sessiontype import Send, Recv, Loop, Offer, Choose, End
 from pydoc import locate
@@ -75,6 +74,13 @@ class TRight:
 
 Transition = TSend | TRecv | TChoose | TOffer | TLoop
 
+str_transition_map = {
+    "recv": TRecv,
+    "send": TSend,
+    "offer": TOffer,
+    "choose": TChoose,
+}
+
 
 class Node:
     def __init__(self, id: int, accepting_state: bool = False) -> None:
@@ -87,15 +93,16 @@ class Node:
         return state
 
     def is_valid_transition(self, op : str, typ: type = None) -> bool:
-
-        op = get_op(op)
+        if op not in str_transition_map:
+            return False
+        op = str_transition_map[op]
         if typ is None:
             return op[int] in self.outgoing or op[str] in self.outgoing or op[bool] in self.outgoing
         else:
             return op[typ] in self.outgoing
 
     def get_edge(self, op, typ = None):
-        op = get_op(op)
+        op = str_transition_map[op]
         if typ is None:
             if op[int] in self.outgoing :
                  typ = int
@@ -109,6 +116,12 @@ class Node:
         else:
             return self.outgoing[op[typ]]
 
+    def outgoing_type(self) -> type:
+        assert len(self.outgoing) == 1, "Function should not be called if it's not a single outgoing edge"
+        key = list(self.outgoing.keys())[0]
+        typ = key.__args__[0]
+        assert isinstance(typ, type)
+        return typ
 
 
 def new_node(*args) -> Node:
@@ -210,15 +223,6 @@ class STParser(NodeVisitor):
         go(self.session_type, ref)
         return root
 
-
-def get_op(op : str):
-    match str.lower(op):
-        case 'recv':
-            return TRecv
-        case 'send':
-            return TSend
-        case x:
-            raise Exception(f'unsupported type {x}')
 
 def print_node(n: Node):
     if not n.outgoing:

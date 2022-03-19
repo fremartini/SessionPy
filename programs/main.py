@@ -1,4 +1,7 @@
-a = Channel[Send[int, Recv[str, End]]]
+ch = Channel[Offer[Send[int, End], Recv[str, End]]]
 
-a.send(2)
-a.recv()
+match ch.offer():
+    case Branch.LEFT:
+        ch.send(42)
+    case Branch.RIGHT:
+        s = ch.recv()
