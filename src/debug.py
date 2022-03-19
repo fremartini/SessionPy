@@ -2,9 +2,10 @@ from ast import dump
 
 
 def debug_print(*args) -> None:
-    debug = not True
+    debug = True
     if debug:
         print(*args)
+        print()
 
 
 def dump_ast(s, node) -> None:

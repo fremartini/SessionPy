@@ -1,5 +1,6 @@
 import ast
 import copy
+from math import exp
 import sys
 from ast import *
 from functools import reduce
@@ -10,6 +11,7 @@ from environment import Environment
 from immutable_list import ImmutableList
 from lib import *
 from statemachine import STParser, Node
+from sessiontype import ST_KEYWORDS
 
 
 class TypeChecker(NodeVisitor):
@@ -20,6 +22,22 @@ class TypeChecker(NodeVisitor):
         self.in_functions: ImmutableList[FunctionDef] = ImmutableList()
         self.visit(tree)
         self.print_envs()
+        #self.validate_postcondition()
+
+    def validate_postcondition(self):
+        latest = self.get_latest_scope()
+        failing_chans = []
+        for (k,v) in latest.get_vars():
+            print('k,v', k,v)
+            if isinstance(v, Node):
+                if not v.accepting:
+                    err_msg = f'\nchannel [{k}] not exhausted - next up is:'
+                    for edge in v.outgoing.keys():
+                        err_msg += f'\n- {str(edge)}'
+                    failing_chans.append(err_msg)
+        if failing_chans:
+            msgs = '\n'.join(failing_chans)
+            raise TypeError(msgs)
 
     def visit_FunctionDef(self, node: FunctionDef) -> Typ:
         self.in_functions = self.in_functions.add(node)
@@ -122,11 +140,8 @@ class TypeChecker(NodeVisitor):
         value = self.visit(node.value)  # A
         attr = node.attr  # square
 
-        def is_session_type_operation(op: str):
-            return str.lower(op) in ['recv', 'send', 'offer', 'branch', 'loop']
-
-        if is_session_type_operation(attr):
-            return value
+        if value in ST_KEYWORDS or attr in ST_KEYWORDS:
+            return value, attr
         else:
             env = self.get_latest_scope().lookup_nested(value)
             return env.lookup_func(attr)
@@ -175,43 +190,51 @@ class TypeChecker(NodeVisitor):
 
     def visit_Call(self, node: Call) -> Typ:
         debug_print('visit_Call', dump(node))
-        expected_signature = self.visit(node.func)
+        call_func = self.visit(node.func)
 
-        if isinstance(expected_signature, Node):
+        if isinstance(call_func, Node):
+            nd = call_func
             args = self.get_function_args(node.args)
-            edges = expected_signature.outgoing
+            edges = nd.outgoing
             op = node.func.attr
-            v = node.func.value.id
+            ch_name = node.func.value.id
+
 
             print('---------')
-            print('args', args)
             print('edges', edges)
+            print('args', args)
             print('op', op)
+            print('ch_name', ch_name)
+            print(edges.keys())
             print('---------')
 
-
-            match str.lower(op):
+            match op:
                 case 'recv':
-                    fail_if(not expected_signature.is_valid_transition(op), f'unexpected session type {op}')
-                    self.bind_var(v, expected_signature.get_edge(op, None))
+                    is_valid = nd.is_valid_transition(op)
+                    fail_if(not is_valid, f'unexpected session type {op}')
+                    edge = nd.get_edge(op, None)
+                    fail_if(not is_valid, edge)
+                    self.bind_var(ch_name, edge)
+                    return nd.outgoing_type()
                 case 'send':
-                    fail_if(not expected_signature.is_valid_transition(op, args.head()), f'unexpected session type {op} {args.head()}')
-                    self.bind_var(v, expected_signature.get_edge(op, args.head()))
+                    fail_if(not nd.is_valid_transition(op, args.head()), f'unexpected session type {op} {args.head()}')
+                    self.bind_var(ch_name, nd.get_edge(op, args.head()))
                 case 'offer':
                     ...
                 case 'branch':
                     ...
 
-        elif isinstance(expected_signature, FunctionTyp):
-            signature = ImmutableList.of_list(expected_signature)
+        elif isinstance(call_func, FunctionTyp):
+            signature = ImmutableList.of_list(call_func)
             return_type = signature.last()
-            expected_signature = signature.discard_last()
+            call_func = signature.discard_last()
 
             provided_args = self.get_function_args(node.args)
-            self.compare_function_arguments_and_parameters("your method", provided_args, expected_signature)
+            self.compare_function_arguments_and_parameters("your method", provided_args, call_func)
             return return_type
 
-        return expected_signature
+        print('expected ->', call_func)
+        return call_func
 
     def visit_ClassDef(self, node: ClassDef) -> None:
         debug_print('visit_ClassDef', dump(node))

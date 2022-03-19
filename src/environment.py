@@ -18,7 +18,7 @@ def empty() -> dict:
 
 
 class Environment:
-    def __init__(self, env=None):
+    def __init__(self, env: dict=None):
         if env is None:
             env = empty()
         self.environment = env
@@ -81,6 +81,10 @@ class Environment:
             if key in self.environment[env_cat]:
                 return self.environment[env_cat][key]
         raise EnvironmentError(f"'{key}' was not found in {self.environment}")
+
+    def get_vars(self):
+        vars: dict = self.environment[Category.VARIABLE]
+        return vars.items()
 
     def try_find(self, key):
         try:

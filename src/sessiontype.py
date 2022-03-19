@@ -31,3 +31,5 @@ class End(SessionType):
 
 class Loop(SessionType):
     ...
+
+ST_KEYWORDS = {'recv', 'send', 'offer', 'Branch', 'loop'}
