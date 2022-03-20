@@ -67,7 +67,7 @@ class Channel(Generic[T]):
         finally:
             s.close()
 
-    def offer(self) -> None:
+    def offer(self) -> Branch:
         ...
 
     def choose(self, direction: Branch) -> None:

@@ -45,7 +45,7 @@ class TChoose(Generic[A]):
         return self.__str__()
 
     def __str__(self) -> str:
-        return f'offer'
+        return f'choose'
 
 
 class STEnd:
@@ -151,7 +151,7 @@ class STParser(NodeVisitor):
                 return STEnd()
             case 'offer':
                 return TOffer()
-            case 'choice':
+            case 'choose':
                 return TChoose()
             case 'loop':
                 return TLoop()
