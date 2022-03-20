@@ -92,6 +92,13 @@ class Environment:
         except EnvironmentError:
             return None
 
+    def get_kind(self, kind: type) -> list[tuple[str, type]] :
+        items = []
+        for (key, val) in self.get_vars():
+            if isinstance(val, kind):
+                items.append((key, val))
+        return items 
+
     def __str__(self) -> str:
         res = "{"
         for key in self.environment:

@@ -10,7 +10,7 @@ from debug import *
 from environment import Environment
 from immutable_list import ImmutableList
 from lib import *
-from statemachine import STParser, Node
+from statemachine import STParser, Node, TLeft, TRight
 from sessiontype import ST_KEYWORDS
 
 
@@ -21,14 +21,12 @@ class TypeChecker(NodeVisitor):
         self.environments: ImmutableList[Environment] = ImmutableList().add(Environment())
         self.in_functions: ImmutableList[FunctionDef] = ImmutableList()
         self.visit(tree)
-        self.print_envs()
-        #self.validate_postcondition()
+        self.validate_postcondition()
 
     def validate_postcondition(self):
         latest = self.get_latest_scope()
         failing_chans = []
         for (k,v) in latest.get_vars():
-            print('k,v', k,v)
             if isinstance(v, Node):
                 if not v.accepting:
                     err_msg = f'\nchannel [{k}] not exhausted - next up is:'
@@ -78,19 +76,41 @@ class TypeChecker(NodeVisitor):
         fail_if_cannot_cast(target, value, f"{target} is not compatible with {value}")
 
     def visit_Match(self, node: ast.Match) -> None:
+        debug_print('visit_Match', dump(node))
         subj = self.visit(node.subject)
-        for case in node.cases:
-            self.dup()
-            case: ast.match_case = case
-            p = self.visit(case.pattern)
+        
+        if isinstance(subj, Node):
+            ch_name = node.subject.func.value.id
+            nd = subj
+            assert len(nd.outgoing) == 2
+            assert len(node.cases) == 2
+            
+            for case in node.cases:
+                match_value = case.pattern
+                attribute = match_value.value
+                left_right = attribute.attr
+                assert attribute.value.id == 'Branch'
+                assert left_right in ['LEFT', 'RIGHT']
+                self.bind_var(ch_name, nd)
+                new_nd = nd.outgoing[TLeft if left_right == 'LEFT' else TRight]
+                self.bind_var(ch_name, new_nd)
+                for s in case.body:
+                    self.visit(s)
+                self.validate_postcondition()
+            
+        else:
+            for case in node.cases:
+                self.dup()
+                case: ast.match_case = case
+                p = self.visit(case.pattern)
 
-            self.bind_var(p, self.lookup_or_self(subj))
-            if case.guard:
-                self.visit(case.guard)
+                self.bind_var(p, self.lookup_or_self(subj))
+                if case.guard:
+                    self.visit(case.guard)
 
-            for s in case.body:
-                self.visit(s)
-            self.pop()
+                for s in case.body:
+                    self.visit(s)
+                self.pop()
 
     def visit_MatchAs(self, node: ast.MatchAs) -> Union[str, None]:
         return node.name if node.name else None
@@ -139,7 +159,6 @@ class TypeChecker(NodeVisitor):
         debug_print('attribute', dump(node))
         value = self.visit(node.value)  # A
         attr = node.attr  # square
-
         if value in ST_KEYWORDS or attr in ST_KEYWORDS:
             return value, attr
         else:
@@ -191,22 +210,13 @@ class TypeChecker(NodeVisitor):
     def visit_Call(self, node: Call) -> Typ:
         debug_print('visit_Call', dump(node))
         call_func = self.visit(node.func)
-
-        if isinstance(call_func, Node):
-            nd = call_func
+        
+        
+        if isinstance(call_func, tuple):
+            nd = call_func[0]
             args = self.get_function_args(node.args)
-            edges = nd.outgoing
-            op = node.func.attr
+            op = call_func[1]
             ch_name = node.func.value.id
-
-
-            print('---------')
-            print('edges', edges)
-            print('args', args)
-            print('op', op)
-            print('ch_name', ch_name)
-            print(edges.keys())
-            print('---------')
 
             match op:
                 case 'recv':
@@ -220,10 +230,11 @@ class TypeChecker(NodeVisitor):
                     fail_if(not nd.is_valid_transition(op, args.head()), f'unexpected session type {op} {args.head()}')
                     self.bind_var(ch_name, nd.get_edge(op, args.head()))
                 case 'offer':
-                    ...
-                case 'branch':
-                    ...
-
+                    return nd
+                case 'choose':
+                    new_nd = nd.outgoing[TLeft if args.head()[1] == 'LEFT' else TRight]
+                    self.bind_var(ch_name, new_nd)
+                    
         elif isinstance(call_func, FunctionTyp):
             signature = ImmutableList.of_list(call_func)
             return_type = signature.last()
@@ -233,7 +244,6 @@ class TypeChecker(NodeVisitor):
             self.compare_function_arguments_and_parameters("your method", provided_args, call_func)
             return return_type
 
-        print('expected ->', call_func)
         return call_func
 
     def visit_ClassDef(self, node: ClassDef) -> None:
@@ -284,15 +294,38 @@ class TypeChecker(NodeVisitor):
     def visit_If(self, node: If) -> None:
         debug_print('visit_If', dump(node))
 
+        env = self.get_latest_scope()
+
         self.visit(node.test)
+        self.dup()
         for stm in node.body:
             self.visit(stm)
+        env_if = self.pop()
+        chans : list[(str,Node)] = env_if.get_kind(Node)
 
         if node.orelse:
+            self.dup()
             for stm in node.orelse:
                 self.visit(stm)
+            env_else = self.pop()
+            chans1 = env_else.get_kind(Node)
+            for (ch1, nd1), (ch2, nd2) in zip(chans, chans1):
+                both_accepting = nd1.accepting and nd2.accepting
+                if ch1 == ch2 and (not both_accepting or (both_accepting and nd1.id == nd2.id)):
+                    raise Exception(f'after conditional block, channel <{ch1}> ended up in two different states')
+        elif chans:
+            latest = self.get_latest_scope()
+            for (ch,nd) in chans:
+                ch1 = latest.lookup_var(ch)
+                if nd.id != ch1.id:
+                    raise Exception('then-block without else should not affect any session types')
+
+        for (ch,nd) in chans:
+            self.bind_var(ch, nd)
+
 
     def visit_ImportFrom(self, node: ImportFrom) -> Any:
+        return
         debug_print('visit_ImportFrom', dump(node))
         mod_name = f'{node.module}.py'
         if mod_name in sys.builtin_module_names:
@@ -309,6 +342,7 @@ class TypeChecker(NodeVisitor):
                 self.bind_var(im, import_env.lookup_var(im))
 
     def visit_Import(self, node: Import) -> Any:
+        return
         debug_print('visit_Import', dump(node))
         for module in node.names:
             module_name = module.name
@@ -338,8 +372,10 @@ class TypeChecker(NodeVisitor):
                             f'return type {return_type} did not match {expected_return_type}')
         return return_type
 
-    def is_session_type(self, node):
-        return isinstance(node, Subscript) and isinstance(node.value, Name) and node.value.id == 'Channel'
+    def is_session_type(self, node) -> bool:
+        def check_subscript(node) -> bool:
+            return isinstance(node, Subscript) and isinstance(node.value, Name) and node.value.id == 'Channel'
+        return isinstance(node, Call) and check_subscript(node.func)
 
     def get_return_type(self, node: FunctionDef):
         return self.visit(node.returns) if node.returns else Any
