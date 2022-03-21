@@ -4,8 +4,6 @@ from textwrap import dedent
 from context import *
 
 
-def get_ast(f) -> ast.Module:
-    return ast.parse(dedent(inspect.getsource(f)))
 
 
 class TestParamTypes(unittest.TestCase):

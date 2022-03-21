@@ -10,6 +10,7 @@ test:
 	python3.10 $(type_checking_tests)/test_union.py
 	python3.10 $(helper_tests)/immutable_list_tests.py
 	python3.10 $(helper_tests)/immutable_map_tests.py
+	python3.10 $(session_type_tests)/channel_tests.py
 
 #usage: make check file=test.py
 check:

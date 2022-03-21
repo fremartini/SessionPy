@@ -34,9 +34,9 @@ def can_downcast_to(t1: type, t2: type):
     return False
 
 
-def fail_if(e: bool, msg: str) -> None:
+def fail_if(e: bool, msg: str, exc: Exception=Exception) -> None:
     if e:
-        raise Exception(msg)
+        raise exc(msg)
 
 
 def fail_if_cannot_cast(a: type, b: type, err: str) -> None:

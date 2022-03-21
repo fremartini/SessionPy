@@ -93,32 +93,25 @@ class Node:
         return state
 
     def is_valid_transition(self, op : str, typ: type = None) -> bool:
-        if op not in str_transition_map:
-            return False
-        op = str_transition_map[op]
-        if typ is None:
-            return op[int] in self.outgoing or op[str] in self.outgoing or op[bool] in self.outgoing
+        transition = str(self.get_edge()())
+        if op == 'recv':
+            return transition == op
         else:
-            return op[typ] in self.outgoing
+            return transition == op and typ == self.outgoing_type()
 
-    def get_edge(self, op, typ = None):
-        op = str_transition_map[op]
-        if typ is None:
-            if op[int] in self.outgoing :
-                 typ = int
-            elif op[str] in self.outgoing:
-                typ = str
-            elif op[bool] in self.outgoing:
-                typ = bool
 
-            return self.outgoing[op[typ]]
 
-        else:
-            return self.outgoing[op[typ]]
-
+    def next_nd(self):
+        assert len(self.outgoing) == 1, "Function should not be called if it's not a single outgoing edge"
+        return list(self.outgoing.values())[0]
+        
+    def get_edge(self):
+        assert len(self.outgoing) == 1, "Function should not be called if it's not a single outgoing edge"
+        return list(self.outgoing.keys())[0]
+        
     def outgoing_type(self) -> type:
         assert len(self.outgoing) == 1, "Function should not be called if it's not a single outgoing edge"
-        key = list(self.outgoing.keys())[0]
+        key = self.get_edge()
         typ = key.__args__[0]
         assert isinstance(typ, type)
         return typ
