@@ -1,11 +1,4 @@
-import inspect
-from textwrap import dedent
-
 from context import *
-
-
-def get_ast(f) -> ast.Module:
-    return ast.parse(dedent(inspect.getsource(f)))
 
 
 def get_func_return_type_in_latest_scope(tc, f) -> type:

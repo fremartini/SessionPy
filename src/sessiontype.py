@@ -32,4 +32,7 @@ class End(SessionType):
 class Loop(SessionType):
     ...
 
+class SessionException(TypeError):
+    ...
+
 ST_KEYWORDS = {'recv', 'send', 'offer', 'choose', 'Branch', 'loop'}

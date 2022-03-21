@@ -11,7 +11,7 @@ from environment import Environment
 from immutable_list import ImmutableList
 from lib import *
 from statemachine import STParser, Node, TLeft, TRight
-from sessiontype import ST_KEYWORDS
+from sessiontype import ST_KEYWORDS, SessionException
 
 
 class TypeChecker(NodeVisitor):
@@ -35,7 +35,7 @@ class TypeChecker(NodeVisitor):
                     failing_chans.append(err_msg)
         if failing_chans:
             msgs = '\n'.join(failing_chans)
-            raise TypeError(msgs)
+            raise SessionException(msgs)
 
     def visit_FunctionDef(self, node: FunctionDef) -> Typ:
         self.in_functions = self.in_functions.add(node)
@@ -217,18 +217,20 @@ class TypeChecker(NodeVisitor):
             args = self.get_function_args(node.args)
             op = call_func[1]
             ch_name = node.func.value.id
-
             match op:
                 case 'recv':
                     is_valid = nd.is_valid_transition(op)
-                    fail_if(not is_valid, f'unexpected session type {op}')
-                    edge = nd.get_edge(op, None)
-                    fail_if(not is_valid, edge)
-                    self.bind_var(ch_name, edge)
+                    fail_if(not is_valid, f'unexpected session type {op}', SessionException)
+                    next_nd = nd.next_nd()
+                    fail_if(not is_valid, next_nd)
+                    self.bind_var(ch_name, next_nd)
                     return nd.outgoing_type()
                 case 'send':
-                    fail_if(not nd.is_valid_transition(op, args.head()), f'unexpected session type {op} {args.head()}')
-                    self.bind_var(ch_name, nd.get_edge(op, args.head()))
+                    valid_transition = nd.is_valid_transition(op, args.head())
+                    if not valid_transition:
+                        raise SessionException(f'unexpected session type {op} {args.head()}')
+                    next_nd = nd.next_nd()
+                    self.bind_var(ch_name, next_nd)
                 case 'offer':
                     return nd
                 case 'choose':
@@ -310,15 +312,16 @@ class TypeChecker(NodeVisitor):
             env_else = self.pop()
             chans1 = env_else.get_kind(Node)
             for (ch1, nd1), (ch2, nd2) in zip(chans, chans1):
-                both_accepting = nd1.accepting and nd2.accepting
-                if ch1 == ch2 and (not both_accepting or (both_accepting and nd1.id == nd2.id)):
-                    raise Exception(f'after conditional block, channel <{ch1}> ended up in two different states')
+                # This is the scenario after and if-then-else block
+                valid = nd1.accepting and nd2.accepting or nd1.id == nd2.id
+                if ch1 == ch2 and not valid:
+                    raise SessionException(f'after conditional block, channel <{ch1}> ended up in two different states')
         elif chans:
             latest = self.get_latest_scope()
             for (ch,nd) in chans:
                 ch1 = latest.lookup_var(ch)
                 if nd.id != ch1.id:
-                    raise Exception('then-block without else should not affect any session types')
+                    raise SessionException('then-block without else should not affect any session types')
 
         for (ch,nd) in chans:
             self.bind_var(ch, nd)
