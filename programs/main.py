@@ -1,17 +1,14 @@
 from channel import Channel, Branch
 from sessiontype import *
 
-ch = Channel[Recv[int, Choose[   Send[str, End],   Choose[  Send[int, End],  Recv[int, End]]]]]()
-n = ch.recv()
+ch = Channel[Label["main", Recv[str, "main"]]]()
 
-if 10 > 5:
-    ch.choose(Branch.LEFT)
-    ch.send("number was greater than 5")
-else:
-    ch.choose(Branch.RIGHT)
-    if 1 + 3 > 4:
-        ch.choose(Branch.LEFT)
-        ch.send(1)
-    else:
-        ch.choose(Branch.RIGHT)
-        ch.recv()
+
+
+""""
+Module(body=[Expr(value=Subscript(value=Name(id='Channel', ctx=Load()),
+    slice=Tuple(elts=[Constant(value='main'), Subscript(value=Name(id='Send',
+        ctx=Load()), slice=Tuple(elts=[Name(id='int', ctx=Load()),
+            Constant(value='main')], ctx=Load()), ctx=Load())], ctx=Load()),
+        ctx=Load()))], type_ignores=[])"
+"""
