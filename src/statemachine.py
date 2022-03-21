@@ -113,7 +113,7 @@ class Node:
         return points_to
         
     def get_edge(self):
-        assert len(self.outgoing) == 1, "Function should not be called if it's not a single outgoing edge"
+        assert len(self.outgoing) > 0, "Function should at least contain a single edge"
         return list(self.outgoing.keys())[0]
 
     def outgoing_action(self) -> TSend | TRecv:
@@ -296,7 +296,7 @@ def print_node(n: Node):
 
 
 if __name__ == '__main__':
-    st = STParser('Label["infinity", Recv[str, "infinity"]]')
+    st = STParser('Channel[Send[int, Offer[  Send[str, Recv[str, End]],  Send[int, End]  ]]]')
     print(st.session_type)
     print_node(st.build())
     #st = STParser("Channel[Label['infinity', 'infinity']]()")
