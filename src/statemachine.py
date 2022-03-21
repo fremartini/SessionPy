@@ -1,6 +1,7 @@
 from ast import *
 from typing import TypeVar, Generic, Any
-from sessiontype import Send, Recv, Loop, Offer, Choose, End
+import typing
+from sessiontype import Send, Recv, Offer, Choose, End
 from pydoc import locate
 import copy
 from collections import deque
@@ -24,12 +25,12 @@ class TRecv(Generic[A]):
         return f'recv'
 
 
-class TLoop(Generic[A]):
+class TLabel(Generic[A]):
     def __repr__(self) -> str:
         return self.__str__()
 
     def __str__(self) -> str:
-        return f'loop'
+        return f'label'
 
 
 class TOffer(Generic[A]):
@@ -71,8 +72,17 @@ class TRight:
     def __repr__(self) -> str:
         return 'right'
 
+class TGoto:
+    def __init__(self, lab) -> None:
+        self.lab = lab
 
-Transition = TSend | TRecv | TChoose | TOffer | TLoop
+    def get_label(self):
+        return self.lab
+
+    def __repr__(self) -> str:
+        return f'goto {self.lab}'
+
+Transition = TSend | TRecv | TChoose | TOffer | TLabel
 
 str_transition_map = {
     "recv": TRecv,
@@ -130,6 +140,7 @@ class STParser(NodeVisitor):
 
     def __init__(self, src) -> None:
         self.slcs = deque()
+        self.labels = set()
         tree = parse(src)
         self.visit(tree)
         self.session_type = self.slcs[0], self.slcs[1]
@@ -146,26 +157,42 @@ class STParser(NodeVisitor):
                 return TOffer()
             case 'choose':
                 return TChoose()
-            case 'loop':
-                return TLoop()
+            case 'label':
+                return TLabel()
             case 'channel':
                 return None
             case x:
-                return locate(x)
+                return locate(x) or x
 
     def visit_Tuple(self, node: Tuple) -> Any:
         assert len(node.elts) == 2
         t1 = self.visit(node.elts[0])
+        if t1 == None:
+            t1 = node.elts[0].value
         t2 = self.visit(node.elts[1])
+        if t2 == None:
+            assert isinstance(node.elts[1], Constant)
+            lab_or_goto = node.elts[1].value
+            t2 = TGoto(lab_or_goto) if lab_or_goto in self.labels else lab_or_goto
         return t1, t2
 
     def visit_Subscript(self, node: Subscript) -> Any:
         value = self.visit(node.value)
         slice = self.visit(node.slice)
+        if isinstance(value, TLabel):
+            assert isinstance(slice[0], str)
+            self.labels.add(slice[0])
+        #if isinstance(slice[0], str) and slice[0] not in self.labels:
+        #    raise Exception()
         assert isinstance(slice, tuple)
         self.slcs.appendleft(slice[1])
         self.slcs.appendleft(slice[0])
         return value, slice
+
+    def visit_Constant(self, node: Constant) -> Any:
+        assert isinstance(node.value, str)
+        return self.visit(Name(node.value))
+
 
     def build(self):
         global ident
@@ -180,11 +207,19 @@ class STParser(NodeVisitor):
         root = new_node(next_id())
         ref = root
 
+        print(self.session_type)
+
         # (recv, (<class 'str'>, (offer, ((send, (<class 'bool'>, end)), (loop, (send, (<class 'int'>, end)))))))
+        st_env = {}
         def go(tup, node: Node):
             if isinstance(tup, STEnd):
                 node.accepting = True
                 return node, None
+            elif isinstance(tup, TGoto):
+                lab = tup.get_label()
+                assert lab in st_env, (lab, st_env)
+                node.outgoing[lab] = st_env[lab]
+                return st_env[lab]
             head, tail = tup[0], tup[1]
             head = head.__class__
             if head in [TRecv, TSend]:
@@ -198,19 +233,27 @@ class STParser(NodeVisitor):
             elif head in [TOffer, TChoose]:
                 st1, st2 = tail[0], tail[1]
                 l, r = new_node(next_id()), new_node(next_id())
-                n1, k1 = go(st1, l)
-                n2, k2 = go(st2, r)
+                go(st1, l)
+                go(st2, r)
                 tl, tr = TLeft, TRight
                 node.outgoing[tl] = l
                 node.outgoing[tr] = r
                 return l, r
-            elif head in [TLoop]:
-                _, key = go(tail, node)
-                node.outgoing[key] = node
+            elif head in [TLabel]:
+                lab = tail[0]
+                tl = tail[1]
+
+                self.labels.add(lab)
+
+                st_env[lab] = node
+                _, key = go(tl, node)
                 return node, key
             else:
-                assert head == STEnd, head
-                node.accepting = True
+                assert head == STEnd or head == str, head
+                if head == STEnd:
+                    node.accepting = True
+                else:
+                    return 
                 return node, None
 
         go(self.session_type, ref)
@@ -221,38 +264,40 @@ def print_node(n: Node):
     if not n.outgoing:
         return
     print(n)
+    seen = set()
     for key in n.outgoing:
         # TLeft() => left
         # TSend[int].__args__ => (int,)[0]
         # key() =>  
+        if key in seen:
+            return
+        if not isinstance(key, str):
+            seen.add(key())
+        else:
+            seen.add(key)
         if not key in [TLeft, TRight]:
-            typ = key.__args__[0]
-            print(key(), typ, '->', n.outgoing[key])
+            if isinstance(key, typing._GenericAlias):
+                typ = key.__args__[0]
+                print(key(), typ, '->', n.outgoing[key])
+            else:
+                assert isinstance(key, str)
+                print('goto', n.outgoing[key])
         else:
             print(key(), '->', n.outgoing[key])
             
    
     print()
     for key in n.outgoing:
+        if key in seen:
+            return
+        seen.add(key)
         n1 = n.outgoing[key]
         if n1.id != n.id:
             print_node(n1)
 
 
 if __name__ == '__main__':
-    send_int_recv_str_end = "Channel[Send[int, Recv[str, End]]]"
-    send_int_recv_bool_send_float_recv_str_end = "Channel[Send[int, Recv[bool, Send[float, Recv[str, End]]]]]"
-    send_int_recv_bool_offer___send_float_recv_str_end___recv_bool_end = "Channel[Send[int, Recv[bool, Offer[ Send[float, Recv[str, End]], Recv[bool, End]]]]]"
-    offer___send_int_end___recv_str_end = "Channel[Offer[Send[int, End], Recv[str, End]]]"
-    offer___offer___send_int_end___send_bool_end___recv_str_end = "Channel[Offer[ Offer[Send[int,End], Send[bool, End]], Recv[str, End]]]"
-    offer___offer___send_int_end___send_bool_end___offer_recv_bool_end___recv_str_end = "Channel[Offer[ Offer[Send[int,End], Send[bool, End]], Offer[Recv[bool, End], Recv[str, End]]]]"
-    # offer___loop_start_offer___send_int_end___send_bool_end_loop_end__recv_str_end = "Channel[Offer[ Loop[Offer[Send[int,End], Send[bool, End]]], Recv[str, End]]]"
+    st = STParser("Channel[ Label['first', Recv[int, Label['first', Offer[ 'hello', Recv[bool, 'first']]]]]]")
+    print(st.session_type)
+    print_node(st.build())
 
-    sts = [send_int_recv_str_end, send_int_recv_bool_send_float_recv_str_end, offer___send_int_end___recv_str_end,
-           send_int_recv_bool_offer___send_float_recv_str_end___recv_bool_end,
-           offer___offer___send_int_end___send_bool_end___recv_str_end,
-           offer___offer___send_int_end___send_bool_end___offer_recv_bool_end___recv_str_end]
-    for s in sts:
-        print(s)
-        sm: Node = STParser(s).build()
-        print_node(sm)

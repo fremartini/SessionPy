@@ -25,14 +25,23 @@ class Choose(SessionType, Generic[ST, ST1]):
     ...
 
 
+class Label(SessionType, Generic[A, ST]):
+    ...
+
+
 class End(SessionType):
     ...
 
 
-class Loop(SessionType):
-    ...
-
 class SessionException(TypeError):
     ...
 
-ST_KEYWORDS = {'recv', 'send', 'offer', 'choose', 'Branch', 'loop'}
+STR_ST_MAPPING = {
+    'recv': Recv,
+    'send': Send,
+    'offer': Offer,
+    'end': End,
+    'choose': Choose,
+    'label': Label,
+    'Branch': None,
+}

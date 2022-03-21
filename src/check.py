@@ -11,7 +11,7 @@ from environment import Environment
 from immutable_list import ImmutableList
 from lib import *
 from statemachine import STParser, Node, TLeft, TRight
-from sessiontype import ST_KEYWORDS, SessionException
+from sessiontype import STR_ST_MAPPING, STR_ST_MAPPING, SessionException
 
 
 class TypeChecker(NodeVisitor):
@@ -142,7 +142,14 @@ class TypeChecker(NodeVisitor):
     def visit_Tuple(self, node: Tuple) -> None:
         debug_print('visit_Tuple', dump(node))
         assert (node.elts)
-        elems = [self.visit(el) for el in node.elts]
+        elems = []
+        for el in node.elts: 
+            # TODO: Hardcoding away forward-refs for now
+            if isinstance(el, Name) and el.id.lower() in STR_ST_MAPPING:
+                typ = STR_ST_MAPPING[el.id.lower()]
+                elems.append(typ)
+            else:
+                elems.append(self.visit(el))
         res = pack_type(Tuple, elems)
         return res
 
@@ -159,7 +166,7 @@ class TypeChecker(NodeVisitor):
         debug_print('attribute', dump(node))
         value = self.visit(node.value)  # A
         attr = node.attr  # square
-        if value in ST_KEYWORDS or attr in ST_KEYWORDS:
+        if value in STR_ST_MAPPING or attr in STR_ST_MAPPING:
             return value, attr
         else:
             env = self.get_latest_scope().lookup_nested(value)
@@ -176,7 +183,7 @@ class TypeChecker(NodeVisitor):
             self.bind_var(target, graph)
         else:
             value = self.visit(node.value)
-
+            print('binding', target, 'to', value)
             self.bind_var(target, value)
 
     def visit_AnnAssign(self, node: AnnAssign) -> None:
@@ -283,8 +290,17 @@ class TypeChecker(NodeVisitor):
 
     def visit_Subscript(self, node: Subscript) -> Any:
         debug_print('visit_Subscript', dump(node))
+        print('visit_Subscript', dump(node))
         opt_typ = self.visit(node.slice)
-        return opt_typ
+        print('opt_typ', opt_typ)
+        st_typ = None
+        if isinstance(node.value, Name):
+            name = node.value.id.lower() 
+            if name in STR_ST_MAPPING:
+                st_typ = STR_ST_MAPPING[name]
+                print('ST_TYP', st_typ)
+        
+        return opt_typ if not st_typ else st_typ[opt_typ]
 
     def visit_Return(self, node: Return) -> Any:
         debug_print('visit_Return', dump(node))
