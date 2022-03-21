@@ -65,8 +65,8 @@ class TypeChecker(NodeVisitor):
     def visit_Compare(self, node: Compare) -> None:
         left = self.lookup_or_self(self.visit(node.left))
         right = self.lookup_or_self(self.visit(node.comparators[0]))
-
         fail_if_cannot_cast(left, right, f"{left} did not equal {right}")
+        return bool
 
     def visit_AugAssign(self, node: AugAssign) -> None:
         debug_print('visit_AugAssign', dump(node))
@@ -183,7 +183,6 @@ class TypeChecker(NodeVisitor):
             self.bind_var(target, graph)
         else:
             value = self.visit(node.value)
-            print('binding', target, 'to', value)
             self.bind_var(target, value)
 
     def visit_AnnAssign(self, node: AnnAssign) -> None:
@@ -226,16 +225,17 @@ class TypeChecker(NodeVisitor):
             ch_name = node.func.value.id
             match op:
                 case 'recv':
-                    is_valid = nd.is_valid_transition(op)
-                    fail_if(not is_valid, f'unexpected session type {op}', SessionException)
+                    valid_action, _ = nd.valid_action_type(op, None)
+                    fail_if(not valid_action, f'unexpected session type {op}', SessionException)
                     next_nd = nd.next_nd()
-                    fail_if(not is_valid, next_nd)
                     self.bind_var(ch_name, next_nd)
                     return nd.outgoing_type()
                 case 'send':
-                    valid_transition = nd.is_valid_transition(op, args.head())
-                    if not valid_transition:
-                        raise SessionException(f'unexpected session type {op} {args.head()}')
+                    valid_action, valid_typ = nd.valid_action_type(op, args.head())
+                    if not valid_action:
+                        raise SessionException(f'expected to send, but {nd.outgoing_action()} was called')
+                    elif not valid_typ:
+                        raise SessionException(f'expected to send a {nd.outgoing_type().__name__}, got {args.head().__name__}')
                     next_nd = nd.next_nd()
                     self.bind_var(ch_name, next_nd)
                 case 'offer':
@@ -290,15 +290,12 @@ class TypeChecker(NodeVisitor):
 
     def visit_Subscript(self, node: Subscript) -> Any:
         debug_print('visit_Subscript', dump(node))
-        print('visit_Subscript', dump(node))
         opt_typ = self.visit(node.slice)
-        print('opt_typ', opt_typ)
         st_typ = None
         if isinstance(node.value, Name):
             name = node.value.id.lower() 
             if name in STR_ST_MAPPING:
                 st_typ = STR_ST_MAPPING[name]
-                print('ST_TYP', st_typ)
         
         return opt_typ if not st_typ else st_typ[opt_typ]
 
