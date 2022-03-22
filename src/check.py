@@ -291,12 +291,7 @@ class TypeChecker(NodeVisitor):
             post_chans = [chs[1] for chs in post_chans]
             for post_chan in post_chans:
                 if post_chan.id not in self.loop_entrypoints:
-<<<<<<< HEAD
                     raise SessionException(f'loop error: needs to {post_chan.outgoing_action()()} {post_chan.outgoing_type()}')
-=======
-                    raise SessionException(f'loop error')
-                    #raise SessionException(f'loop error: needs to {post_chan.outgoing_action()()} {post_chan.outgoing_type()}')
->>>>>>> fde9a74f560df15f3c97f78a3f8bdf5d0d7800bb
 
 
     def visit_For(self, node: For) -> None:
