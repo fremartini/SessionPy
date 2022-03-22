@@ -1,6 +1,5 @@
 import ast
 import copy
-from math import exp
 import sys
 from ast import *
 from functools import reduce
@@ -132,6 +131,8 @@ class TypeChecker(NodeVisitor):
 
     def visit_Name(self, node: Name) -> Tuple[str, Typ] | Typ:
         debug_print('visit_Name', dump(node))
+        if node.id == 'DEBUG':
+            return self
         opt = locate(node.id)
         opt_lower = locate(node.id.lower())
         if not opt and opt_lower:
@@ -165,8 +166,12 @@ class TypeChecker(NodeVisitor):
 
     def visit_Attribute(self, node: Attribute) -> Typ:
         debug_print('attribute', dump(node))
-        value = self.visit(node.value)  # A
-        attr = node.attr  # square
+        value = self.visit(node.value)
+        attr = node.attr  
+        if value == self: # TODO: Debug hack from within source
+            invokable = getattr(self, attr)
+            invokable()
+            return
         if value in STR_ST_MAPPING or attr in STR_ST_MAPPING:
             return value, attr
         else:
@@ -178,7 +183,10 @@ class TypeChecker(NodeVisitor):
         debug_print('visit_Assign', dump(node))
         assert (len(node.targets) == 1)
 
+        print('visiting target')
         target = self.visit(node.targets[0])
+        print('back, got:', target, 'node.value:', node.value)
+
         if self.is_session_type(node.value):
             graph = STParser(node.value).build()
             self.bind_var(target, graph)
@@ -218,8 +226,9 @@ class TypeChecker(NodeVisitor):
         debug_print('visit_Call', dump(node))
         call_func = self.visit(node.func)
         
-        
+        print('here now, call!')
         if isinstance(call_func, tuple):
+            print('here, no, surely not?')
             nd = call_func[0]
             args = self.get_function_args(node.args)
             op = call_func[1]
@@ -259,7 +268,8 @@ class TypeChecker(NodeVisitor):
             provided_args = self.get_function_args(node.args)
             self.compare_function_arguments_and_parameters("your method", provided_args, call_func)
             return return_type
-
+        print(dump(node))
+        print('this is what I return:', call_func)
         return call_func
 
     def visit_ClassDef(self, node: ClassDef) -> None:
@@ -311,14 +321,23 @@ class TypeChecker(NodeVisitor):
 
     def visit_Subscript(self, node: Subscript) -> Any:
         debug_print('visit_Subscript', dump(node))
-        opt_typ = self.visit(node.slice)
-        st_typ = None
-        if isinstance(node.value, Name):
-            name = node.value.id.lower() 
-            if name in STR_ST_MAPPING:
-                st_typ = STR_ST_MAPPING[name]
-        
-        return opt_typ if not st_typ else st_typ[opt_typ]
+        print(dump(node))
+        name = node.value.id.lower()
+        if name in STR_ST_MAPPING:
+            print('name', name)
+            if name != 'channel': # we're doing an alias/helper Sessiontype
+                return ast.unparse(node) 
+            else:
+                assert False
+                alias_opts = self.get_latest_scope().get_kind(str)
+                channel_str = ast.unparse(node)
+                for key, val in alias_opts:
+                    assert key in channel_str
+                    channel_str.replace(key, val)
+                print('alias_opts:', alias_opts)
+                nd = STParser(sub=node, env=self.get_latest_scope())
+                print('nd', nd.session_tuple)
+                return 'foobar'
 
     def visit_Return(self, node: Return) -> Any:
         debug_print('visit_Return', dump(node))
@@ -329,8 +348,6 @@ class TypeChecker(NodeVisitor):
 
     def visit_If(self, node: If) -> None:
         debug_print('visit_If', dump(node))
-
-        env = self.get_latest_scope()
 
         self.visit(node.test)
         self.dup()
