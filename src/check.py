@@ -10,7 +10,7 @@ from debug import *
 from environment import Environment
 from immutable_list import ImmutableList
 from lib import *
-from statemachine import STParser, Node, TLeft, TRight
+from statemachine import STParser, Node, TLeft, TRight, TGoto
 from sessiontype import STR_ST_MAPPING, STR_ST_MAPPING, SessionException
 
 
@@ -244,7 +244,12 @@ class TypeChecker(NodeVisitor):
                     return nd
                 case 'choose':
                     new_nd = nd.outgoing[TLeft if args.head()[1] == 'LEFT' else TRight]
+                    assert new_nd, new_nd
+                    # FIXME: sanitise goto-skips
+                    if new_nd.outgoing and isinstance(new_nd.get_edge(), TGoto):
+                        new_nd = new_nd.next_nd()
                     self.bind_var(ch_name, new_nd)
+                    return nd
                     
         elif isinstance(call_func, FunctionTyp):
             signature = ImmutableList.of_list(call_func)
@@ -268,7 +273,26 @@ class TypeChecker(NodeVisitor):
         env = self.pop()
 
         self.get_latest_scope().bind_nested(node.name, env)
+    """
+    s0
+    send <class 'int'> -> s1
 
+    s1
+    left -> s2
+    right -> s3
+
+    s2
+    goto s0
+
+    s3
+    send <class 'bool'> -> s4
+
+    s4
+    recv <class 'bool'> -> s5
+
+    s5
+    goto s1
+    """
     def visit_While(self, node: While) -> None:
         debug_print('visit_While', dump(node))
         self.visit(node.test)
@@ -283,9 +307,10 @@ class TypeChecker(NodeVisitor):
         post_chans = self.get_latest_scope().get_kind(Node)
         if pre_chans and post_chans:
             post_chans = [chs[1] for chs in post_chans]
-            for (ch1, ch2) in zip(pre_chans, post_chans):
-                if not (ch1.id in self.loop_entrypoints and ch2.id in self.loop_entrypoints):
-                    raise SessionException(f'loop error: needs to {ch2.outgoing_action()()} {ch2.outgoing_type()}')
+            for post_chan in post_chans:
+                if post_chan.id not in self.loop_entrypoints:
+                    raise SessionException(f'loop error')
+                    #raise SessionException(f'loop error: needs to {post_chan.outgoing_action()()} {post_chan.outgoing_type()}')
 
 
     def visit_For(self, node: For) -> None:

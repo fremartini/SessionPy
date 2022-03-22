@@ -54,5 +54,18 @@ class TestRecAndLab(unittest.TestCase):
                     ch.recv()
         TypeChecker(get_ast(ok))
 
+    def test_nested_while_choose(self):
+        def ok():
+            ch = Channel[Label['main', Send[int, Label['inner', Choose [ 'main',  Recv[bool, Send[str, 'inner'] ]]]]]]()
+            ch.send(42)
+            while 2+2 == 4:
+                while 2 < 3:
+                    ch.choose(Branch.RIGHT)
+                    b = ch.recv()
+                    ch.send('hi')
+                ch.choose(Branch.LEFT)
+                ch.send(100)
+        TypeChecker(get_ast(ok))
+
 if __name__ == '__main__':
     unittest.main()
