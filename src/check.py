@@ -273,26 +273,8 @@ class TypeChecker(NodeVisitor):
         env = self.pop()
 
         self.get_latest_scope().bind_nested(node.name, env)
-    """
-    s0
-    send <class 'int'> -> s1
 
-    s1
-    left -> s2
-    right -> s3
 
-    s2
-    goto s0
-
-    s3
-    send <class 'bool'> -> s4
-
-    s4
-    recv <class 'bool'> -> s5
-
-    s5
-    goto s1
-    """
     def visit_While(self, node: While) -> None:
         debug_print('visit_While', dump(node))
         self.visit(node.test)
@@ -309,8 +291,7 @@ class TypeChecker(NodeVisitor):
             post_chans = [chs[1] for chs in post_chans]
             for post_chan in post_chans:
                 if post_chan.id not in self.loop_entrypoints:
-                    raise SessionException(f'loop error')
-                    #raise SessionException(f'loop error: needs to {post_chan.outgoing_action()()} {post_chan.outgoing_type()}')
+                    raise SessionException(f'loop error: needs to {post_chan.outgoing_action()()} {post_chan.outgoing_type()}')
 
 
     def visit_For(self, node: For) -> None:

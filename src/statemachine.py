@@ -218,7 +218,6 @@ class STParser(NodeVisitor):
                     node.outgoing[goto_trans] = labels[lab]
                 else:
                     forwarded_labs[lab] = node
-                    #raise SessionException(f'label {lab} not defined here')
             head, tail = tup[0], tup[1]
             head = head.__class__
             if head in [TRecv, TSend]:
