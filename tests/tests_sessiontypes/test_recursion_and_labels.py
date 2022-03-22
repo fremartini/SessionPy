@@ -67,5 +67,18 @@ class TestRecAndLab(unittest.TestCase):
                 ch.send(100)
         TypeChecker(get_ast(ok))
 
+    def test_loop_last_action_identitcal_with_next(self):
+        def ok():
+            ch = Channel[ Send[int, Label['looping', Choose [  Send[str, Recv[bool, Send[str, 'looping']]] ,   Send[str, End]]]]]()
+            ch.send(42)
+            while True:
+                ch.choose(Branch.LEFT)
+                ch.send('hello')
+                boolean = ch.recv()
+                ch.send('world')
+            ch.choose(Branch.RIGHT)
+            ch.send('last str outside loop')
+        TypeChecker(get_ast(ok))
+
 if __name__ == '__main__':
     unittest.main()
