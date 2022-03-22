@@ -20,6 +20,7 @@ class TypeChecker(NodeVisitor):
         self.inside_class = inside_class
         self.environments: ImmutableList[Environment] = ImmutableList().add(Environment())
         self.in_functions: ImmutableList[FunctionDef] = ImmutableList()
+        self.loop_entrypoints = set() # TODO: consider putting into environment
         self.visit(tree)
         self.validate_postcondition()
 
@@ -28,8 +29,8 @@ class TypeChecker(NodeVisitor):
         failing_chans = []
         for (k,v) in latest.get_vars():
             if isinstance(v, Node):
-                if not v.accepting:
-                    err_msg = f'\nchannel [{k}] not exhausted - next up is:'
+                if not v.accepting and v.id not in self.loop_entrypoints:
+                    err_msg = f'\nchannel <{k}> not exhausted - next up is:'
                     for edge in v.outgoing.keys():
                         err_msg += f'\n- {str(edge)}'
                     failing_chans.append(err_msg)
@@ -226,14 +227,15 @@ class TypeChecker(NodeVisitor):
             match op:
                 case 'recv':
                     valid_action, _ = nd.valid_action_type(op, None)
-                    fail_if(not valid_action, f'unexpected session type {op}', SessionException)
+                    if not valid_action:
+                        raise SessionException(f'expected a {nd.outgoing_action()()}, but recv was called')
                     next_nd = nd.next_nd()
                     self.bind_var(ch_name, next_nd)
                     return nd.outgoing_type()
                 case 'send':
                     valid_action, valid_typ = nd.valid_action_type(op, args.head())
                     if not valid_action:
-                        raise SessionException(f'expected to send, but {nd.outgoing_action()} was called')
+                        raise SessionException(f'expected a {nd.outgoing_action()()}, but send was called')
                     elif not valid_typ:
                         raise SessionException(f'expected to send a {nd.outgoing_type().__name__}, got {args.head().__name__}')
                     next_nd = nd.next_nd()
@@ -270,8 +272,21 @@ class TypeChecker(NodeVisitor):
     def visit_While(self, node: While) -> None:
         debug_print('visit_While', dump(node))
         self.visit(node.test)
+        pre_chans = self.get_latest_scope().get_kind(Node)
+        if pre_chans:
+            nds = [chs[1] for chs in pre_chans]
+            for nd in nds:
+                self.loop_entrypoints.add(nd.id) 
+            pre_chans = [chs[1] for chs in pre_chans]
         for stm in node.body:
             self.visit(stm)
+        post_chans = self.get_latest_scope().get_kind(Node)
+        if pre_chans and post_chans:
+            post_chans = [chs[1] for chs in post_chans]
+            for (ch1, ch2) in zip(pre_chans, post_chans):
+                if ch1.id != ch2.id:
+                    raise SessionException(f'loop error: needs to {ch2.outgoing_action()()} {ch2.outgoing_type()}')
+
 
     def visit_For(self, node: For) -> None:
         debug_print('visit_For', dump(node))
