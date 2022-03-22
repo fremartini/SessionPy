@@ -1,12 +1,13 @@
 from channel import Channel, Branch
 from sessiontype import *
 
-ch = Channel[Offer[  Send[int, 'jump'],  Recv[str, Label['jump', Recv[bool, End]]]   ]]()
-match ch.offer():
-    case Branch.LEFT:
-        ch.send(42)
+ch = Channel[Label['main', Send[int, Label['switch', Choose [ 'main',  Send[bool, Recv[bool, 'switch']]]]  ]]]()
+
+while True:
+    ch.send(42)
+    while True:
+        ch.choose(Branch.RIGHT)
+        ch.send(True)
         b = ch.recv()
-        assert b == bool
-    case Branch.RIGHT:
-        s = ch.recv()
-        b = ch.recv()
+    ch.choose(Branch.LEFT)
+

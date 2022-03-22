@@ -277,14 +277,14 @@ class TypeChecker(NodeVisitor):
             nds = [chs[1] for chs in pre_chans]
             for nd in nds:
                 self.loop_entrypoints.add(nd.id) 
-            pre_chans = [chs[1] for chs in pre_chans]
+            pre_chans = nds
         for stm in node.body:
             self.visit(stm)
         post_chans = self.get_latest_scope().get_kind(Node)
         if pre_chans and post_chans:
             post_chans = [chs[1] for chs in post_chans]
             for (ch1, ch2) in zip(pre_chans, post_chans):
-                if ch1.id != ch2.id:
+                if not (ch1.id in self.loop_entrypoints and ch2.id in self.loop_entrypoints):
                     raise SessionException(f'loop error: needs to {ch2.outgoing_action()()} {ch2.outgoing_type()}')
 
 
