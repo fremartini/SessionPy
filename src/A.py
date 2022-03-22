@@ -2,6 +2,8 @@ if __name__ == '__main__':
     from channel import *
     from sessiontype import *
 
-    ch = Channel[Send[int, End]](('localhost', 5000), ('localhost', 5001))
+    ch = Channel[Send[int, End]](('localhost', 5006), ('localhost', 5011))
 
-    ch.send(13)
+    a = ch.recv()
+    print('received ', a)
+    ch.send("there")
