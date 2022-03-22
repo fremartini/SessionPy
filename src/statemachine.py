@@ -296,7 +296,7 @@ def print_node(n: Node):
 
 
 if __name__ == '__main__':
-    st = STParser('Channel[Send[int, Offer[  Send[str, Recv[str, End]],  Send[int, End]  ]]]')
+    st = STParser("Channel[Label['main', Send[int, Label['switch', Choose [ 'main',  Send[bool, Recv[bool, 'switch']]]]  ]]]()")
     print(st.session_type)
     print_node(st.build())
     #st = STParser("Channel[Label['infinity', 'infinity']]()")

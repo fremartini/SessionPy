@@ -1,13 +1,16 @@
 from channel import Channel, Branch
 from sessiontype import *
 
-ch = Channel[Label['main', Send[int, Label['switch', Choose [ 'main',  Send[bool, Recv[bool, 'switch']]]]  ]]]()
+ch = Channel[Label['main', Send[int, Label['inner', Choose [ 'main',  Recv[bool, Send[str, 'inner'] ]]]]]]()
 
+ch.send(42)
 while True:
-    ch.send(42)
     while True:
         ch.choose(Branch.RIGHT)
-        ch.send(True)
         b = ch.recv()
+        ch.send('hi')
     ch.choose(Branch.LEFT)
+    ch.send(100)
+
+        
 
