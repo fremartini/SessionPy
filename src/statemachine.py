@@ -1,9 +1,11 @@
 from ast import *
 from typing import TypeVar, Generic, Any
-from sessiontype import Send, Recv, Loop, Offer, Choose, End
+import typing
+from sessiontype import Send, Recv, Offer, Choose, End, SessionException
 from pydoc import locate
 import copy
 from collections import deque
+from lib import debug_print
 
 A = TypeVar('A')
 
@@ -24,12 +26,12 @@ class TRecv(Generic[A]):
         return f'recv'
 
 
-class TLoop(Generic[A]):
+class TLabel(Generic[A]):
     def __repr__(self) -> str:
         return self.__str__()
 
     def __str__(self) -> str:
-        return f'loop'
+        return f'label'
 
 
 class TOffer(Generic[A]):
@@ -71,8 +73,17 @@ class TRight:
     def __repr__(self) -> str:
         return 'right'
 
+class TGoto:
+    def __init__(self, lab) -> None:
+        self.lab = lab
 
-Transition = TSend | TRecv | TChoose | TOffer | TLoop
+    def get_label(self):
+        return self.lab
+
+    def __repr__(self) -> str:
+        return f'goto {self.lab}'
+
+Transition = TSend | TRecv | TChoose | TOffer | TLabel
 
 str_transition_map = {
     "recv": TRecv,
@@ -92,29 +103,36 @@ class Node:
         state = f'(s{self.id})' if self.accepting else f's{self.id}'
         return state
 
-    def is_valid_transition(self, op : str, typ: type = None) -> bool:
-        transition = str(self.get_edge()())
-        if op == 'recv':
-            return transition == op
-        else:
-            return transition == op and typ == self.outgoing_type()
-
-
 
     def next_nd(self):
         assert len(self.outgoing) == 1, "Function should not be called if it's not a single outgoing edge"
-        return list(self.outgoing.values())[0]
+        points_to = list(self.outgoing.values())[0]
+        if points_to.outgoing and isinstance(points_to.get_edge(), TGoto):
+            points_to = points_to.next_nd()
+            assert not isinstance(points_to.get_edge(), TGoto), "Wow now, are you trying to break something?"
+        return points_to
         
     def get_edge(self):
-        assert len(self.outgoing) == 1, "Function should not be called if it's not a single outgoing edge"
+        assert len(self.outgoing) > 0, "Function should at least contain a single edge"
         return list(self.outgoing.keys())[0]
-        
+
+    def outgoing_action(self) -> TSend | TRecv:
+        assert len(self.outgoing) == 1, "Function should not be called if it's not a single outgoing edge"
+        key = self.get_edge()
+        return key.__origin__ 
+
     def outgoing_type(self) -> type:
         assert len(self.outgoing) == 1, "Function should not be called if it's not a single outgoing edge"
         key = self.get_edge()
         typ = key.__args__[0]
         assert isinstance(typ, type)
         return typ
+
+    def valid_action_type(self, action: str, typ: type=Any):
+        assert action in str_transition_map, action
+        action = str_transition_map[action]
+        return (action == self.outgoing_action(), typ == self.outgoing_type() or typ == None)
+
 
 
 def new_node(*args) -> Node:
@@ -146,12 +164,12 @@ class STParser(NodeVisitor):
                 return TOffer()
             case 'choose':
                 return TChoose()
-            case 'loop':
-                return TLoop()
+            case 'label':
+                return TLabel()
             case 'channel':
                 return None
             case x:
-                return locate(x)
+                return locate(x) or x
 
     def visit_Tuple(self, node: Tuple) -> Any:
         assert len(node.elts) == 2
@@ -167,6 +185,11 @@ class STParser(NodeVisitor):
         self.slcs.appendleft(slice[0])
         return value, slice
 
+    def visit_Constant(self, node: Constant) -> Any:
+        assert isinstance(node.value, str)
+        return self.visit(Name(node.value))
+
+
     def build(self):
         global ident
         ident = 0
@@ -180,11 +203,21 @@ class STParser(NodeVisitor):
         root = new_node(next_id())
         ref = root
 
+
         # (recv, (<class 'str'>, (offer, ((send, (<class 'bool'>, end)), (loop, (send, (<class 'int'>, end)))))))
+        labels = {}
+        forwarded_labs = {}
         def go(tup, node: Node):
             if isinstance(tup, STEnd):
                 node.accepting = True
                 return node, None
+            elif isinstance(tup, str):
+                lab = tup
+                if lab in labels:
+                    goto_trans = TGoto(lab)
+                    node.outgoing[goto_trans] = labels[lab]
+                else:
+                    forwarded_labs[lab] = node
             head, tail = tup[0], tup[1]
             head = head.__class__
             if head in [TRecv, TSend]:
@@ -198,19 +231,32 @@ class STParser(NodeVisitor):
             elif head in [TOffer, TChoose]:
                 st1, st2 = tail[0], tail[1]
                 l, r = new_node(next_id()), new_node(next_id())
-                n1, k1 = go(st1, l)
-                n2, k2 = go(st2, r)
+                go(st1, l)
+                go(st2, r)
                 tl, tr = TLeft, TRight
                 node.outgoing[tl] = l
                 node.outgoing[tr] = r
                 return l, r
-            elif head in [TLoop]:
-                _, key = go(tail, node)
-                node.outgoing[key] = node
-                return node, key
+            elif head in [TLabel]:
+                lab = tail[0]
+                tl = tail[1]
+                labels[lab] = node
+                if lab in forwarded_labs:
+                    forwarded_labs[lab].outgoing[TGoto(lab)] = node
+                if isinstance(tl, str):
+                    assert tl in labels, tl
+                    goto_trans = TGoto(tl)
+                    node.outgoing[goto_trans] = labels[tl]
+                    #return labels[tl]
+                else:
+                    _, key = go(tl, node)
+                    return node, key
             else:
-                assert head == STEnd, head
-                node.accepting = True
+                assert head == STEnd or head == str, head
+                if head == STEnd:
+                    node.accepting = True
+                else:
+                    return 
                 return node, None
 
         go(self.session_type, ref)
@@ -221,38 +267,37 @@ def print_node(n: Node):
     if not n.outgoing:
         return
     print(n)
+    seen = set()
     for key in n.outgoing:
-        # TLeft() => left
-        # TSend[int].__args__ => (int,)[0]
-        # key() =>  
-        if not key in [TLeft, TRight]:
+        if key in seen:
+            return
+        s = ''
+        if isinstance(key, typing._GenericAlias):
             typ = key.__args__[0]
-            print(key(), typ, '->', n.outgoing[key])
+            s += f'{key()} {typ} -> {n.outgoing[key]}'
+        elif key in [TLeft, TRight]: 
+            s += f'{key()} -> {n.outgoing[key]}'
         else:
-            print(key(), '->', n.outgoing[key])
-            
-   
-    print()
+            assert isinstance(key, TGoto), key
+            seen.add(key.get_label())
+            s += f'goto {n.outgoing[key]}'
+        print(s)
+    
     for key in n.outgoing:
+        print() 
+        key = key.get_label() if isinstance(key, TGoto) else key
+        if key in seen:
+            return
+        seen.add(key)
         n1 = n.outgoing[key]
         if n1.id != n.id:
             print_node(n1)
 
 
 if __name__ == '__main__':
-    send_int_recv_str_end = "Channel[Send[int, Recv[str, End]]]"
-    send_int_recv_bool_send_float_recv_str_end = "Channel[Send[int, Recv[bool, Send[float, Recv[str, End]]]]]"
-    send_int_recv_bool_offer___send_float_recv_str_end___recv_bool_end = "Channel[Send[int, Recv[bool, Offer[ Send[float, Recv[str, End]], Recv[bool, End]]]]]"
-    offer___send_int_end___recv_str_end = "Channel[Offer[Send[int, End], Recv[str, End]]]"
-    offer___offer___send_int_end___send_bool_end___recv_str_end = "Channel[Offer[ Offer[Send[int,End], Send[bool, End]], Recv[str, End]]]"
-    offer___offer___send_int_end___send_bool_end___offer_recv_bool_end___recv_str_end = "Channel[Offer[ Offer[Send[int,End], Send[bool, End]], Offer[Recv[bool, End], Recv[str, End]]]]"
-    # offer___loop_start_offer___send_int_end___send_bool_end_loop_end__recv_str_end = "Channel[Offer[ Loop[Offer[Send[int,End], Send[bool, End]]], Recv[str, End]]]"
+    st = STParser("Channel[Label['main', Send[int, Label['switch', Choose [ 'main',  Send[bool, Recv[bool, 'switch']]]]  ]]]()")
+    print(st.session_type)
+    print_node(st.build())
+    #st = STParser("Channel[Label['infinity', 'infinity']]()")
+    #print_node(st.build())
 
-    sts = [send_int_recv_str_end, send_int_recv_bool_send_float_recv_str_end, offer___send_int_end___recv_str_end,
-           send_int_recv_bool_offer___send_float_recv_str_end___recv_bool_end,
-           offer___offer___send_int_end___send_bool_end___recv_str_end,
-           offer___offer___send_int_end___send_bool_end___offer_recv_bool_end___recv_str_end]
-    for s in sts:
-        print(s)
-        sm: Node = STParser(s).build()
-        print_node(sm)

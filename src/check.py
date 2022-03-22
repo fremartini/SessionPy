@@ -10,8 +10,8 @@ from debug import *
 from environment import Environment
 from immutable_list import ImmutableList
 from lib import *
-from statemachine import STParser, Node, TLeft, TRight
-from sessiontype import ST_KEYWORDS, SessionException
+from statemachine import STParser, Node, TLeft, TRight, TGoto
+from sessiontype import STR_ST_MAPPING, STR_ST_MAPPING, SessionException
 
 
 class TypeChecker(NodeVisitor):
@@ -20,6 +20,7 @@ class TypeChecker(NodeVisitor):
         self.inside_class = inside_class
         self.environments: ImmutableList[Environment] = ImmutableList().add(Environment())
         self.in_functions: ImmutableList[FunctionDef] = ImmutableList()
+        self.loop_entrypoints = set() # TODO: consider putting into environment
         self.visit(tree)
         self.validate_postcondition()
 
@@ -28,8 +29,8 @@ class TypeChecker(NodeVisitor):
         failing_chans = []
         for (k,v) in latest.get_vars():
             if isinstance(v, Node):
-                if not v.accepting:
-                    err_msg = f'\nchannel [{k}] not exhausted - next up is:'
+                if not v.accepting and v.id not in self.loop_entrypoints:
+                    err_msg = f'\nchannel <{k}> not exhausted - next up is:'
                     for edge in v.outgoing.keys():
                         err_msg += f'\n- {str(edge)}'
                     failing_chans.append(err_msg)
@@ -65,8 +66,8 @@ class TypeChecker(NodeVisitor):
     def visit_Compare(self, node: Compare) -> None:
         left = self.lookup_or_self(self.visit(node.left))
         right = self.lookup_or_self(self.visit(node.comparators[0]))
-
         fail_if_cannot_cast(left, right, f"{left} did not equal {right}")
+        return bool
 
     def visit_AugAssign(self, node: AugAssign) -> None:
         debug_print('visit_AugAssign', dump(node))
@@ -142,7 +143,14 @@ class TypeChecker(NodeVisitor):
     def visit_Tuple(self, node: Tuple) -> None:
         debug_print('visit_Tuple', dump(node))
         assert (node.elts)
-        elems = [self.visit(el) for el in node.elts]
+        elems = []
+        for el in node.elts: 
+            # TODO: Hardcoding away forward-refs for now
+            if isinstance(el, Name) and el.id.lower() in STR_ST_MAPPING:
+                typ = STR_ST_MAPPING[el.id.lower()]
+                elems.append(typ)
+            else:
+                elems.append(self.visit(el))
         res = pack_type(Tuple, elems)
         return res
 
@@ -159,7 +167,7 @@ class TypeChecker(NodeVisitor):
         debug_print('attribute', dump(node))
         value = self.visit(node.value)  # A
         attr = node.attr  # square
-        if value in ST_KEYWORDS or attr in ST_KEYWORDS:
+        if value in STR_ST_MAPPING or attr in STR_ST_MAPPING:
             return value, attr
         else:
             env = self.get_latest_scope().lookup_nested(value)
@@ -176,7 +184,6 @@ class TypeChecker(NodeVisitor):
             self.bind_var(target, graph)
         else:
             value = self.visit(node.value)
-
             self.bind_var(target, value)
 
     def visit_AnnAssign(self, node: AnnAssign) -> None:
@@ -219,23 +226,30 @@ class TypeChecker(NodeVisitor):
             ch_name = node.func.value.id
             match op:
                 case 'recv':
-                    is_valid = nd.is_valid_transition(op)
-                    fail_if(not is_valid, f'unexpected session type {op}', SessionException)
+                    valid_action, _ = nd.valid_action_type(op, None)
+                    if not valid_action:
+                        raise SessionException(f'expected a {nd.outgoing_action()()}, but recv was called')
                     next_nd = nd.next_nd()
-                    fail_if(not is_valid, next_nd)
                     self.bind_var(ch_name, next_nd)
                     return nd.outgoing_type()
                 case 'send':
-                    valid_transition = nd.is_valid_transition(op, args.head())
-                    if not valid_transition:
-                        raise SessionException(f'unexpected session type {op} {args.head()}')
+                    valid_action, valid_typ = nd.valid_action_type(op, args.head())
+                    if not valid_action:
+                        raise SessionException(f'expected a {nd.outgoing_action()()}, but send was called')
+                    elif not valid_typ:
+                        raise SessionException(f'expected to send a {nd.outgoing_type().__name__}, got {args.head().__name__}')
                     next_nd = nd.next_nd()
                     self.bind_var(ch_name, next_nd)
                 case 'offer':
                     return nd
                 case 'choose':
                     new_nd = nd.outgoing[TLeft if args.head()[1] == 'LEFT' else TRight]
+                    assert new_nd, new_nd
+                    # FIXME: sanitise goto-skips
+                    if new_nd.outgoing and isinstance(new_nd.get_edge(), TGoto):
+                        new_nd = new_nd.next_nd()
                     self.bind_var(ch_name, new_nd)
+                    return nd
                     
         elif isinstance(call_func, FunctionTyp):
             signature = ImmutableList.of_list(call_func)
@@ -260,11 +274,25 @@ class TypeChecker(NodeVisitor):
 
         self.get_latest_scope().bind_nested(node.name, env)
 
+
     def visit_While(self, node: While) -> None:
         debug_print('visit_While', dump(node))
         self.visit(node.test)
+        pre_chans = self.get_latest_scope().get_kind(Node)
+        if pre_chans:
+            nds = [chs[1] for chs in pre_chans]
+            for nd in nds:
+                self.loop_entrypoints.add(nd.id) 
+            pre_chans = nds
         for stm in node.body:
             self.visit(stm)
+        post_chans = self.get_latest_scope().get_kind(Node)
+        if pre_chans and post_chans:
+            post_chans = [chs[1] for chs in post_chans]
+            for post_chan in post_chans:
+                if post_chan.id not in self.loop_entrypoints:
+                    raise SessionException(f'loop error: needs to {post_chan.outgoing_action()()} {post_chan.outgoing_type()}')
+
 
     def visit_For(self, node: For) -> None:
         debug_print('visit_For', dump(node))
@@ -284,7 +312,13 @@ class TypeChecker(NodeVisitor):
     def visit_Subscript(self, node: Subscript) -> Any:
         debug_print('visit_Subscript', dump(node))
         opt_typ = self.visit(node.slice)
-        return opt_typ
+        st_typ = None
+        if isinstance(node.value, Name):
+            name = node.value.id.lower() 
+            if name in STR_ST_MAPPING:
+                st_typ = STR_ST_MAPPING[name]
+        
+        return opt_typ if not st_typ else st_typ[opt_typ]
 
     def visit_Return(self, node: Return) -> Any:
         debug_print('visit_Return', dump(node))

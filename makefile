@@ -11,6 +11,7 @@ test:
 	python3.10 $(helper_tests)/immutable_list_tests.py
 	python3.10 $(helper_tests)/immutable_map_tests.py
 	python3.10 $(session_type_tests)/channel_tests.py
+	python3.10 $(session_type_tests)/test_recursion_and_labels.py
 
 #usage: make check file=test.py
 check:
