@@ -49,9 +49,6 @@ def fail_if_cannot_cast(a: type, b: type, err: str) -> None:
 
 
 def union(t1: Typ, t2: Typ) -> Typ:
-    print('union called with')
-    print('t1', t1)
-    print('t2', t2)
     """
         Unionises two types based on their hierachical structure/class relation.
         
@@ -82,7 +79,7 @@ def union(t1: Typ, t2: Typ) -> Typ:
             raise TypeError("cannot union different typing constructs")
 
         if t1._name in ['Tuple', 'Dict']:
-            res = pack_type(Tuple if t1._name == 'Tuple' else Dict,
+            res = parameterise(Tuple if t1._name == 'Tuple' else Dict,
                             [union(t1, t2) for t1, t2 in zip(t1.__args__, t2.__args__)])
             return res
         elif t1._name == 'List':
@@ -122,19 +119,22 @@ def to_typing(typ: type):
         raise Exception(f'to_typing: unsupported built-in type: {typ}')
 
 
-def pack_type(container: Typ, types: List[Typ]):
-    debug_print('pack_type', container, types)
-    match len(types):
-        case 1:
-            return container[types[0]]
-        case 2:
-            return container[types[0], types[1]]
-        case 3:
-            return container[types[0], types[1], types[2]]
-        case 4:
-            return container[types[0], types[1], types[2], types[3]]
-        case _:
-            raise Exception(f"pack_type: supporting up to four types now; {container}[{types}] needs support")
+def parameterise(container: Typ, typ: List[Typ]):
+    debug_print('parameterise', container, typ)
+    if isinstance(typ, type):
+        return container[typ]
+    else:
+        match len(typ):
+            case 1:
+                return container[typ[0]]
+            case 2:
+                return container[typ[0], typ[1]]
+            case 3:
+                return container[typ[0], typ[1], typ[2]]
+            case 4:
+                return container[typ[0], typ[1], typ[2], typ[3]]
+            case _:
+                raise Exception(f"parameterise: supporting up to four types now; {container}[{typ}] needs support")
 
 
 def get_dir(path: str):

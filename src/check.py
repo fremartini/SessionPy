@@ -10,7 +10,7 @@ from environment import Environment
 from immutable_list import ImmutableList
 from lib import *
 from statemachine import STParser, Node, TLeft, TRight, TGoto
-from sessiontype import STR_ST_MAPPING, STR_ST_MAPPING, SessionException
+from sessiontype import A, STR_ST_MAPPING, SessionException
 
 
 class TypeChecker(NodeVisitor):
@@ -149,8 +149,7 @@ class TypeChecker(NodeVisitor):
                 elems.append(typ)
             else:
                 elems.append(self.visit(el))
-        res = pack_type(Tuple, elems)
-        return res
+        return elems 
 
     def visit_List(self, node: List) -> None:
         debug_print('visit_List', dump(node))
@@ -186,6 +185,8 @@ class TypeChecker(NodeVisitor):
             self.bind_session_type(node, target)
         else:
             value = self.visit(node.value)
+            if isinstance(node.value, ast.Tuple):
+                value = parameterise(Tuple, value)
             self.bind_var(target, value)
 
     def visit_AnnAssign(self, node: AnnAssign) -> None:
@@ -194,9 +195,10 @@ class TypeChecker(NodeVisitor):
         if self.is_session_type(node.value):
             self.bind_session_type(node, target)
         else:
-            print(dump(node))
             name_or_type = self.visit(node.annotation)
             rhs_type = self.visit(node.value)
+            if isinstance(name_or_type, typing._GenericAlias) and name_or_type.__origin__ == tuple:
+                rhs_type = parameterise(Tuple, rhs_type)
             
             if is_type(name_or_type):
                 self.bind_var(target, union(rhs_type, name_or_type))
@@ -234,7 +236,10 @@ class TypeChecker(NodeVisitor):
                     self.bind_var(ch_name, next_nd)
                     return nd.outgoing_type()
                 case 'send':
-                    print('args', args)
+                    if isinstance(args.head(), list): # TODO(Johan): Feels hacky; Tuple always returns lists now, but this only *sometimes* have to get parameterised. How to solve?
+                        items = args.items()
+                        items[0] = parameterise(Tuple, items[0])
+                        args = ImmutableList.of_list(items)
                     valid_action, valid_typ = nd.valid_action_type(op, args.head())
                     if not valid_action:
                         raise SessionException(f'expected a {nd.outgoing_action()()}, but send was called')
@@ -291,7 +296,6 @@ class TypeChecker(NodeVisitor):
 
     def visit_Dict(self, node: Dict) -> Dict[Typ, Typ]:
         debug_print('visit_Dict', dump(node))
-        print('visit_Dict', dump(node))
         key_typ = reduce(union, ((self.visit(k)) for k in node.keys)) if node.keys else Any
         val_typ = reduce(union, ((self.visit(v)) for v in node.values)) if node.values else Any
         res = Dict[key_typ, val_typ]
@@ -304,13 +308,12 @@ class TypeChecker(NodeVisitor):
             assert name != 'channel'
             return ast.unparse(node) # Recv[str, End]
         else:
-            # TODO: Problem here with Dict vs. Tuple
-            if isinstance(node.slice, ast.Tuple):
-                return self.visit(node.slice)    
+            container = str_to_typ(name)
+            typs = self.visit(node.slice)
+            if isinstance(typs, type | list):
+                return parameterise(to_typing(container), typs)
             else:
-                container = str_to_typ(name)
-                typs = self.visit(node.slice)
-                return pack_type(to_typing(container), [typs])
+                return to_typing(container)[typs]
 
     def visit_Return(self, node: Return) -> Any:
         debug_print('visit_Return', dump(node))

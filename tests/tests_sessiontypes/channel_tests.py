@@ -205,6 +205,13 @@ class TestVerifyChannels(unittest.TestCase):
                 s = ch.recv()
         TypeChecker(get_ast(main))
 
+    def test_sending_parameterised_data(self):
+        def ok():
+            ch = Channel[Send[List[int], Send[Tuple[str, int], Send[Dict[int, float], End]]]]()
+            ch.send([1,2])
+            ch.send(('cool', 42))
+            ch.send({3: 3.14})
+        TypeChecker(get_ast(ok))
 
 
 if __name__ == '__main__':

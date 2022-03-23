@@ -7,7 +7,7 @@ import copy
 from collections import deque
 
 
-from lib import Typ, pack_type, str_to_typ, to_typing
+from lib import Typ, parameterise, str_to_typ, to_typing
 
 A = TypeVar('A')
 
@@ -226,7 +226,7 @@ class STParser(NodeVisitor):
                 assert isinstance(typ, type | tuple), typ
                 nd = new_node()
                 if isinstance(typ, tuple):
-                    typ = pack_type(to_typing(typ[0]), [typ[1]])
+                    typ = parameterise(to_typing(typ[0]), [typ[1]])
                 key = head[typ]
                 go(tail[1], nd)
                 node.outgoing[key] = nd
