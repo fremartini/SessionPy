@@ -205,7 +205,15 @@ class TestVerifyChannels(unittest.TestCase):
                 s = ch.recv()
         TypeChecker(get_ast(main))
 
-    def test_sending_parameterised_data(self):
+
+    def test_parameterised_simple(self):
+        def ok():
+            ch = Channel[Send[List[int], End]]()
+            ch.send([1,2])
+        TypeChecker(get_ast(ok))
+
+
+    def test_parameterised_multiple_types(self):
         def ok():
             ch = Channel[Send[List[int], Send[Tuple[str, int], Send[Dict[int, float], End]]]]()
             ch.send([1,2])
@@ -213,6 +221,56 @@ class TestVerifyChannels(unittest.TestCase):
             ch.send({3: 3.14})
         TypeChecker(get_ast(ok))
 
+    
+    def test_parameterised_wrong_type(self):
+        def fail():
+            ch = Channel[Send[List[int], Send[Tuple[str, int], Send[Dict[int, float], End]]]]()
+            ch.send([1,2])
+            ch.send(('cool', 42))
+            ch.send({3: 'oops'})
+        with self.assertRaises(SessionException):
+            TypeChecker(get_ast(fail))
+
+    def test_parameterised_offer(self):
+        def ok():
+            ch = Channel[Send[List[int], Offer[ Send[Tuple[str, int], End], Recv[str, Send[Dict[float, str], End]]]]]()
+            ch.send([1,2])
+            match ch.offer():
+                case Branch.LEFT:
+                    ch.send(('cool', 42))
+                case Branch.RIGHT:
+                    s = ch.recv()
+                    ch.send({3.14: 'pi'})
+        TypeChecker(get_ast(ok))
+
+    def test_parameterised_offer_with_alias(self):
+        def ok():
+            LeftOffer = Send[Tuple[str, int], End]
+            RightOffer = Recv[str, Send[Dict[float, str], End]]
+            ch = Channel[Send[List[int], Offer[LeftOffer, RightOffer]]]()
+            ch.send([1,2])
+            match ch.offer():
+                case Branch.LEFT:
+                    ch.send(('cool', 42))
+                case Branch.RIGHT:
+                    s = ch.recv()
+                    ch.send({3.14: 'pi'})
+        TypeChecker(get_ast(ok))
+
+    def test_parameterised_offer_and_loop_with_alias(self):
+        def ok():
+            LeftOffer = Send[Tuple[str, int], 'repeat']
+            RightOffer = Recv[str, Send[Dict[float, str], 'repeat']]
+            ch = Channel[Send[List[int], Label['repeat', Offer[LeftOffer, RightOffer]]]]()
+            ch.send([1,2])
+            while 2+2 == 4:
+                match ch.offer():
+                    case Branch.LEFT:
+                        ch.send(('cool', 42))
+                    case Branch.RIGHT:
+                        s = ch.recv()
+                        ch.send({3.14: 'pi'})
+        TypeChecker(get_ast(ok))
 
 if __name__ == '__main__':
     unittest.main()
