@@ -1,4 +1,5 @@
 import sys
+import time
 import traceback
 from typing import Any
 
@@ -12,6 +13,9 @@ T = TypeVar('T')
 class Branch(Enum):
     LEFT = 0
     RIGHT = 1
+
+    def equals(self, string):
+        return self.name == string
 
 
 class Channel(Generic[T]):
@@ -29,25 +33,28 @@ class Channel(Generic[T]):
                 _trace(ex)
 
     def recv(self) -> Any:
-        try:
-            with socket.socket() as server_socket:
+        with socket.socket() as server_socket:
+            try:
                 server_socket.bind(self.local)
 
                 server_socket.listen(2)
                 conn, address = server_socket.accept()
                 with conn:
                     data = _decode(conn.recv(1024))
-                    return str(data)
-        except KeyboardInterrupt:
-            _exit()
-        except Exception as ex:
-            _trace(ex)
+                    return data
+            except KeyboardInterrupt:
+                _exit()
+            except Exception as ex:
+                _trace(ex)
 
-    def offer(self) -> None:
-        ...
+    def offer(self) -> Branch:
+        maybe_branch: str = self.recv()
+        assert maybe_branch in ['Branch.RIGHT', 'Branch.LEFT']
+        return Branch.LEFT if maybe_branch == 'Branch.LEFT' else Branch.RIGHT
 
     def choose(self, direction: Branch) -> None:
-        ...
+        assert isinstance(direction, Branch)
+        self.send(direction)
 
 
 def _wait_until_connected_to(sock: socket.socket, address: tuple[str, int]) -> None:
