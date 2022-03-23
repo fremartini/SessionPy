@@ -1,11 +1,13 @@
 from ast import *
+from struct import pack_into
 from typing import TypeVar, Generic, Any
 import typing
-from sessiontype import Send, Recv, Offer, Choose, End, SessionException
 from pydoc import locate
 import copy
 from collections import deque
-from lib import debug_print
+
+
+from lib import Typ, parameterise, str_to_typ, to_typing
 
 A = TypeVar('A')
 
@@ -65,13 +67,16 @@ class TEps:
     def __repr__(self) -> str:
         return self.__str__()
 
+
 class TLeft:
     def __repr__(self) -> str:
         return 'left'
 
+
 class TRight:
     def __repr__(self) -> str:
         return 'right'
+
 
 class TGoto:
     def __init__(self, lab) -> None:
@@ -83,7 +88,8 @@ class TGoto:
     def __repr__(self) -> str:
         return f'goto {self.lab}'
 
-Transition = TSend | TRecv | TChoose | TOffer | TLabel
+
+Transition = TSend | TRecv | TGoto | TLeft | TRight
 
 str_transition_map = {
     "recv": TRecv,
@@ -97,12 +103,11 @@ class Node:
     def __init__(self, id: int, accepting_state: bool = False) -> None:
         self.id = id
         self.accepting = accepting_state
-        self.outgoing: dict[TSend | TRecv, Node] = {}
+        self.outgoing: dict[Transition, Node] = {}
 
     def __str__(self) -> str:
         state = f'(s{self.id})' if self.accepting else f's{self.id}'
         return state
-
 
     def next_nd(self):
         assert len(self.outgoing) == 1, "Function should not be called if it's not a single outgoing edge"
@@ -111,7 +116,7 @@ class Node:
             points_to = points_to.next_nd()
             assert not isinstance(points_to.get_edge(), TGoto), "Wow now, are you trying to break something?"
         return points_to
-        
+
     def get_edge(self):
         assert len(self.outgoing) > 0, "Function should at least contain a single edge"
         return list(self.outgoing.keys())[0]
@@ -119,24 +124,19 @@ class Node:
     def outgoing_action(self) -> TSend | TRecv:
         assert len(self.outgoing) == 1, "Function should not be called if it's not a single outgoing edge"
         key = self.get_edge()
-        return key.__origin__ 
+        return key.__origin__
 
     def outgoing_type(self) -> type:
         assert len(self.outgoing) == 1, "Function should not be called if it's not a single outgoing edge"
         key = self.get_edge()
         typ = key.__args__[0]
-        assert isinstance(typ, type)
+        assert isinstance(typ, Typ)
         return typ
 
-    def valid_action_type(self, action: str, typ: type=Any):
+    def valid_action_type(self, action: str, typ: type = Any):
         assert action in str_transition_map, action
         action = str_transition_map[action]
-        return (action == self.outgoing_action(), typ == self.outgoing_type() or typ == None)
-
-
-
-def new_node(*args) -> Node:
-    return copy.deepcopy(Node(*args))
+        return action == self.outgoing_action(), typ == self.outgoing_type() or typ is Any
 
 
 class STParser(NodeVisitor):
@@ -146,11 +146,11 @@ class STParser(NodeVisitor):
         parsed.res # (recv, (<class 'str'>, (offer, ((send, (<class 'bool'>, end)), (loop, (send, (<class 'int'>, end)))))))
     """
 
-    def __init__(self, src) -> None:
-        self.slcs = deque()
+    def __init__(self, src: str):
+        self.session_tuple = None
         tree = parse(src)
         self.visit(tree)
-        self.session_type = self.slcs[0], self.slcs[1]
+        assert self.session_tuple
 
     def visit_Name(self, node: Name) -> Any:
         match node.id.lower():
@@ -169,26 +169,25 @@ class STParser(NodeVisitor):
             case 'channel':
                 return None
             case x:
-                return locate(x) or x
+                res = str_to_typ(x) or x
+                return res
 
     def visit_Tuple(self, node: Tuple) -> Any:
-        assert len(node.elts) == 2
-        t1 = self.visit(node.elts[0])
-        t2 = self.visit(node.elts[1])
-        return t1, t2
+        elems = [self.visit(el) for el in node.elts]
+        return tuple(elems)
+
+    def visit_Dict(self, node: Dict) -> Any:
+        print('will I ever hit this')
 
     def visit_Subscript(self, node: Subscript) -> Any:
         value = self.visit(node.value)
         slice = self.visit(node.slice)
-        assert isinstance(slice, tuple)
-        self.slcs.appendleft(slice[1])
-        self.slcs.appendleft(slice[0])
+        self.session_tuple = slice if not value else (value, slice)
         return value, slice
 
     def visit_Constant(self, node: Constant) -> Any:
         assert isinstance(node.value, str)
         return self.visit(Name(node.value))
-
 
     def build(self):
         global ident
@@ -200,13 +199,15 @@ class STParser(NodeVisitor):
             ident += 1
             return res
 
-        root = new_node(next_id())
+        def new_node() -> Node:
+            return Node(next_id())
+
+        root = new_node()
         ref = root
 
-
-        # (recv, (<class 'str'>, (offer, ((send, (<class 'bool'>, end)), (loop, (send, (<class 'int'>, end)))))))
         labels = {}
         forwarded_labs = {}
+
         def go(tup, node: Node):
             if isinstance(tup, STEnd):
                 node.accepting = True
@@ -222,15 +223,17 @@ class STParser(NodeVisitor):
             head = head.__class__
             if head in [TRecv, TSend]:
                 typ = tail[0]
-                assert isinstance(typ, type), typ
-                nd = new_node(next_id())
+                assert isinstance(typ, type | tuple), typ
+                nd = new_node()
+                if isinstance(typ, tuple):
+                    typ = parameterise(to_typing(typ[0]), [typ[1]])
                 key = head[typ]
                 go(tail[1], nd)
                 node.outgoing[key] = nd
                 return nd, key
             elif head in [TOffer, TChoose]:
                 st1, st2 = tail[0], tail[1]
-                l, r = new_node(next_id()), new_node(next_id())
+                l, r = new_node(), new_node()
                 go(st1, l)
                 go(st2, r)
                 tl, tr = TLeft, TRight
@@ -247,19 +250,14 @@ class STParser(NodeVisitor):
                     assert tl in labels, tl
                     goto_trans = TGoto(tl)
                     node.outgoing[goto_trans] = labels[tl]
-                    #return labels[tl]
                 else:
                     _, key = go(tl, node)
-                    return node, key
             else:
-                assert head == STEnd or head == str, head
+                #assert head == STEnd or head == str, head
                 if head == STEnd:
                     node.accepting = True
-                else:
-                    return 
-                return node, None
 
-        go(self.session_type, ref)
+        go(self.session_tuple, ref)
         return root
 
 
@@ -275,16 +273,16 @@ def print_node(n: Node):
         if isinstance(key, typing._GenericAlias):
             typ = key.__args__[0]
             s += f'{key()} {typ} -> {n.outgoing[key]}'
-        elif key in [TLeft, TRight]: 
+        elif key in [TLeft, TRight]:
             s += f'{key()} -> {n.outgoing[key]}'
         else:
             assert isinstance(key, TGoto), key
             seen.add(key.get_label())
             s += f'goto {n.outgoing[key]}'
         print(s)
-    
+
     for key in n.outgoing:
-        print() 
+        print()
         key = key.get_label() if isinstance(key, TGoto) else key
         if key in seen:
             return
@@ -295,9 +293,8 @@ def print_node(n: Node):
 
 
 if __name__ == '__main__':
-    st = STParser("Channel[Label['main', Send[int, Label['switch', Choose [ 'main',  Send[bool, Recv[bool, 'switch']]]]  ]]]()")
-    print(st.session_type)
+    st = STParser("Channel[Send[List[int], Send[ Dict[str, int], Send[ Tuple[int, float], End]]]]")
+    print(st.session_tuple)
     print_node(st.build())
-    #st = STParser("Channel[Label['infinity', 'infinity']]()")
-    #print_node(st.build())
-
+    # st = STParser("Channel[Label['infinity',k 'infinity']]()")
+    # print_node(st.build())

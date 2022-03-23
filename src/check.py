@@ -1,6 +1,5 @@
 import ast
 import copy
-from math import exp
 import sys
 from ast import *
 from functools import reduce
@@ -11,7 +10,7 @@ from environment import Environment
 from immutable_list import ImmutableList
 from lib import *
 from statemachine import STParser, Node, TLeft, TRight, TGoto
-from sessiontype import STR_ST_MAPPING, STR_ST_MAPPING, SessionException
+from sessiontype import A, STR_ST_MAPPING, SessionException
 
 
 class TypeChecker(NodeVisitor):
@@ -132,10 +131,9 @@ class TypeChecker(NodeVisitor):
 
     def visit_Name(self, node: Name) -> Tuple[str, Typ] | Typ:
         debug_print('visit_Name', dump(node))
-        opt = locate(node.id)
-        opt_lower = locate(node.id.lower())
-        if not opt and opt_lower:
-            return to_typing(opt_lower)
+        if node.id == 'DEBUG':
+            return self
+        opt = str_to_typ(node.id)
         return opt or self.get_latest_scope().lookup_var_or_default(node.id,
                                                                     self.get_latest_scope().lookup_func_or_default(
                                                                         node.id, node.id))
@@ -151,22 +149,25 @@ class TypeChecker(NodeVisitor):
                 elems.append(typ)
             else:
                 elems.append(self.visit(el))
-        res = pack_type(Tuple, elems)
-        return res
+        return elems 
 
     def visit_List(self, node: List) -> None:
         debug_print('visit_List', dump(node))
         if node.elts:
             list_types: List[Typ] = [self.visit(el) for el in node.elts]
             res = reduce(union, list_types)
-            return res
+            return List[res]
         else:
-            return Any
+            return List[Any]
 
     def visit_Attribute(self, node: Attribute) -> Typ:
         debug_print('attribute', dump(node))
-        value = self.visit(node.value)  # A
-        attr = node.attr  # square
+        value = self.visit(node.value)
+        attr = node.attr  
+        if value == self: # TODO: Debug hack from within source
+            invokable = getattr(self, attr)
+            invokable()
+            return
         if value in STR_ST_MAPPING or attr in STR_ST_MAPPING:
             return value, attr
         else:
@@ -179,23 +180,26 @@ class TypeChecker(NodeVisitor):
         assert (len(node.targets) == 1)
 
         target = self.visit(node.targets[0])
+
         if self.is_session_type(node.value):
-            graph = STParser(node.value).build()
-            self.bind_var(target, graph)
+            self.bind_session_type(node, target)
         else:
             value = self.visit(node.value)
+            if isinstance(node.value, ast.Tuple):
+                value = parameterise(Tuple, value)
             self.bind_var(target, value)
 
     def visit_AnnAssign(self, node: AnnAssign) -> None:
         debug_print('visit_AnnAssign', dump(node))
-
         target: str = self.visit(node.target)
         if self.is_session_type(node.value):
-            graph = STParser(node.value).build()
-            self.bind_var(target, graph)
+            self.bind_session_type(node, target)
         else:
             name_or_type = self.visit(node.annotation)
             rhs_type = self.visit(node.value)
+            if isinstance(name_or_type, typing._GenericAlias) and name_or_type.__origin__ == tuple:
+                rhs_type = parameterise(Tuple, rhs_type)
+            
             if is_type(name_or_type):
                 self.bind_var(target, union(rhs_type, name_or_type))
             else:
@@ -218,7 +222,6 @@ class TypeChecker(NodeVisitor):
         debug_print('visit_Call', dump(node))
         call_func = self.visit(node.func)
         
-        
         if isinstance(call_func, tuple):
             nd = call_func[0]
             args = self.get_function_args(node.args)
@@ -233,11 +236,15 @@ class TypeChecker(NodeVisitor):
                     self.bind_var(ch_name, next_nd)
                     return nd.outgoing_type()
                 case 'send':
+                    if isinstance(args.head(), list): # TODO(Johan): Feels hacky; Tuple always returns lists now, but this only *sometimes* have to get parameterised. How to solve?
+                        items = args.items()
+                        items[0] = parameterise(Tuple, items[0])
+                        args = ImmutableList.of_list(items)
                     valid_action, valid_typ = nd.valid_action_type(op, args.head())
                     if not valid_action:
                         raise SessionException(f'expected a {nd.outgoing_action()()}, but send was called')
                     elif not valid_typ:
-                        raise SessionException(f'expected to send a {nd.outgoing_type().__name__}, got {args.head().__name__}')
+                        raise SessionException(f'expected to send a {type_to_str(nd.outgoing_type())}, got {type_to_str(args.head())}')
                     next_nd = nd.next_nd()
                     self.bind_var(ch_name, next_nd)
                 case 'offer':
@@ -259,7 +266,6 @@ class TypeChecker(NodeVisitor):
             provided_args = self.get_function_args(node.args)
             self.compare_function_arguments_and_parameters("your method", provided_args, call_func)
             return return_type
-
         return call_func
 
     def visit_ClassDef(self, node: ClassDef) -> None:
@@ -278,47 +284,36 @@ class TypeChecker(NodeVisitor):
     def visit_While(self, node: While) -> None:
         debug_print('visit_While', dump(node))
         self.visit(node.test)
-        pre_chans = self.get_latest_scope().get_kind(Node)
-        if pre_chans:
-            nds = [chs[1] for chs in pre_chans]
-            for nd in nds:
-                self.loop_entrypoints.add(nd.id) 
-            pre_chans = nds
-        for stm in node.body:
-            self.visit(stm)
-        post_chans = self.get_latest_scope().get_kind(Node)
-        if pre_chans and post_chans:
-            post_chans = [chs[1] for chs in post_chans]
-            for post_chan in post_chans:
-                if post_chan.id not in self.loop_entrypoints:
-                    raise SessionException(f'loop error: needs to {post_chan.outgoing_action()()} {post_chan.outgoing_type()}')
-
+        self.verify_loop(node.body)
 
     def visit_For(self, node: For) -> None:
         debug_print('visit_For', dump(node))
         target = self.visit(node.target)
         ite = self.visit(node.iter)
         self.bind_var(target, ite)
-        for stm in node.body:
-            self.visit(stm)
 
-    def visit_Dict(self, node: Dict) -> Tuple[Typ, Typ]:
+        self.verify_loop(node.body)
+
+    def visit_Dict(self, node: Dict) -> Dict[Typ, Typ]:
         debug_print('visit_Dict', dump(node))
         key_typ = reduce(union, ((self.visit(k)) for k in node.keys)) if node.keys else Any
         val_typ = reduce(union, ((self.visit(v)) for v in node.values)) if node.values else Any
-        res = Tuple[key_typ, val_typ]
+        res = Dict[key_typ, val_typ]
         return res
 
     def visit_Subscript(self, node: Subscript) -> Any:
         debug_print('visit_Subscript', dump(node))
-        opt_typ = self.visit(node.slice)
-        st_typ = None
-        if isinstance(node.value, Name):
-            name = node.value.id.lower() 
-            if name in STR_ST_MAPPING:
-                st_typ = STR_ST_MAPPING[name]
-        
-        return opt_typ if not st_typ else st_typ[opt_typ]
+        name = node.value.id.lower()
+        if name in STR_ST_MAPPING:
+            assert name != 'channel'
+            return ast.unparse(node) # Recv[str, End]
+        else:
+            container = str_to_typ(name)
+            typs = self.visit(node.slice)
+            if isinstance(typs, type | list):
+                return parameterise(to_typing(container), typs)
+            else:
+                return to_typing(container)[typs]
 
     def visit_Return(self, node: Return) -> Any:
         debug_print('visit_Return', dump(node))
@@ -329,8 +324,6 @@ class TypeChecker(NodeVisitor):
 
     def visit_If(self, node: If) -> None:
         debug_print('visit_If', dump(node))
-
-        env = self.get_latest_scope()
 
         self.visit(node.test)
         self.dup()
@@ -402,6 +395,31 @@ class TypeChecker(NodeVisitor):
             can_upcast: bool = can_upcast_to(actual_type, expected_type)
             fail_if(types_differ and not can_upcast,
                     f'function <{func_name}> expected {parameters}, got {arguments}')
+
+    def verify_loop(self, body):
+        pre_chans = self.get_latest_scope().get_kind(Node)
+        if pre_chans:
+            nds = [chs[1] for chs in pre_chans]
+            for nd in nds:
+                self.loop_entrypoints.add(nd.id) 
+            pre_chans = nds
+        for stm in body:
+            self.visit(stm)
+        post_chans = self.get_latest_scope().get_kind(Node)
+        if pre_chans and post_chans:
+            post_chans = [chs[1] for chs in post_chans]
+            for post_chan in post_chans:
+                if post_chan.id not in self.loop_entrypoints:
+                    raise SessionException(f'loop error: needs to {post_chan.outgoing_action()()} {post_chan.outgoing_type()}')
+
+    def bind_session_type(self, node, target):
+            alias_opts = self.get_latest_scope().get_kind(str)
+            channel_str = ast.unparse(node.value) # 'Channel[Send[..., <Alias>]]'
+            for key, val in alias_opts:
+                assert key in channel_str 
+                channel_str = channel_str.replace(key, val)
+            nd = STParser(src=channel_str).build()
+            self.bind_var(target, nd)
 
     def compare_type_to_latest_func_return_type(self, return_type: Typ):
         expected_return_type = self.get_current_function_return_type()
