@@ -133,10 +133,7 @@ class TypeChecker(NodeVisitor):
         debug_print('visit_Name', dump(node))
         if node.id == 'DEBUG':
             return self
-        opt = locate(node.id)
-        opt_lower = locate(node.id.lower())
-        if not opt and opt_lower:
-            return to_typing(opt_lower)
+        opt = str_to_typ(node.id)
         return opt or self.get_latest_scope().lookup_var_or_default(node.id,
                                                                     self.get_latest_scope().lookup_func_or_default(
                                                                         node.id, node.id))
@@ -160,9 +157,9 @@ class TypeChecker(NodeVisitor):
         if node.elts:
             list_types: List[Typ] = [self.visit(el) for el in node.elts]
             res = reduce(union, list_types)
-            return res
+            return List[res]
         else:
-            return Any
+            return List[Any]
 
     def visit_Attribute(self, node: Attribute) -> Typ:
         debug_print('attribute', dump(node))
@@ -193,13 +190,14 @@ class TypeChecker(NodeVisitor):
 
     def visit_AnnAssign(self, node: AnnAssign) -> None:
         debug_print('visit_AnnAssign', dump(node))
-
         target: str = self.visit(node.target)
         if self.is_session_type(node.value):
             self.bind_session_type(node, target)
         else:
+            print(dump(node))
             name_or_type = self.visit(node.annotation)
             rhs_type = self.visit(node.value)
+            
             if is_type(name_or_type):
                 self.bind_var(target, union(rhs_type, name_or_type))
             else:
@@ -236,11 +234,12 @@ class TypeChecker(NodeVisitor):
                     self.bind_var(ch_name, next_nd)
                     return nd.outgoing_type()
                 case 'send':
+                    print('args', args)
                     valid_action, valid_typ = nd.valid_action_type(op, args.head())
                     if not valid_action:
                         raise SessionException(f'expected a {nd.outgoing_action()()}, but send was called')
                     elif not valid_typ:
-                        raise SessionException(f'expected to send a {nd.outgoing_type().__name__}, got {args.head().__name__}')
+                        raise SessionException(f'expected to send a {type_to_str(nd.outgoing_type())}, got {type_to_str(args.head())}')
                     next_nd = nd.next_nd()
                     self.bind_var(ch_name, next_nd)
                 case 'offer':
@@ -290,17 +289,16 @@ class TypeChecker(NodeVisitor):
 
         self.verify_loop(node.body)
 
-    def visit_Dict(self, node: Dict) -> Tuple[Typ, Typ]:
+    def visit_Dict(self, node: Dict) -> Dict[Typ, Typ]:
         debug_print('visit_Dict', dump(node))
+        print('visit_Dict', dump(node))
         key_typ = reduce(union, ((self.visit(k)) for k in node.keys)) if node.keys else Any
         val_typ = reduce(union, ((self.visit(v)) for v in node.values)) if node.values else Any
-        res = Tuple[key_typ, val_typ]
+        res = Dict[key_typ, val_typ]
         return res
 
     def visit_Subscript(self, node: Subscript) -> Any:
         debug_print('visit_Subscript', dump(node))
-        # Can be ST:
-        # Recv[str, End]
         name = node.value.id.lower()
         if name in STR_ST_MAPPING:
             # RecvStringEnd = Recv[str, End]
@@ -309,9 +307,15 @@ class TypeChecker(NodeVisitor):
                 return ast.unparse(node) # Recv[str, End]
             else:
                 assert False
-        # - and can be
-        # List[int]
-        # Tuple[str, Tuple[...]
+        else:
+            # TODO: Problem here with Dict vs. Tuple
+            if isinstance(node.slice, ast.Tuple):
+                return self.visit(node.slice)    
+            else:
+                print('here...')
+                container = str_to_typ(name)
+                typs = self.visit(node.slice)
+                return pack_type(to_typing(container), [typs])
 
     def visit_Return(self, node: Return) -> Any:
         debug_print('visit_Return', dump(node))

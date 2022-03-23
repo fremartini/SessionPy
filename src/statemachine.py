@@ -1,9 +1,13 @@
 from ast import *
+from struct import pack_into
 from typing import TypeVar, Generic, Any
 import typing
 from pydoc import locate
 import copy
 from collections import deque
+
+
+from lib import Typ, pack_type, str_to_typ, to_typing
 
 A = TypeVar('A')
 
@@ -126,13 +130,13 @@ class Node:
         assert len(self.outgoing) == 1, "Function should not be called if it's not a single outgoing edge"
         key = self.get_edge()
         typ = key.__args__[0]
-        assert isinstance(typ, type)
+        assert isinstance(typ, Typ)
         return typ
 
     def valid_action_type(self, action: str, typ: type = Any):
         assert action in str_transition_map, action
         action = str_transition_map[action]
-        return action == self.outgoing_action(), typ == self.outgoing_type() or typ is None
+        return action == self.outgoing_action(), typ == self.outgoing_type() or typ is Any
 
 
 class STParser(NodeVisitor):
@@ -165,13 +169,15 @@ class STParser(NodeVisitor):
             case 'channel':
                 return None
             case x:
-                return locate(x) or x
+                res = str_to_typ(x) or x
+                return res
 
     def visit_Tuple(self, node: Tuple) -> Any:
-        assert len(node.elts) == 2
-        t1 = self.visit(node.elts[0])
-        t2 = self.visit(node.elts[1])
-        return t1, t2
+        elems = [self.visit(el) for el in node.elts]
+        return tuple(elems)
+
+    def visit_Dict(self, node: Dict) -> Any:
+        print('will I ever hit this')
 
     def visit_Subscript(self, node: Subscript) -> Any:
         value = self.visit(node.value)
@@ -217,8 +223,10 @@ class STParser(NodeVisitor):
             head = head.__class__
             if head in [TRecv, TSend]:
                 typ = tail[0]
-                assert isinstance(typ, type), typ
+                assert isinstance(typ, type | tuple), typ
                 nd = new_node()
+                if isinstance(typ, tuple):
+                    typ = pack_type(to_typing(typ[0]), [typ[1]])
                 key = head[typ]
                 go(tail[1], nd)
                 node.outgoing[key] = nd
@@ -245,7 +253,7 @@ class STParser(NodeVisitor):
                 else:
                     _, key = go(tl, node)
             else:
-                assert head == STEnd or head == str, head
+                #assert head == STEnd or head == str, head
                 if head == STEnd:
                     node.accepting = True
 
@@ -285,8 +293,8 @@ def print_node(n: Node):
 
 
 if __name__ == '__main__':
-    st = STParser("Channel[Label['main', Send[int, Label['switch', Choose [ 'main',  Send[bool, Recv[bool, 'switch']]]]  ]]]()")
+    st = STParser("Channel[Send[List[int], Send[ Dict[str, int], Send[ Tuple[int, float], End]]]]")
     print(st.session_tuple)
     print_node(st.build())
-    # st = STParser("Channel[Label['infinity', 'infinity']]()")
+    # st = STParser("Channel[Label['infinity',k 'infinity']]()")
     # print_node(st.build())

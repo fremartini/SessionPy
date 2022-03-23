@@ -2,6 +2,7 @@ from typing import *
 import typing
 from types import GenericAlias
 import os
+from pydoc import locate
 
 from debug import debug_print
 
@@ -48,6 +49,9 @@ def fail_if_cannot_cast(a: type, b: type, err: str) -> None:
 
 
 def union(t1: Typ, t2: Typ) -> Typ:
+    print('union called with')
+    print('t1', t1)
+    print('t2', t2)
     """
         Unionises two types based on their hierachical structure/class relation.
         
@@ -174,3 +178,22 @@ def str_to_typ(s):
 def assert_eq(expected, actual):
     if not expected == actual:
         raise Exception("expected " + str(expected) + ", found " + str(actual))
+
+def str_to_typ(s: str) -> type:
+    opt = locate(s)
+    opt_lower = locate(s.lower())
+    if not opt and opt_lower:
+        opt = to_typing(opt_lower)
+    return opt
+    
+def type_to_str(typ: Typ) -> str:
+    if isinstance(typ, type):
+        return typ.__name__
+    elif isinstance(typ, typing._GenericAlias):
+        elems = [type_to_str(_) for _ in typ.__args__]
+        return f'{typ.__origin__.__name__}[{",".join(elems)}]'
+    elif typ == Any:
+        return 'Any'
+    else:
+        assert False, ('unsupported type:', typ)
+
