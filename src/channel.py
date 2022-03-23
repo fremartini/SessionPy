@@ -20,19 +20,26 @@ class Channel(Generic[T]):
         self.remote = remote
 
     def send(self, e: Any) -> None:
-        try:
-            if _is_port_listening(self.remote):
-                self._send(e, self.remote)
-            else:
-                print('waiting on ', self.remote)
-                while True:
-                    if _is_port_listening(self.remote):
-                        break
-                self._send(e, self.remote)
-        except KeyboardInterrupt:
-            _exit()
-        except Exception as ex:
-            _trace(ex)
+        with _spawn_socket() as s:
+            try:
+                _connected = False
+
+                print('trying to connect to ', self.remote)
+                while not _connected:
+                    try:
+                        s.connect(self.remote)
+
+                        _connected = True
+                    except Exception:
+                        pass
+
+                print('connected to ', self.remote)
+                s.send(e.encode('utf-8'))
+
+            except KeyboardInterrupt:
+                _exit()
+            except Exception as ex:
+                _trace(ex)
 
     def recv(self) -> Any:
         try:

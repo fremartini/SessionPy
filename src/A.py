@@ -6,4 +6,4 @@ if __name__ == '__main__':
 
     a = ch.recv()
     print('received ', a)
-    ch.send("there")
+    ch.send("hi!")
