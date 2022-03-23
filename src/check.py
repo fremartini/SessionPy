@@ -301,18 +301,13 @@ class TypeChecker(NodeVisitor):
         debug_print('visit_Subscript', dump(node))
         name = node.value.id.lower()
         if name in STR_ST_MAPPING:
-            # RecvStringEnd = Recv[str, End]
-            # ch = Send[int, End]
-            if name != 'channel': # we're doing an alias/helper Sessiontype
-                return ast.unparse(node) # Recv[str, End]
-            else:
-                assert False
+            assert name != 'channel'
+            return ast.unparse(node) # Recv[str, End]
         else:
             # TODO: Problem here with Dict vs. Tuple
             if isinstance(node.slice, ast.Tuple):
                 return self.visit(node.slice)    
             else:
-                print('here...')
                 container = str_to_typ(name)
                 typs = self.visit(node.slice)
                 return pack_type(to_typing(container), [typs])
