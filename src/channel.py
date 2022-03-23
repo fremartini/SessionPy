@@ -20,30 +20,24 @@ class Channel(Generic[T]):
         self.remote = remote
 
     def send(self, e: Any) -> None:
-        with _spawn_socket() as s:
+        with _spawn_socket() as client_socket:
             try:
-                _connected = False
+                _wait_until_connected_to(client_socket, self.remote)
 
-                print('trying to connect to ', self.remote)
-                while not _connected:
-                    try:
-                        s.connect(self.remote)
-
-                        _connected = True
-                    except Exception:
-                        pass
-
-                print('connected to ', self.remote)
-                s.send(e.encode('utf-8'))
-
-            except KeyboardInterrupt:
-                _exit()
+                client_socket.send(e.encode('utf-8'))
             except Exception as ex:
                 _trace(ex)
 
     def recv(self) -> Any:
         try:
-            return self._recv()
+            with socket.socket() as server_socket:
+                server_socket.bind(self.local)
+
+                server_socket.listen(2)
+                conn, address = server_socket.accept()
+                with conn:
+                    data = conn.recv(1024).decode()
+                    return str(data)
         except KeyboardInterrupt:
             _exit()
         except Exception as ex:
@@ -55,46 +49,23 @@ class Channel(Generic[T]):
     def choose(self, direction: Branch) -> None:
         ...
 
-    def _recv(self):
-        with socket.socket() as server_socket:
-            server_socket.bind(self.local)
 
-            server_socket.listen(2)
-            conn, address = server_socket.accept()
-            with conn:
-                data = conn.recv(1024).decode()
-                return str(data)
+def _wait_until_connected_to(sock: socket.socket, address: tuple[str, int]) -> None:
+    _connected = False
 
-    def _send(self, message: Any, to: tuple[str, int]):
-        print('sending message to ', self.remote)
-        with _spawn_socket() as s:
-            s.connect(to)
-            s.send(message.encode('utf-8'))
+    while not _connected:
+        try:
+            sock.connect(address)
 
-
-def _is_port_listening(address: tuple[str, int]):
-    s = socket.socket()
-    try:
-        s.connect(address)
-        return True
-    except socket.error:
-        return False
-    finally:
-        s.close()
+            _connected = True
+        except KeyboardInterrupt:
+            _exit()
+        except Exception:
+            pass
 
 
 def _spawn_socket() -> socket.socket:
-    s: socket = socket.socket()
-    # s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    return s
-
-
-def _encode(e: Any) -> bytes:
-    return bytes(str(e), 'utf-8')
-
-
-def _decode(e: bytes) -> Any:
-    return e.decode('utf-8')
+    return socket.socket()
 
 
 def _trace(ex: Exception) -> None:
