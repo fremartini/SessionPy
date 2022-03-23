@@ -24,7 +24,7 @@ class Channel(Generic[T]):
             try:
                 _wait_until_connected_to(client_socket, self.remote)
 
-                client_socket.send(e.encode('utf-8'))
+                client_socket.send(_encode(e))
             except Exception as ex:
                 _trace(ex)
 
@@ -36,7 +36,7 @@ class Channel(Generic[T]):
                 server_socket.listen(2)
                 conn, address = server_socket.accept()
                 with conn:
-                    data = conn.recv(1024).decode()
+                    data = _decode(conn.recv(1024))
                     return str(data)
         except KeyboardInterrupt:
             _exit()
@@ -66,6 +66,14 @@ def _wait_until_connected_to(sock: socket.socket, address: tuple[str, int]) -> N
 
 def _spawn_socket() -> socket.socket:
     return socket.socket()
+
+
+def _encode(e: Any) -> bytes:
+    return bytes(str(e), 'utf-8')
+
+
+def _decode(e: bytes) -> Any:
+    return e.decode('utf-8')
 
 
 def _trace(ex: Exception) -> None:
