@@ -1,7 +1,7 @@
 import sys
-import time
 import traceback
 from typing import Any
+import pickle
 
 from sessiontype import *
 from enum import Enum
@@ -76,11 +76,11 @@ def _spawn_socket() -> socket.socket:
 
 
 def _encode(e: Any) -> bytes:
-    return bytes(str(e), 'utf-8')
+    return pickle.dumps(e)
 
 
 def _decode(e: bytes) -> Any:
-    return e.decode('utf-8')
+    return pickle.loads(e)
 
 
 def _trace(ex: Exception) -> None:
