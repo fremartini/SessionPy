@@ -1,12 +1,10 @@
-from channel import *
-from sessiontype import *
-from typechecking import verify_channels
-from diamond_util import *
+if __name__ == '__main__':
+    from channel import *
+    from sessiontype import *
+    from diamond_util import *
 
-
-@verify_channels
-def main():
-    ch = Channel[Recv[str, Send[Catalogue,Offer[Recv[str, Send[str, End]], Recv[DiamondColour, Send[str, End]]]]]]()
+    ch = Channel[Recv[str, Send[Catalogue, Offer[Recv[str, Send[str, End]], Recv[DiamondColour, Send[str, End]]]]]](
+        ("localhost", 5005), ("localhost", 5000))
     req = ch.recv()
     print('Received request from seller:', req)
     catalogue = {
@@ -23,6 +21,3 @@ def main():
             ch.send(
                 f'Thanks for purchasing a {colour} diamond, you spent ${catalogue[colour]}')
 
-
-if __name__ == '__main__':
-    main()

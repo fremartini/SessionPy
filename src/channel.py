@@ -27,6 +27,8 @@ class Channel(Generic[T]):
         else:
             self.local = local
             self.remote = remote
+            self.server_socket = _spawn_socket()
+            self.server_socket.bind(self.local)
 
     def send(self, e: Any) -> None:
         if self.local_mode:
@@ -42,8 +44,8 @@ class Channel(Generic[T]):
 
     def offer(self) -> Branch:
         maybe_branch: str = self.recv()
-        assert maybe_branch in ['Branch.RIGHT', 'Branch.LEFT']
-        return Branch.LEFT if maybe_branch == 'Branch.LEFT' else Branch.RIGHT
+        assert isinstance(maybe_branch, Branch), (maybe_branch, type(maybe_branch))
+        return maybe_branch
 
     def choose(self, direction: Branch) -> None:
         assert isinstance(direction, Branch)
@@ -70,19 +72,20 @@ class Channel(Generic[T]):
         return self.queue.pop(0)
 
     def _recv_remote(self) -> Any:
-        with socket.socket() as server_socket:
-            try:
-                server_socket.bind(self.local)
+        try:
+            self.server_socket.listen(2)
+            conn, address = self.server_socket.accept()
+            with conn:
+                data = _decode(conn.recv(1024))
+                return data
+        except KeyboardInterrupt:
+            _exit()
+        except Exception as ex:
+            _trace(ex)
 
-                server_socket.listen(2)
-                conn, address = server_socket.accept()
-                with conn:
-                    data = _decode(conn.recv(1024))
-                    return data
-            except KeyboardInterrupt:
-                _exit()
-            except Exception as ex:
-                _trace(ex)
+    def __del__(self):
+        if not self.local_mode:
+            self.server_socket.close()
 
 
 def _wait_until_connected_to(sock: socket.socket, address: tuple[str, int]) -> None:
@@ -100,7 +103,9 @@ def _wait_until_connected_to(sock: socket.socket, address: tuple[str, int]) -> N
 
 
 def _spawn_socket() -> socket.socket:
-    return socket.socket()
+    sock = socket.socket()
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    return sock
 
 
 def _encode(e: Any) -> bytes:
