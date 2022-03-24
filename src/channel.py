@@ -19,11 +19,40 @@ class Branch(Enum):
 
 
 class Channel(Generic[T]):
-    def __init__(self, local: tuple[str, int], remote: tuple[str, int]) -> None:
-        self.local = local
-        self.remote = remote
+    def __init__(self, local: tuple[str, int] = None, remote: tuple[str, int] = None) -> None:
+        self.local_mode = True if local is None or remote is None else False
+
+        if self.local_mode:
+            self.queue = []
+        else:
+            self.local = local
+            self.remote = remote
 
     def send(self, e: Any) -> None:
+        if self.local_mode:
+            self._send_local(e)
+        else:
+            self._send_remote(e)
+
+    def recv(self) -> Any:
+        if self.local_mode:
+            return self._recv_local()
+        else:
+            return self._recv_remote()
+
+    def offer(self) -> Branch:
+        maybe_branch: str = self.recv()
+        assert maybe_branch in ['Branch.RIGHT', 'Branch.LEFT']
+        return Branch.LEFT if maybe_branch == 'Branch.LEFT' else Branch.RIGHT
+
+    def choose(self, direction: Branch) -> None:
+        assert isinstance(direction, Branch)
+        self.send(direction)
+
+    def _send_local(self, e: Any) -> None:
+        self.queue.append(e)
+
+    def _send_remote(self, e: Any) -> None:
         with _spawn_socket() as client_socket:
             try:
                 _wait_until_connected_to(client_socket, self.remote)
@@ -32,7 +61,15 @@ class Channel(Generic[T]):
             except Exception as ex:
                 _trace(ex)
 
-    def recv(self) -> Any:
+    def _recv_local(self) -> Any:
+        if len(self.queue) == 0:
+            while True:
+                if len(self.queue) != 0:
+                    break
+
+        return self.queue.pop(0)
+
+    def _recv_remote(self) -> Any:
         with socket.socket() as server_socket:
             try:
                 server_socket.bind(self.local)
@@ -46,15 +83,6 @@ class Channel(Generic[T]):
                 _exit()
             except Exception as ex:
                 _trace(ex)
-
-    def offer(self) -> Branch:
-        maybe_branch: str = self.recv()
-        assert maybe_branch in ['Branch.RIGHT', 'Branch.LEFT']
-        return Branch.LEFT if maybe_branch == 'Branch.LEFT' else Branch.RIGHT
-
-    def choose(self, direction: Branch) -> None:
-        assert isinstance(direction, Branch)
-        self.send(direction)
 
 
 def _wait_until_connected_to(sock: socket.socket, address: tuple[str, int]) -> None:
