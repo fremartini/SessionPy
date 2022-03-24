@@ -1,6 +1,7 @@
 import sys
 import traceback
 from typing import Any
+import pickle
 
 from sessiontype import *
 from enum import Enum
@@ -13,79 +14,106 @@ class Branch(Enum):
     LEFT = 0
     RIGHT = 1
 
+    def equals(self, string):
+        return self.name == string
+
 
 class Channel(Generic[T]):
-    def __init__(self, address: tuple[str, int]) -> None:
-        self.address = address
+    def __init__(self, local: tuple[str, int] = None, remote: tuple[str, int] = None) -> None:
+        self.local_mode = True if local is None or remote is None else False
+
+        if self.local_mode:
+            self.queue = []
+        else:
+            self.local = local
+            self.remote = remote
+            self.server_socket = _spawn_socket()
+            self.server_socket.bind(self.local)
 
     def send(self, e: Any) -> None:
-        s = _spawn_socket()
-        try:
-            # try to connect if someone is listening
-            s.connect(self.address)
-            s.sendall(_encode(e))
-        except OSError:
-            # nobody is listening, become the 'server' and wait
-            s.bind(self.address)
-            s.listen()
-            c, _ = s.accept()
-            with c:
-                c.sendall(_encode(e))
-        except KeyboardInterrupt:
-            s.close()
-            _exit()
-        except Exception as ex:
-            _trace(ex)
+        if self.local_mode:
+            self._send_local(e)
+        else:
+            self._send_remote(e)
 
     def recv(self) -> Any:
-        s = _spawn_socket()
-        try:
-            # try to connect to 'server' and receive message
-            s.connect(self.address)
-            r = s.recv(1024)
-            return _decode(r)
-        except OSError:
+        if self.local_mode:
+            return self._recv_local()
+        else:
+            return self._recv_remote()
+
+    def offer(self) -> Branch:
+        maybe_branch: str = self.recv()
+        assert isinstance(maybe_branch, Branch), (maybe_branch, type(maybe_branch))
+        return maybe_branch
+
+    def choose(self, direction: Branch) -> None:
+        assert isinstance(direction, Branch)
+        self.send(direction)
+
+    def _send_local(self, e: Any) -> None:
+        self.queue.append(e)
+
+    def _send_remote(self, e: Any) -> None:
+        with _spawn_socket() as client_socket:
             try:
-                # nobody is serving anything, become the server and wait
-                s.bind(self.address)
-                s.listen()
-                c, _ = s.accept()
-                with c:
-                    r = c.recv(1024)
-                    return _decode(r)
-            except KeyboardInterrupt:
-                sys.exit(0)
-            except OSError:
-                # address may already be bound, try again
-                return self.recv()
+                _wait_until_connected_to(client_socket, self.remote)
+
+                client_socket.send(_encode(e))
             except Exception as ex:
                 _trace(ex)
+
+    def _recv_local(self) -> Any:
+        if len(self.queue) == 0:
+            while True:
+                if len(self.queue) != 0:
+                    break
+
+        return self.queue.pop(0)
+
+    def _recv_remote(self) -> Any:
+        try:
+            self.server_socket.listen(2)
+            conn, address = self.server_socket.accept()
+            with conn:
+                data = _decode(conn.recv(1024))
+                return data
         except KeyboardInterrupt:
             _exit()
         except Exception as ex:
             _trace(ex)
-        finally:
-            s.close()
 
-    def offer(self) -> Branch:
-        ...
+    def __del__(self):
+        if not self.local_mode:
+            self.server_socket.close()
 
-    def choose(self, direction: Branch) -> None:
-        assert (isinstance(direction, Branch))
+
+def _wait_until_connected_to(sock: socket.socket, address: tuple[str, int]) -> None:
+    _connected = False
+
+    while not _connected:
+        try:
+            sock.connect(address)
+
+            _connected = True
+        except KeyboardInterrupt:
+            _exit()
+        except Exception:
+            pass
 
 
 def _spawn_socket() -> socket.socket:
-    s: socket = socket.socket()
-    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    return s
+    sock = socket.socket()
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    return sock
 
 
 def _encode(e: Any) -> bytes:
-    return bytes(str(e), 'utf-8')
+    return pickle.dumps(e)
 
 
 def _decode(e: bytes) -> Any:
-    return e.decode('utf-8')
+    return pickle.loads(e)
 
 
 def _trace(ex: Exception) -> None:

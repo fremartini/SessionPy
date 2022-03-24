@@ -8,8 +8,8 @@ def debug_print(*args) -> None:
         print()
 
 
-def dump_ast(s, node) -> None:
-    print(f'{s}\n', dump(node, indent=4))
+def dump_ast(node) -> None:
+    print(dump(node, indent=4))
 
 
 def is_a(obj):
