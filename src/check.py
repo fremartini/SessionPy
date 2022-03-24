@@ -264,7 +264,7 @@ class TypeChecker(NodeVisitor):
             call_func = signature.discard_last()
 
             provided_args = self.get_function_args(node.args)
-            self.compare_function_arguments_and_parameters("your method", provided_args, call_func)
+            self.compare_function_arguments_and_parameters(node.func.attr, provided_args, call_func)
             return return_type
         return call_func
 
