@@ -82,15 +82,16 @@ class TypeChecker(NodeVisitor):
         if isinstance(subj, Node):
             ch_name = node.subject.func.value.id
             nd = subj
-            assert len(nd.outgoing) == 2
-            assert len(node.cases) == 2
+            fail_if(not len(nd.outgoing) == 2, "Node should have 2 outgoing edges", SessionException)
+            fail_if(not len(node.cases) == 2, "Matching on session type operations should always have 2 cases", SessionException)
             
             for case in node.cases:
                 match_value = case.pattern
                 attribute = match_value.value
                 left_right = attribute.attr
-                assert attribute.value.id == 'Branch'
-                assert left_right in ['LEFT', 'RIGHT']
+                fail_if(not attribute.value.id == 'Branch', "Match case did not contain a Branch", SessionException)
+                fail_if(not left_right in ['LEFT', 'RIGHT'], "Branching operation should either be left or right", SessionException)
+
                 self.bind_var(ch_name, nd)
                 new_nd = nd.outgoing[TLeft if left_right == 'LEFT' else TRight]
                 self.bind_var(ch_name, new_nd)
@@ -140,7 +141,7 @@ class TypeChecker(NodeVisitor):
 
     def visit_Tuple(self, node: Tuple) -> None:
         debug_print('visit_Tuple', dump(node))
-        assert (node.elts)
+        fail_if(not node.elts, "Tuple should contain elements", Exception)
         elems = []
         for el in node.elts: 
             # TODO: Hardcoding away forward-refs for now
@@ -175,9 +176,8 @@ class TypeChecker(NodeVisitor):
             return env.lookup_func(attr)
 
     def visit_Assign(self, node: Assign) -> None:
-        # FIXME: handle case where node.targets > 1
         debug_print('visit_Assign', dump(node))
-        assert (len(node.targets) == 1)
+        fail_if(not len(node.targets) == 1, "Assigning multiple variables are not supported", Exception)
 
         target = self.visit(node.targets[0])
 
@@ -204,7 +204,7 @@ class TypeChecker(NodeVisitor):
                 self.bind_var(target, union(rhs_type, name_or_type))
             else:
                 ann_type: Type = locate(name_or_type)
-                assert (type(ann_type) == type)
+                fail_if(not type(ann_type) == type, f"{type(ann_type)} did not match {type}", Exception)
                 rhs_type: Type = self.visit(node.value)
                 fail_if(not ann_type == rhs_type, f'annotated type {ann_type} does not match inferred type {rhs_type}')
                 self.bind_var(target, ann_type)
@@ -251,7 +251,7 @@ class TypeChecker(NodeVisitor):
                     return nd
                 case 'choose':
                     new_nd = nd.outgoing[TLeft if args.head()[1] == 'LEFT' else TRight]
-                    assert new_nd, new_nd
+                    fail_if(new_nd is None, "Choose outgoing node was none", SessionException)
                     # FIXME: sanitise goto-skips
                     if new_nd.outgoing and isinstance(new_nd.get_edge(), TGoto):
                         new_nd = new_nd.next_nd()
@@ -305,8 +305,8 @@ class TypeChecker(NodeVisitor):
         debug_print('visit_Subscript', dump(node))
         name = node.value.id.lower()
         if name in STR_ST_MAPPING:
-            assert name != 'channel'
-            return ast.unparse(node) # Recv[str, End]
+            fail_if(name == 'channel', "Subscript cannot contain a channel", SessionException)
+            return ast.unparse(node)
         else:
             container = str_to_typ(name)
             typs = self.visit(node.slice)
@@ -416,7 +416,7 @@ class TypeChecker(NodeVisitor):
             alias_opts = self.get_latest_scope().get_kind(str)
             channel_str = ast.unparse(node.value) # 'Channel[Send[..., <Alias>]]'
             for key, val in alias_opts:
-                assert key in channel_str 
+                fail_if(not key in channel_str, f"{key} was not found in {channel_str}", SessionException)
                 channel_str = channel_str.replace(key, val)
             nd = STParser(src=channel_str).build()
             self.bind_var(target, nd)
