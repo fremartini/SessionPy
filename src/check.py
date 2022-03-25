@@ -3,14 +3,13 @@ import copy
 import sys
 from ast import *
 from functools import reduce
-from pydoc import locate
 
 from debug import *
 from environment import Environment
 from immutable_list import ImmutableList
 from lib import *
 from statemachine import STParser, Node, TLeft, TRight, TGoto
-from sessiontype import A, STR_ST_MAPPING, SessionException
+from sessiontype import STR_ST_MAPPING, SessionException
 
 
 class TypeChecker(NodeVisitor):
