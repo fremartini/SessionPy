@@ -2,7 +2,6 @@ from ast import *
 from typing import TypeVar, Generic, Any
 import typing
 
-
 from lib import Typ, parameterise, str_to_typ, to_typing
 
 A = TypeVar('A')
