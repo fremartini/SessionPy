@@ -1,4 +1,5 @@
 from enum import Enum, auto
+from typing import List
 
 from lib import read_src_from_file
 
@@ -51,12 +52,12 @@ types = {
 
 
 class Token:
-    def __init__(self, type: TokenType, literal: str | None):
-        self.type = type
+    def __init__(self, typ: TokenType, literal: str | None):
+        self.typ = typ
         self.literal = literal
 
     def __repr__(self) -> str:
-        return f'({self.type}, {self.literal})'
+        return f'({self.typ}, {self.literal})'
 
 
 class Lexer:
@@ -66,10 +67,9 @@ class Lexer:
         self.current = 0
         self.tokens = []
 
-    def lex(self):
+    def lex(self) -> List[Token]:
         self._scan_tokens()
-        for t in self.tokens:
-            print(t)
+        return self.tokens
 
     def _scan_tokens(self) -> None:
         while not self._is_at_end():
@@ -134,7 +134,3 @@ class Lexer:
 
     def _add_token_literal(self, typ: TokenType, literal: str) -> None:
         self.tokens.append(Token(typ, literal))
-
-
-if __name__ == '__main__':
-    Lexer('protocol.scr').lex()
