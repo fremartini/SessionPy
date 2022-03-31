@@ -10,6 +10,7 @@ action          -> (recurse | transmit) ";";
 recurse         -> "do" identifier "(" roles ")";
 transmit        -> primary "from" identifier ("to | "from") identifier;
 roles           -> role ("," role)*;
+identifiers     -> identifier ("," identifier)*;
 role            -> "role" identifier;
 identifier      -> [A-Z] ([A-Z] | [a-z] | 0 - 9)*;
 primary         -> STR | INT | "BOOL;
@@ -31,6 +32,11 @@ class Role:
         self.identifier = identifier
 
 
+class Identifiers:
+    def __init__(self, identifiers: List[Identifier]):
+        self.identifiers = identifiers
+
+
 class Roles:
     def __init__(self, roles: List[Role]):
         self.roles = roles
@@ -44,9 +50,9 @@ class Transmit:
 
 
 class Recurse:
-    def __init__(self, identifier: Identifier, roles: Roles):
+    def __init__(self, identifier: Identifier, identifiers: Identifiers):
         self.identifier = identifier
-        self.roles = roles
+        self.identifiers = identifiers
 
 
 class Action:
@@ -101,8 +107,12 @@ class Parser:
         if not self._match(TokenType.LEFT_BRACE):
             self._throw('{')
 
-        statements: List[Statement] = []
-        # self._statement()
+        statements = []
+        while True:
+            try:
+                statements.append(self._statement())
+            except:
+                break
 
         if not self._match(TokenType.RIGHT_BRACE):
             self._throw('}')
@@ -117,6 +127,14 @@ class Parser:
 
         return Roles(roles)
 
+    def _identifiers(self) -> Identifiers:
+        identifiers: List[Identifier] = [self._identifier()]
+
+        while self._match(TokenType.COMMA):
+            identifiers.append(self._identifier())
+
+        return Identifiers(identifiers)
+
     def _role(self) -> Role:
         if not self._match(TokenType.ROLE):
             self._throw('role')
@@ -130,7 +148,102 @@ class Parser:
         self._throw('identifier')
 
     def _statement(self) -> Statement:
-        ...
+        statement = None
+
+        try:
+            statement = self._choice()
+        except:
+            try:
+                statement = self._action()
+            except:
+                self._throw('choice | action')
+
+        return Statement(statement)
+
+    def _choice(self) -> Choice:
+        if not self._match(TokenType.CHOICE):
+            self._throw('choice')
+
+        if not self._match(TokenType.AT):
+            self._throw('at')
+
+        identifier = self._identifier()
+
+        if not self._match(TokenType.LEFT_BRACE):
+            self._throw('{')
+
+        statementsDO = []
+        while True:
+            try:
+                statementsDO.append(self._statement())
+            except:
+                break
+
+        if not self._match(TokenType.RIGHT_BRACE):
+            self._throw('}')
+
+        if not self._match(TokenType.OR):
+            self._throw('or')
+
+        if not self._match(TokenType.LEFT_BRACE):
+            self._throw('{')
+
+        statementsOR = []
+        while True:
+            try:
+                statementsOR.append(self._statement())
+            except:
+                break
+
+        if not self._match(TokenType.RIGHT_BRACE):
+            self._throw('}')
+
+        return Choice(identifier, statementsDO, statementsOR)
+
+    def _action(self) -> Action:
+        action = None
+        try:
+            action = self._recurse()
+        except:
+            try:
+                action = self._transmit()
+            except:
+                self._throw('recurse | transmit')
+
+        self._match(TokenType.SEMICOLON)
+
+        return Action(action)
+
+    def _recurse(self) -> Recurse:
+        if not self._match(TokenType.DO):
+            self._throw('do')
+
+        identifier = self._identifier()
+
+        if not self._match(TokenType.LEFT_PARENS):
+            self._throw('(')
+
+        roles = self._identifiers()
+
+        if not self._match(TokenType.RIGHT_PARENS):
+            self._throw(')')
+
+        return Recurse(identifier, roles)
+
+    def _transmit(self) -> Transmit:
+        primary = self._primary()
+
+        if not self._match(TokenType.FROM):
+            self._throw('from')
+
+        identifier1 = self._identifier()
+
+        if not self._match(TokenType.TO, TokenType.FROM):
+            self._throw('to, from')
+
+        identifier2 = self._identifier()
+
+        return Transmit(primary, identifier1, identifier2)
 
     def _primary(self) -> Primary:
         if self._match(TokenType.STR):
