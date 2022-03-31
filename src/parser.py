@@ -7,7 +7,7 @@ protocol        -> "global" "protocol" identifier "(" roles ")" "{" statement* "
 statement       -> choice | action;
 choice          -> "choice" "at" identifier "{" statement* "}" "or" "{" statement* "}";
 action          -> (recurse | transmit) ";";
-recurse         -> "do" identifier "(" roles ")";
+recurse         -> "do" identifier;
 transmit        -> primary "from" identifier ("to | "from") identifier;
 roles           -> role ("," role)*;
 identifiers     -> identifier ("," identifier)*;
@@ -50,9 +50,8 @@ class Transmit:
 
 
 class Recurse:
-    def __init__(self, identifier: Identifier, identifiers: Identifiers):
+    def __init__(self, identifier: Identifier):
         self.identifier = identifier
-        self.identifiers = identifiers
 
 
 class Action:
@@ -220,15 +219,7 @@ class Parser:
 
         identifier = self._identifier()
 
-        if not self._match(TokenType.LEFT_PARENS):
-            self._throw('(')
-
-        roles = self._identifiers()
-
-        if not self._match(TokenType.RIGHT_PARENS):
-            self._throw(')')
-
-        return Recurse(identifier, roles)
+        return Recurse(identifier)
 
     def _transmit(self) -> Transmit:
         primary = self._primary()

@@ -1,11 +1,11 @@
-global protocol HelloWorld(role Me, role World) {
-	str from Me to World;
-	str from World to Me;
+global protocol HelloWorld(role A, role B) {
+	str from A to B;
+	str from B to A;
 
-	choice at World {
-		str from World to Me;
-        do HelloWorld(Me, World);
+	choice at B {
+		str from B to A;
+        do HelloWorld;
 	} or {
-		int from World to Me;
+		int from B to A;
 	}
 }
