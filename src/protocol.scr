@@ -4,7 +4,7 @@ global protocol HelloWorld(role Me, role World) {
 
 	choice at World {
 		str from World to Me;
-                do HelloWorld(Me, World);
+        do HelloWorld(Me, World);
 	} or {
 		int from World to Me;
 	}
