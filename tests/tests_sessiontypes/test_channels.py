@@ -1,4 +1,3 @@
-import unittest
 from context import *
 
 class TestVerifyChannels(unittest.TestCase):
@@ -11,12 +10,12 @@ class TestVerifyChannels(unittest.TestCase):
 
         TypeChecker(get_ast(main))
 
-       
     def test_recv_succeeds(self):
         def main():
             ch = Channel[Recv[int, End]]()
             v = ch.recv()
             print('received value', v)  # this should happen!
+
         TypeChecker(get_ast(main))
 
     def test_send_recv_sequence_succeeds(self):
@@ -26,6 +25,7 @@ class TestVerifyChannels(unittest.TestCase):
             ch.send(True)
             print('received value', v)  # this should happen!
             print('sent value', True)
+
         TypeChecker(get_ast(main))
 
     # def test_channel_using_function_call_succeeds(test):    
@@ -58,6 +58,7 @@ class TestVerifyChannels(unittest.TestCase):
                 case Branch.RIGHT:
                     print("A: sending number to client (B)")
                     ch.send(42)
+
         TypeChecker(get_ast(main))
 
     def test_channel_branch_succeeds(self):
@@ -76,6 +77,7 @@ class TestVerifyChannels(unittest.TestCase):
                 else:
                     ch.choose(Branch.RIGHT)
                     i = ch.recv()
+
         TypeChecker(get_ast(main))
 
     # def test_passing_channel_multiple_times_succeeds(test):
@@ -93,20 +95,22 @@ class TestVerifyChannels(unittest.TestCase):
     #         print('sent value', True)
     #         f(ch)
     #     TypeChecker(get_ast(main))
-    
+
     def test_unexpected_recv_fails(self):
         def main():
             ch = Channel[Send[int, End]]()
             v = ch.recv()
             print('received', v)  # should never happen
+
         with self.assertRaises(SessionException):
             TypeChecker(get_ast(main))
-    
+
     def test_unexpected_send_fails(self):
         def main():
             ch = Channel[Recv[int, End]]()
             ch.send(42)
             print('sent value', 42)  # should never happen
+
         with self.assertRaises(SessionException):
             TypeChecker(get_ast(main))
 
@@ -119,11 +123,10 @@ class TestVerifyChannels(unittest.TestCase):
             # this should NOT happen - wrong type!
             print('received value', v)
             print('sent value', True)
+
         with self.assertRaises(SessionException):
             TypeChecker(get_ast(main))
 
-
-    
     # def test_incorrect_channel_use_in_function_fails(self):
     #     def main():
     #         def f(c: Channel):
@@ -154,6 +157,7 @@ class TestVerifyChannels(unittest.TestCase):
                 case Branch.RIGHT:
                     print("A: sending number to client (B)")
                     ch.send(42)
+
         with self.assertRaises(SessionException):
             TypeChecker(get_ast(main))
 
@@ -172,16 +176,18 @@ class TestVerifyChannels(unittest.TestCase):
                     ch.send(1)
                 else:
                     ch.choose(Branch.RIGHT)
+
         with self.assertRaises(SessionException):
             TypeChecker(get_ast(main))
-    
+
     def test_channel_recv_ints_can_send_result(self):
         def main():
             ch = Channel[Recv[int, Recv[int, Send[int, End]]]]()
-            x  = ch.recv()
-            y  = ch.recv()
-            res : int = x+y
+            x = ch.recv()
+            y = ch.recv()
+            res: int = x + y
             ch.send(res)
+
         TypeChecker(get_ast(main))
 
     def test_channel_recv_send_same_value_succeeds(self):
@@ -189,6 +195,7 @@ class TestVerifyChannels(unittest.TestCase):
             ch = Channel[Recv[int, Send[int, End]]]()
             x = ch.recv()
             ch.send(x)
+
         TypeChecker(get_ast(main))
 
     def test_if_block_with_correct_usage(self):
@@ -203,44 +210,46 @@ class TestVerifyChannels(unittest.TestCase):
             else:
                 ch.send(100)
                 s = ch.recv()
-        TypeChecker(get_ast(main))
 
+        TypeChecker(get_ast(main))
 
     def test_parameterised_simple(self):
         def ok():
             ch = Channel[Send[List[int], End]]()
-            ch.send([1,2])
-        TypeChecker(get_ast(ok))
+            ch.send([1, 2])
 
+        TypeChecker(get_ast(ok))
 
     def test_parameterised_multiple_types(self):
         def ok():
             ch = Channel[Send[List[int], Send[Tuple[str, int], Send[Dict[int, float], End]]]]()
-            ch.send([1,2])
+            ch.send([1, 2])
             ch.send(('cool', 42))
             ch.send({3: 3.14})
+
         TypeChecker(get_ast(ok))
 
-    
     def test_parameterised_wrong_type(self):
         def fail():
             ch = Channel[Send[List[int], Send[Tuple[str, int], Send[Dict[int, float], End]]]]()
-            ch.send([1,2])
+            ch.send([1, 2])
             ch.send(('cool', 42))
             ch.send({3: 'oops'})
+
         with self.assertRaises(SessionException):
             TypeChecker(get_ast(fail))
 
     def test_parameterised_offer(self):
         def ok():
-            ch = Channel[Send[List[int], Offer[ Send[Tuple[str, int], End], Recv[str, Send[Dict[float, str], End]]]]]()
-            ch.send([1,2])
+            ch = Channel[Send[List[int], Offer[Send[Tuple[str, int], End], Recv[str, Send[Dict[float, str], End]]]]]()
+            ch.send([1, 2])
             match ch.offer():
                 case Branch.LEFT:
                     ch.send(('cool', 42))
                 case Branch.RIGHT:
                     s = ch.recv()
                     ch.send({3.14: 'pi'})
+
         TypeChecker(get_ast(ok))
 
     def test_parameterised_offer_with_alias(self):
@@ -248,13 +257,14 @@ class TestVerifyChannels(unittest.TestCase):
             LeftOffer = Send[Tuple[str, int], End]
             RightOffer = Recv[str, Send[Dict[float, str], End]]
             ch = Channel[Send[List[int], Offer[LeftOffer, RightOffer]]]()
-            ch.send([1,2])
+            ch.send([1, 2])
             match ch.offer():
                 case Branch.LEFT:
                     ch.send(('cool', 42))
                 case Branch.RIGHT:
                     s = ch.recv()
                     ch.send({3.14: 'pi'})
+
         TypeChecker(get_ast(ok))
 
     def test_parameterised_offer_and_loop_with_alias(self):
@@ -262,15 +272,17 @@ class TestVerifyChannels(unittest.TestCase):
             LeftOffer = Send[Tuple[str, int], 'repeat']
             RightOffer = Recv[str, Send[Dict[float, str], 'repeat']]
             ch = Channel[Send[List[int], Label['repeat', Offer[LeftOffer, RightOffer]]]]()
-            ch.send([1,2])
-            while 2+2 == 4:
+            ch.send([1, 2])
+            while 2 + 2 == 4:
                 match ch.offer():
                     case Branch.LEFT:
                         ch.send(('cool', 42))
                     case Branch.RIGHT:
                         s = ch.recv()
                         ch.send({3.14: 'pi'})
+
         TypeChecker(get_ast(ok))
+
 
 if __name__ == '__main__':
     unittest.main()

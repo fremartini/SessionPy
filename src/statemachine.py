@@ -1,11 +1,6 @@
 from ast import *
-from struct import pack_into
 from typing import TypeVar, Generic, Any
 import typing
-from pydoc import locate
-import copy
-from collections import deque
-
 
 from lib import Typ, parameterise, str_to_typ, to_typing
 
@@ -253,7 +248,6 @@ class STParser(NodeVisitor):
                 else:
                     _, key = go(tl, node)
             else:
-                #assert head == STEnd or head == str, head
                 if head == STEnd:
                     node.accepting = True
 
@@ -296,5 +290,3 @@ if __name__ == '__main__':
     st = STParser("Channel[Send[List[int], Send[ Dict[str, int], Send[ Tuple[int, float], End]]]]")
     print(st.session_tuple)
     print_node(st.build())
-    # st = STParser("Channel[Label['infinity',k 'infinity']]()")
-    # print_node(st.build())
