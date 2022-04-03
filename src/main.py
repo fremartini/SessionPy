@@ -1,11 +1,7 @@
 from lexer import Lexer
-from parser import Parser
+from parser import Parser, Projector
 
 if __name__ == '__main__':
-    tokens = Lexer('protocol.scr').lex()
-
-    for t in tokens:
-        print(t)
-
+    tokens = Lexer('two_buyers.scr').lex()
     tree = Parser(tokens).parse()
-    print(tree)
+    Projector().project(tree)

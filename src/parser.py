@@ -21,25 +21,40 @@ class Primary:
     def __init__(self, literal: type):
         self.literal = literal
 
+    def visit(self) -> str:
+        return str(self.literal)
+
 
 class Identifier:
     def __init__(self, identifier: str):
         self.identifier = identifier
+
+    def visit(self) -> str:
+        return self.identifier
 
 
 class Role:
     def __init__(self, identifier: Identifier):
         self.identifier = identifier
 
+    def visit(self) -> str:
+        return self.identifier.visit()
+
 
 class Identifiers:
     def __init__(self, identifiers: List[Identifier]):
         self.identifiers = identifiers
 
+    def visit(self) -> List[str]:
+        return [i.visit() for i in self.identifiers]
+
 
 class Roles:
     def __init__(self, roles: List[Role]):
         self.roles = roles
+
+    def visit(self) -> List[str]:
+        return [i.visit() for i in self.roles]
 
 
 class Transmit:
@@ -53,10 +68,16 @@ class Recurse:
     def __init__(self, identifier: Identifier):
         self.identifier = identifier
 
+    def visit(self) -> str:
+        return self.identifier.visit()
+
 
 class Action:
     def __init__(self, action: Recurse | Transmit):
         self.action = action
+
+    def visit(self) -> str:
+        return self.action.visit()
 
 
 class Choice:
@@ -70,12 +91,54 @@ class Statement:
     def __init__(self, statement: Choice | Action):
         self.statement = statement
 
+    def visit(self) -> str:
+        return self.statement.visit()
+
 
 class Protocol:
     def __init__(self, identifier: Identifier, roles: Roles, statements: List[Statement]):
         self.identifier = identifier
         self.roles = roles
         self.statements = statements
+
+
+class Projector:
+    def project(self, root: Protocol):
+        roles = root.roles.visit()
+        for r in roles:
+            role_str = ''.join([f'role {R}, ' for R in roles]).removesuffix(', ')
+            with open(f'{r}.scr', "w") as f:
+                f.write(f'local protocol {root.identifier.visit()} at {r} ({role_str})')
+                f.writelines(self._project_local_protocol_for(r, root))
+
+    def _project_local_protocol_for(self, role: str, root : Protocol) -> List[str]:
+        actions = []
+        for stmt in root.statements:
+            actions.append(self._project_statement(role, stmt))
+        return actions
+
+    def _project_statement(self, role: str, s: Statement) -> str:
+        match s.statement:
+            case choice if isinstance(choice, Choice):
+                ...
+            case action if isinstance(action, Action):
+                return self._project_action(role, action)
+
+    def _project_action(self, role: str, a: Action) -> str:
+        match a.action:
+            case recurse if isinstance(recurse, Recurse):
+                return f'jump {recurse.visit()}'
+            case transmit if isinstance(transmit, Transmit):
+                return self._project_transmit(role, transmit)
+
+    def _project_transmit(self, role: str, t: Transmit) -> str:
+        sender = t.identifier1.visit()
+        receiver = t.identifier2.visit()
+        message = t.primary.visit()
+        if role == sender:
+            return f'\n{message} to {receiver}'
+        elif role == receiver:
+            return f'\n{message} from {sender}'
 
 
 class Parser:
@@ -241,7 +304,7 @@ class Parser:
             return Primary(str)
 
         if self._match(TokenType.INT):
-            return Primary(str)
+            return Primary(int)
 
         if self._match(TokenType.BOOL):
             return Primary(bool)
