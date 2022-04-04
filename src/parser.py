@@ -22,7 +22,7 @@ recurse             -> "do" identifier;
 roles               -> role ("," role)*;
 role                -> "role" identifier;
 identifier          -> [A-Z] ([A-Z] | [a-z] | 0 - 9)*;
-end                 -> "End";
+end                 -> "end";
 """
 
 

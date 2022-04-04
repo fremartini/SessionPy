@@ -33,28 +33,24 @@ class TokenType(Enum):
     TYPE = auto(),
 
     # types
-    STR = auto(),
-    INT = auto(),
-    BOOL = auto(),
     IDENTIFIER = auto(),
 
 
 keywords = {
     "global": TokenType.GLOBAL,
+    "local": TokenType.LOCAL,
     "protocol": TokenType.PROTOCOL,
     "role": TokenType.ROLE,
     "from": TokenType.FROM,
     "to": TokenType.TO,
     "choice": TokenType.CHOICE,
+    "offer": TokenType.OFFER,
+    "as": TokenType.AS,
     "at": TokenType.AT,
     "do": TokenType.DO,
     "or": TokenType.OR,
-}
-
-types = {
-    "int": TokenType.INT,
-    "str": TokenType.STR,
-    "bool": TokenType.BOOL,
+    "end": TokenType.END,
+    "type": TokenType.TYPE,
 }
 
 
@@ -103,6 +99,10 @@ class Lexer:
                 self._add_token(TokenType.SEMICOLON)
             case ',':
                 self._add_token(TokenType.COMMA)
+            case '<':
+                self._add_token(TokenType.LT)
+            case '>':
+                self._add_token(TokenType.GT)
             case x if x in [' ', '\r', '\t', '\n']:
                 return
             case x:
@@ -127,8 +127,7 @@ class Lexer:
         typ: TokenType = TokenType.IDENTIFIER
         if text in keywords:
             typ = keywords[text]
-        elif text in types:
-            typ = types[text]
+
         self._add_token_literal(typ, text)
 
     def _advance(self) -> str:
