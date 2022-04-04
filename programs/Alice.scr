@@ -1,0 +1,5 @@
+local protocol BuyerSeller at Alice(role Alice, role Bob, role Seller) {
+    Message to Seller;
+    Message from Seller;
+    Price to Bob;
+}

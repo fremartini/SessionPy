@@ -13,17 +13,24 @@ class TokenType(Enum):
     SEMICOLON = auto(),
     EOF = auto(),
     COMMA = auto(),
+    LT = auto(),
+    GT = auto(),
 
     # keywords
     GLOBAL = auto(),
+    LOCAL = auto(),
     PROTOCOL = auto(),
     ROLE = auto(),
     FROM = auto(),
     TO = auto()
     CHOICE = auto(),
+    OFFER = auto(),
+    AS = auto(),
     AT = auto(),
     DO = auto(),
     OR = auto(),
+    END = auto(),
+    TYPE = auto(),
 
     # types
     STR = auto(),

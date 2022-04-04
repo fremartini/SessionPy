@@ -1,5 +1,5 @@
-type <str> as Message
-type <float> as Price
+type <str> as Message;
+type <float> as Price;
 
 global protocol BuyerSeller(role Alice, role Bob, role Seller) {
     Prompt(Message) from Alice to Seller;

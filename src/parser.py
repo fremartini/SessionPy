@@ -3,17 +3,26 @@ from lexer import Token, TokenType
 from typing import List
 
 """
-protocol        -> "global" "protocol" identifier "(" roles ")" "{" statement* "}";
-statement       -> choice | action;
-choice          -> "choice" "at" identifier "{" statement* "}" "or" "{" statement* "}";
-action          -> (recurse | transmit) ";";
-recurse         -> "do" identifier;
-transmit        -> primary "from" identifier ("to | "from") identifier;
-roles           -> role ("," role)*;
-identifiers     -> identifier ("," identifier)*;
-role            -> "role" identifier;
-identifier      -> [A-Z] ([A-Z] | [a-z] | 0 - 9)*;
-primary         -> STR | INT | "BOOL;
+protocol            -> typedef* (global_protocol | local_protocol);
+
+global_protocol     -> "global" "protocol" identifier "(" roles ")" "{" global_statement* "}";
+global_statement    -> global_choice | global_action | end;
+global_choice       -> "choice" "from" identifier "to" identifier "{" global_statement* "}" "or" "{" global_statement* "}";
+global_action       -> (recurse | global_transmit) ";";
+global_transmit     -> identifier "from" identifier ("to | "from") identifier;
+
+local_protocol      -> "local" "protocol" identifier "at" identifier "(" roles ")" "{" local_statement* "}";
+local_statement     -> local_choice | local_action | end;
+local_choice        -> ("offer" "to" | "choice" "from") identifier "{" local_statement* "}" "or" "{" local_statement* "}"
+local_action        -> (recurse | local_transmit) ";";
+local_transmit      -> identifier ("to | "from") identifier;
+
+typedef             -> "type" "<" identifier ">" "as" identifier ";";
+recurse             -> "do" identifier;
+roles               -> role ("," role)*;
+role                -> "role" identifier;
+identifier          -> [A-Z] ([A-Z] | [a-z] | 0 - 9)*;
+end                 -> "End";
 """
 
 
