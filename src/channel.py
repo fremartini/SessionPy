@@ -14,9 +14,6 @@ class Branch(Enum):
     LEFT = 0
     RIGHT = 1
 
-    def equals(self, string):
-        return self.name == string
-
 
 class Channel(Generic[T]):
     def __init__(self, local: tuple[str, int] = None, remote: tuple[str, int] = None) -> None:
@@ -31,28 +28,29 @@ class Channel(Generic[T]):
             self.server_socket.bind(self.local)
 
     def send(self, e: Any) -> None:
-        if self.local_mode:
-            self._send_local(e)
-        else:
-            self._send_remote(e)
+        self._send_local(e) if self.local_mode else self._send_remote(e)
 
     def recv(self) -> Any:
-        if self.local_mode:
-            return self._recv_local()
-        else:
-            return self._recv_remote()
+        return self._recv_local() if self.local_mode else self._recv_remote()
 
     def offer(self) -> Branch:
-        maybe_branch: str = self.recv()
-        assert isinstance(maybe_branch, Branch), (maybe_branch, type(maybe_branch))
+        maybe_branch: Any = self.recv()
+        assert isinstance(maybe_branch, Branch)
         return maybe_branch
 
-    def choose(self, direction: Branch) -> None:
-        assert isinstance(direction, Branch)
-        self.send(direction)
+    def choose(self, branch: Branch) -> None:
+        assert isinstance(branch, Branch)
+        self.send(branch)
 
     def _send_local(self, e: Any) -> None:
         self.queue.append(e)
+
+    def _recv_local(self) -> Any:
+        if len(self.queue) == 0:
+            while True:
+                if len(self.queue) != 0:
+                    break
+        return self.queue.pop(0)
 
     def _send_remote(self, e: Any) -> None:
         with _spawn_socket() as client_socket:
@@ -63,21 +61,12 @@ class Channel(Generic[T]):
             except Exception as ex:
                 _trace(ex)
 
-    def _recv_local(self) -> Any:
-        if len(self.queue) == 0:
-            while True:
-                if len(self.queue) != 0:
-                    break
-
-        return self.queue.pop(0)
-
     def _recv_remote(self) -> Any:
         try:
-            self.server_socket.listen(2)
-            conn, address = self.server_socket.accept()
+            self.server_socket.listen()
+            conn, _ = self.server_socket.accept()
             with conn:
-                data = _decode(conn.recv(1024))
-                return data
+                return _decode(conn.recv(1024))
         except KeyboardInterrupt:
             _exit()
         except Exception as ex:
