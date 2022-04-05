@@ -267,8 +267,6 @@ class TypeChecker(NodeVisitor):
         debug_print('visit_BinOp', dump(node))
         l_typ = self.visit(node.left)
         r_typ = self.visit(node.right)
-        print('ltyp', l_typ)
-        print('rtyp', r_typ)
         return union(l_typ, r_typ)
 
     def visit_Constant(self, node: Constant) -> type:
@@ -280,11 +278,8 @@ class TypeChecker(NodeVisitor):
     def visit_Call(self, node: Call) -> Typ:
         debug_print('visit_Call', dump(node))
         call_func = self.visit(node.func)
-        print('call_func', call_func)
         if isinstance(call_func, str) and (call_func in self.function_queue or call_func in self.functions_that_alter_channels):
-            print('HERE')
             visited_args = [self.visit(arg) for arg in node.args]
-            print('args', visited_args)
             function: FunctionDef = self.function_queue[call_func] if call_func in self.function_queue else self.functions_that_alter_channels[call_func]
             if any(isinstance(arg, Node) for arg in visited_args):
                 # We passed a channel to a function
@@ -302,7 +297,6 @@ class TypeChecker(NodeVisitor):
                 self.visit_and_drop_function(call_func)
                 call_func = self.visit(node.func)
                 self.subst_var = pre_subst
-                print('call_func is now', call_func)
 
             else:
                 self.visit_and_drop_function(call_func)
