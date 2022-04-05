@@ -1,9 +1,9 @@
 local protocol BuyerSeller at Seller(role Alice, role Bob, role Seller) {
-    Message from Alice;
-    Message to Alice;
+    Prompt(Message) from Alice;
+    Answer(Message) to Alice;
 
     choice from Bob {
-        Message from Bob;
+        Response(Message) from Bob;
         End;
     } or {
         End;

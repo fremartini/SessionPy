@@ -1,7 +1,8 @@
 from lexer import Lexer
-from parser import Parser, Projector
+from parser import Parser
 
 if __name__ == '__main__':
-    tokens = Lexer('../programs/Alice.scr').lex()
+    tokens = Lexer('../programs/two_buyers.scr').lex()
     tree = Parser(tokens).parse()
-    Projector().project(tree)
+    print(tree)
+    #Projector().project(tree)
