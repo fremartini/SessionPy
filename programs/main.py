@@ -1,7 +1,7 @@
 from channel import Channel, Branch
 from sessiontype import *
 
-
+ch = Channel[Recv[str, Send[int, End]]]()
 def f(ch, ch1) -> str:
     ch.send(42)
     s = ch1.recv()
@@ -10,5 +10,5 @@ def f(ch, ch1) -> str:
     return s
 
 
-f(Channel[Send[int, Send[bool, End]]](), Channel[Recv[str, Send[int, End]]]())
+f(Channel[Send[int, Send[int, End]]](), ch)
 

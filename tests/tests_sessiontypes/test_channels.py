@@ -302,5 +302,34 @@ class TestVerifyChannels(unittest.TestCase):
         
         TypeChecker(get_ast(ok))
 
+    def test_passing_multiple_valid_channels_directly(self):
+        def ok():
+            def f(ch, ch1) -> str:
+                ch.send(42)
+                s = ch1.recv()
+                ch.send(100)
+                ch1.send(1239)
+                return s
+            f(Channel[Send[int, Send[int, End]]](), Channel[Recv[str, Send[int, End]]]())
+        TypeChecker(get_ast(ok))
+
+    def test_passing_multiple_channels_directly_with_wrong_type(self):
+        def ok():
+            def f(ch, ch1) -> str:
+                ch.send(42)
+                s = ch1.recv()
+                ch.send(100)
+                ch1.send(1239)
+                return s
+            f(Channel[Send[int, Send[bool, End]]](), Channel[Recv[str, Send[int, End]]]())
+        with self.assertRaises(SessionException):
+            TypeChecker(get_ast(ok))
+
+        
+
+
+
+
+
 if __name__ == '__main__':
     unittest.main()
