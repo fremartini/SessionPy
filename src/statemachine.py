@@ -3,6 +3,7 @@ from typing import TypeVar, Generic, Any
 import typing
 
 from lib import Typ, parameterise, str_to_typ, to_typing
+from sessiontype import SessionException
 
 A = TypeVar('A')
 
@@ -104,6 +105,9 @@ class Node:
         state = f'(s{self.id})' if self.accepting else f's{self.id}'
         return state
 
+    def __repr__(self) -> str:
+        return f'Node(state={self.id})'
+
     def next_nd(self):
         assert len(self.outgoing) == 1, "Function should not be called if it's not a single outgoing edge"
         points_to = list(self.outgoing.values())[0]
@@ -117,6 +121,8 @@ class Node:
         return list(self.outgoing.keys())[0]
 
     def outgoing_action(self) -> TSend | TRecv:
+        if len(self.outgoing) == 0:
+            raise SessionException(f'Channel {self} is done and exhausted')
         assert len(self.outgoing) == 1, "Function should not be called if it's not a single outgoing edge"
         key = self.get_edge()
         return key.__origin__

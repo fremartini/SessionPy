@@ -283,6 +283,24 @@ class TestVerifyChannels(unittest.TestCase):
 
         TypeChecker(get_ast(ok))
 
+    def test_simple_pass_to_function(self):
+        def ok():
+            ch = Channel[Send[int, End]]()
+            def sending_int(chan):
+                chan.send(42)
+            sending_int(ch)
+        
+        TypeChecker(get_ast(ok))
+
+    def test_twice_pass_to_function(self):
+        def ok():
+            ch = Channel[Send[int, Send[int, End]]]()
+            def sending_int(chan):
+                chan.send(42)
+            sending_int(ch)
+            sending_int(ch)
+        
+        TypeChecker(get_ast(ok))
 
 if __name__ == '__main__':
     unittest.main()
