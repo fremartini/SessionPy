@@ -82,9 +82,15 @@ class TypeChecker(NodeVisitor):
 
         self.get_latest_scope().bind_func(node.name, function_type.items())
         self.dup()
-        for (v, t) in params:
-            if not v in self.subst_var:
-                self.bind_var(v, t)
+        chans = self.get_latest_scope().get_kind(Node)
+        if chans:
+            for (v, t), (ch,nd) in zip(params, chans):
+                if not v in self.subst_var and v != ch:
+                    self.bind_var(v, t)
+        else:
+            for (v, t) in params:
+                if not v in self.subst_var:
+                    self.bind_var(v, t)
 
         for stm in node.body:
             self.visit(stm)
@@ -261,6 +267,8 @@ class TypeChecker(NodeVisitor):
         debug_print('visit_BinOp', dump(node))
         l_typ = self.visit(node.left)
         r_typ = self.visit(node.right)
+        print('ltyp', l_typ)
+        print('rtyp', r_typ)
         return union(l_typ, r_typ)
 
     def visit_Constant(self, node: Constant) -> type:
@@ -272,8 +280,11 @@ class TypeChecker(NodeVisitor):
     def visit_Call(self, node: Call) -> Typ:
         debug_print('visit_Call', dump(node))
         call_func = self.visit(node.func)
+        print('call_func', call_func)
         if isinstance(call_func, str) and (call_func in self.function_queue or call_func in self.functions_that_alter_channels):
+            print('HERE')
             visited_args = [self.visit(arg) for arg in node.args]
+            print('args', visited_args)
             function: FunctionDef = self.function_queue[call_func] if call_func in self.function_queue else self.functions_that_alter_channels[call_func]
             if any(isinstance(arg, Node) for arg in visited_args):
                 # We passed a channel to a function
@@ -281,16 +292,24 @@ class TypeChecker(NodeVisitor):
                 pre_subst = copy.deepcopy(self.subst_var)
                 self.functions_that_alter_channels[call_func] = function
                 for (param, typ), (arg_ast,arg) in zip(params, zip(node.args, visited_args)):
-                    if isinstance(arg, Node) and isinstance(arg_ast, Name):
-                        self.subst_var[param] = arg_ast.id
+                    if isinstance(arg, Node):
+                        if isinstance(arg_ast, Name):
+                            self.subst_var[param] = arg_ast.id
+                        else:
+                            self.bind_var(param, arg)
+                    
                 
                 self.visit_and_drop_function(call_func)
                 call_func = self.visit(node.func)
                 self.subst_var = pre_subst
+                print('call_func is now', call_func)
 
             else:
                 self.visit_and_drop_function(call_func)
                 call_func = self.visit(node.func)
+        # if isinstance(call_func, Node):
+        #     return call_func
+ 
         if isinstance(call_func, tuple):
             nd = call_func[0]
             args = self.get_function_args(node.args)
@@ -379,7 +398,9 @@ class TypeChecker(NodeVisitor):
         debug_print('visit_Subscript', dump(node))
         name = node.value.id.lower()
         if name in STR_ST_MAPPING:
-            fail_if(name == 'channel', "Subscript cannot contain a channel", SessionException)
+            if name == 'channel':
+                return STParser(ast.unparse(node)).build()
+            #fail_if(name == 'channel', "Subscript cannot contain a channel", SessionException)
             return ast.unparse(node)
         else:
             container = str_to_typ(name)
