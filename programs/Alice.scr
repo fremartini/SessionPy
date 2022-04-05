@@ -1,3 +1,6 @@
+type <str> as Message;
+type <float> as Price;
+
 local protocol BuyerSeller at Alice(role Alice, role Bob, role Seller) {
     Prompt(Message) to Seller;
     Answer(Message) from Seller;

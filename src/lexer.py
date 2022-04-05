@@ -49,7 +49,7 @@ keywords = {
     "at": TokenType.AT,
     "do": TokenType.DO,
     "or": TokenType.OR,
-    "end": TokenType.END,
+    "End": TokenType.END,
     "type": TokenType.TYPE,
 }
 
