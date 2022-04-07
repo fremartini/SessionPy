@@ -1,7 +1,5 @@
 import ast
-from cgi import test
 import copy
-from subprocess import call
 import sys
 from ast import *
 from functools import reduce
