@@ -15,18 +15,16 @@ from sessiontype import STR_ST_MAPPING, SessionException
 
 class TypeChecker(NodeVisitor):
 
-    def __init__(self, tree, inside_class=False, test_mode=True) -> None:
+    def __init__(self, tree, inside_class=False) -> None:
         self.inside_class = inside_class
         self.function_queue = {}
         self.functions_that_alter_channels = {}
         self.subst_var = {}
-        self.test_mode = test_mode
         self.environments: ImmutableList[Environment] = ImmutableList().add(Environment())
         self.in_functions: ImmutableList[FunctionDef] = ImmutableList()
         self.loop_entrypoints = set() # TODO: consider putting into environment
         self.visit(tree)
-        if self.test_mode:
-            self.visit_functions()
+        self.visit_functions()
         self.validate_postcondition()
 
     def visit_and_drop_function(self, key: str) -> None:
@@ -71,7 +69,6 @@ class TypeChecker(NodeVisitor):
         if not in_queue and node.name not in self.functions_that_alter_channels and not self.inside_class:
             return
         self.in_functions = self.in_functions.add(node)
-
         expected_return_type: type = self.get_return_type(node)
         params = self.visit(node.args)
         if self.inside_class:
@@ -84,9 +81,10 @@ class TypeChecker(NodeVisitor):
         self.dup()
         chans = self.get_latest_scope().get_kind(Node)
         if chans:
-            for (v, t), (ch,nd) in zip(params, chans):
-                if not v in self.subst_var and v != ch:
-                    self.bind_var(v, t)
+            for v, t in params:
+                for ch, nd in chans:
+                    if not isinstance(nd, Node) and not v in self.subst_var and v != ch:
+                        self.bind_var(v, t)
         else:
             for (v, t) in params:
                 if not v in self.subst_var:
@@ -291,7 +289,8 @@ class TypeChecker(NodeVisitor):
                         if isinstance(arg_ast, Name):
                             self.subst_var[param] = arg_ast.id
                         else:
-                            self.bind_var(param, arg)
+                            unioned = union(typ, arg)
+                            self.bind_var(param, unioned)
                     
                 
                 self.visit_and_drop_function(call_func)
@@ -301,14 +300,14 @@ class TypeChecker(NodeVisitor):
             else:
                 self.visit_and_drop_function(call_func)
                 call_func = self.visit(node.func)
-        # if isinstance(call_func, Node):
-        #     return call_func
- 
+        
         if isinstance(call_func, tuple):
-            nd = call_func[0]
             args = self.get_function_args(node.args)
             op = call_func[1]
             ch_name = node.func.value.id
+            nd = self.get_latest_scope().try_find(ch_name)
+            if not nd or nd and not isinstance(nd, Node):
+                nd = call_func[0]
             if ch_name in self.subst_var:
                 ch_name = self.subst_var[ch_name]
             match op:
@@ -370,16 +369,17 @@ class TypeChecker(NodeVisitor):
 
     def visit_While(self, node: While) -> None:
         debug_print('visit_While', dump(node))
-        self.visit(node.test)
-        self.verify_loop(node.body)
+        self.verify_loop(node)
 
     def visit_For(self, node: For) -> None:
         debug_print('visit_For', dump(node))
         target = self.visit(node.target)
         ite = self.visit(node.iter)
-        self.bind_var(target, ite)
+        assert isinstance(ite, ContainerType) or ite is str, ite
+        typ = ite.__args__[0] if isinstance(ite, ContainerType) else str
+        self.bind_var(target, typ)
 
-        self.verify_loop(node.body)
+        self.verify_loop(node)
 
     def visit_Dict(self, node: Dict) -> Dict[Typ, Typ]:
         debug_print('visit_Dict', dump(node))
@@ -485,14 +485,16 @@ class TypeChecker(NodeVisitor):
             fail_if(types_differ and not can_upcast,
                     f'function <{func_name}> expected {parameters}, got {arguments}')
 
-    def verify_loop(self, body):
+    def verify_loop(self, node: While | For):
         pre_chans = self.get_latest_scope().get_kind(Node)
         if pre_chans:
             nds = [chs[1] for chs in pre_chans]
             for nd in nds:
                 self.loop_entrypoints.add(nd.id) 
             pre_chans = nds
-        for stm in body:
+        if isinstance(node, While):
+            self.visit(node.test)
+        for stm in node.body:
             self.visit(stm)
         post_chans = self.get_latest_scope().get_kind(Node)
         if pre_chans and post_chans:

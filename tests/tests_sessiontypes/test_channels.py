@@ -325,6 +325,13 @@ class TestVerifyChannels(unittest.TestCase):
         with self.assertRaises(SessionException):
             TypeChecker(get_ast(ok))
 
+
+    def test_receiving_values_inside_send(self):
+        def ok():
+            ch = Channel[Recv[int, Recv[int, Send[int, End]]]]()
+            ch.send(ch.recv() + ch.recv())
+        TypeChecker(get_ast(ok))
+
         
 
 
