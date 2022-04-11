@@ -1,8 +1,12 @@
 from channel import Channel, Branch
 from sessiontype import *
 
-ch = Channel[Send[List[int], Send[Tuple[str, int], Send[Dict[int, float], End]]]]()
 
-ch.send([1,2])
-ch.send(('cool', 42))
-ch.send({3: 3.14})
+def ok():
+    def f(ch, ch1) -> str:
+        ch.send(42)
+        s = ch1.recv()
+        ch.send(100)
+        ch1.send(1239)
+        return s
+    f(Channel[Send[int, Send[int, End]]](), Channel[Recv[str, Send[int, End]]]())

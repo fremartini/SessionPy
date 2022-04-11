@@ -11,16 +11,40 @@ from lib import *
 from statemachine import STParser, Node, TLeft, TRight, TGoto
 from sessiontype import STR_ST_MAPPING, SessionException
 
-
 class TypeChecker(NodeVisitor):
 
     def __init__(self, tree, inside_class=False) -> None:
         self.inside_class = inside_class
+        self.function_queue = {}
+        self.functions_that_alter_channels = {}
+        self.subst_var = {}
         self.environments: ImmutableList[Environment] = ImmutableList().add(Environment())
         self.in_functions: ImmutableList[FunctionDef] = ImmutableList()
         self.loop_entrypoints = set() # TODO: consider putting into environment
         self.visit(tree)
+        self.visit_functions()
         self.validate_postcondition()
+
+    def visit_and_drop_function(self, key: str) -> None:
+        env = self.get_latest_scope()
+        #assert key in self.function_queue and not env.contains_function(key), "You may only call this function if you know we haven't evaluated it yet"
+        function = self.function_queue[key] if key in self.function_queue else self.functions_that_alter_channels[key]
+        self.visit(function)
+        if key in self.function_queue:
+            del self.function_queue[key]
+
+
+    def visit_functions(self):
+        """
+        For testing to work we would have to exhaust the dictionary of functions
+        before checking post-conditions.
+        Due to nested function, we need to do it inside a loop.
+        """
+        while self.function_queue:
+            for name in list(self.function_queue.keys()):
+                self.visit_and_drop_function(name)
+        
+
 
     def validate_postcondition(self):
         latest = self.get_latest_scope()
@@ -37,8 +61,12 @@ class TypeChecker(NodeVisitor):
             raise SessionException(msgs)
 
     def visit_FunctionDef(self, node: FunctionDef) -> Typ:
+        in_queue = self.in_function_queue(node.name)
+        if not in_queue and not self.inside_class:
+            self.function_queue[node.name] = node
+        if not in_queue and node.name not in self.functions_that_alter_channels and not self.inside_class:
+            return
         self.in_functions = self.in_functions.add(node)
-
         expected_return_type: type = self.get_return_type(node)
         params = self.visit(node.args)
         if self.inside_class:
@@ -49,14 +77,32 @@ class TypeChecker(NodeVisitor):
 
         self.get_latest_scope().bind_func(node.name, function_type.items())
         self.dup()
-        for (v, t) in params:
-            self.bind_var(v, t)
+        chans = self.get_latest_scope().get_kind(Node)
+        if chans:
+            for v, t in params:
+                for ch, nd in chans:
+                    if not isinstance(nd, Node) and not v in self.subst_var and v != ch:
+                        self.bind_var(v, t)
+        else:
+            for (v, t) in params:
+                if not v in self.subst_var:
+                    self.bind_var(v, t)
 
         for stm in node.body:
             self.visit(stm)
 
-        self.pop()
 
+        # Popping, but if we updated any channels in a lower scope, we need to
+        # bring them up to speed
+        env = self.pop()
+        chans = env.get_kind(Node)
+        for name, ch in chans:
+            current_env = self.get_latest_scope()
+            if current_env.contains_variable(name):
+                self.functions_that_alter_channels[node.name] = node
+                self.bind_var(name, ch)
+
+        
         self.in_functions = self.in_functions.tail()
 
         return function_type.items()
@@ -131,12 +177,17 @@ class TypeChecker(NodeVisitor):
 
     def visit_Name(self, node: Name) -> Tuple[str, Typ] | Typ:
         debug_print('visit_Name', dump(node))
-        if node.id == 'DEBUG':
+        name = node.id
+        if name == 'DEBUG':
             return self
-        opt = str_to_typ(node.id)
-        return opt or self.get_latest_scope().lookup_var_or_default(node.id,
+        if name in self.subst_var:
+            name = self.subst_var[name]
+        if name in self.functions_that_alter_channels:
+            return name
+        opt = str_to_typ(name)
+        return opt or self.get_latest_scope().lookup_var_or_default(name,
                                                                     self.get_latest_scope().lookup_func_or_default(
-                                                                        node.id, node.id))
+                                                                        name, name))
 
     def visit_Tuple(self, node: Tuple) -> None:
         debug_print('visit_Tuple', dump(node))
@@ -217,15 +268,46 @@ class TypeChecker(NodeVisitor):
     def visit_Constant(self, node: Constant) -> type:
         return type(node.value)
 
+    def in_function_queue(self, key) -> bool:
+        return type(key) is str and key in self.function_queue
+
     def visit_Call(self, node: Call) -> Typ:
         debug_print('visit_Call', dump(node))
         call_func = self.visit(node.func)
+        if isinstance(call_func, str) and (call_func in self.function_queue or call_func in self.functions_that_alter_channels):
+            visited_args = [self.visit(arg) for arg in node.args]
+            function: FunctionDef = self.function_queue[call_func] if call_func in self.function_queue else self.functions_that_alter_channels[call_func]
+            if any(isinstance(arg, Node) for arg in visited_args):
+                # We passed a channel to a function
+                params = self.visit(function.args)
+                pre_subst = copy.deepcopy(self.subst_var)
+                self.functions_that_alter_channels[call_func] = function
+                for (param, typ), (arg_ast,arg) in zip(params, zip(node.args, visited_args)):
+                    if isinstance(arg, Node):
+                        if isinstance(arg_ast, Name):
+                            self.subst_var[param] = arg_ast.id
+                        else:
+                            unioned = union(typ, arg)
+                            self.bind_var(param, unioned)
+                    
+                
+                self.visit_and_drop_function(call_func)
+                call_func = self.visit(node.func)
+                self.subst_var = pre_subst
+
+            else:
+                self.visit_and_drop_function(call_func)
+                call_func = self.visit(node.func)
         
         if isinstance(call_func, tuple):
-            nd = call_func[0]
             args = self.get_function_args(node.args)
             op = call_func[1]
             ch_name = node.func.value.id
+            nd = self.get_latest_scope().try_find(ch_name)
+            if not nd or nd and not isinstance(nd, Node):
+                nd = call_func[0]
+            if ch_name in self.subst_var:
+                ch_name = self.subst_var[ch_name]
             match op:
                 case 'recv':
                     valid_action, _ = nd.valid_action_type(op, None)
@@ -285,16 +367,17 @@ class TypeChecker(NodeVisitor):
 
     def visit_While(self, node: While) -> None:
         debug_print('visit_While', dump(node))
-        self.visit(node.test)
-        self.verify_loop(node.body)
+        self.verify_loop(node)
 
     def visit_For(self, node: For) -> None:
         debug_print('visit_For', dump(node))
         target = self.visit(node.target)
         ite = self.visit(node.iter)
-        self.bind_var(target, ite)
+        assert isinstance(ite, ContainerType) or ite is str, ite
+        typ = ite.__args__[0] if isinstance(ite, ContainerType) else str
+        self.bind_var(target, typ)
 
-        self.verify_loop(node.body)
+        self.verify_loop(node)
 
     def visit_Dict(self, node: Dict) -> Dict[Typ, Typ]:
         debug_print('visit_Dict', dump(node))
@@ -307,7 +390,9 @@ class TypeChecker(NodeVisitor):
         debug_print('visit_Subscript', dump(node))
         name = node.value.id.lower()
         if name in STR_ST_MAPPING:
-            fail_if(name == 'channel', "Subscript cannot contain a channel", SessionException)
+            if name == 'channel':
+                return STParser(ast.unparse(node)).build()
+            #fail_if(name == 'channel', "Subscript cannot contain a channel", SessionException)
             return ast.unparse(node)
         else:
             container = str_to_typ(name)
@@ -398,14 +483,16 @@ class TypeChecker(NodeVisitor):
             fail_if(types_differ and not can_upcast,
                     f'function <{func_name}> expected {parameters}, got {arguments}')
 
-    def verify_loop(self, body):
+    def verify_loop(self, node: While | For):
         pre_chans = self.get_latest_scope().get_kind(Node)
         if pre_chans:
             nds = [chs[1] for chs in pre_chans]
             for nd in nds:
                 self.loop_entrypoints.add(nd.id) 
             pre_chans = nds
-        for stm in body:
+        if isinstance(node, While):
+            self.visit(node.test)
+        for stm in node.body:
             self.visit(stm)
         post_chans = self.get_latest_scope().get_kind(Node)
         if pre_chans and post_chans:
@@ -466,7 +553,7 @@ class TypeChecker(NodeVisitor):
     def bind_var(self, var: str, typ: Typ) -> None:
         self.get_latest_scope().bind_var(var, typ)
 
-    def print_envs(self) -> None:
+    def print_envs(self, opt_title='') -> None:
         i = 0
         for env in self.environments.items():
             print(f'Env #{i}:', env)

@@ -283,6 +283,60 @@ class TestVerifyChannels(unittest.TestCase):
 
         TypeChecker(get_ast(ok))
 
+    def test_simple_pass_to_function(self):
+        def ok():
+            ch = Channel[Send[int, End]]()
+            def sending_int(chan):
+                chan.send(42)
+            sending_int(ch)
+        
+        TypeChecker(get_ast(ok))
+
+    def test_twice_pass_to_function(self):
+        def ok():
+            ch = Channel[Send[int, Send[int, End]]]()
+            def sending_int(chan):
+                chan.send(42)
+            sending_int(ch)
+            sending_int(ch)
+        
+        TypeChecker(get_ast(ok))
+
+    def test_passing_multiple_valid_channels_directly(self):
+        def ok():
+            def f(ch, ch1) -> str:
+                ch.send(42)
+                s = ch1.recv()
+                ch.send(100)
+                ch1.send(1239)
+                return s
+            f(Channel[Send[int, Send[int, End]]](), Channel[Recv[str, Send[int, End]]]())
+        TypeChecker(get_ast(ok))
+
+    def test_passing_multiple_channels_directly_with_wrong_type(self):
+        def ok():
+            def f(ch, ch1) -> str:
+                ch.send(42)
+                s = ch1.recv()
+                ch.send(100)
+                ch1.send(1239)
+                return s
+            f(Channel[Send[int, Send[bool, End]]](), Channel[Recv[str, Send[int, End]]]())
+        with self.assertRaises(SessionException):
+            TypeChecker(get_ast(ok))
+
+
+    def test_receiving_values_inside_send(self):
+        def ok():
+            ch = Channel[Recv[int, Recv[int, Send[int, End]]]]()
+            ch.send(ch.recv() + ch.recv())
+        TypeChecker(get_ast(ok))
+
+        
+
+
+
+
 
 if __name__ == '__main__':
     unittest.main()
