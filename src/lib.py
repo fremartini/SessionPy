@@ -91,8 +91,6 @@ def union(t1: Typ, t2: Typ) -> Typ:
 
         # TODO: Extend with other collections 
     else:
-        print('t1', t1)
-        print('t2', t2)
         if issubclass(t1, t2):
             return t2
         elif issubclass(t2, t1):
