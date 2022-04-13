@@ -8,7 +8,7 @@ from debug import *
 from environment import Environment
 from immutable_list import ImmutableList
 from lib import *
-from statemachine import STParser, Node, TLeft, TRight, TGoto
+from statemachine import STParser, Node, TGoto
 from sessiontype import STR_ST_MAPPING, SessionException
 
 class TypeChecker(NodeVisitor):
@@ -312,7 +312,7 @@ class TypeChecker(NodeVisitor):
                 case 'recv':
                     valid_action, _ = nd.valid_action_type(op, None)
                     if not valid_action:
-                        raise SessionException(f'expected a {nd.outgoing_action()()}, but recv was called')
+                        raise SessionException(f'expected a {nd.outgoing_action()}, but recv was called')
                     next_nd = nd.next_nd()
                     self.bind_var(ch_name, next_nd)
                     return nd.outgoing_type()
@@ -321,9 +321,12 @@ class TypeChecker(NodeVisitor):
                         items = args.items()
                         items[0] = parameterise(Tuple, items[0])
                         args = ImmutableList.of_list(items)
+                    print('nd', nd)
+                    print('out', nd.outgoing)
                     valid_action, valid_typ = nd.valid_action_type(op, args.head())
+
                     if not valid_action:
-                        raise SessionException(f'expected a {nd.outgoing_action()()}, but send was called')
+                        raise SessionException(f'expected a {nd.outgoing_action()}, but send was called')
                     elif not valid_typ:
                         raise SessionException(f'expected to send a {type_to_str(nd.outgoing_type())}, got {type_to_str(args.head())}')
                     next_nd = nd.next_nd()
