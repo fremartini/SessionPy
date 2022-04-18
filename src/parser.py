@@ -147,58 +147,6 @@ class Protocol:
         self.protocol = protocol
 
 
-class Projector:
-    def project(self, root: Protocol):
-        match root.protocol:
-            case g if isinstance(g, GlobalProtocol):
-                self._project_global_protocol(g)
-            case l if isinstance(l, LocalProtocol):
-                self._project_local_protocol(l)
-
-    def _project_global_protocol(self, protocol: GlobalProtocol):
-        ...
-
-    def _project_local_protocol(self, protocol: LocalProtocol):
-        roles = protocol.roles.visit()
-        for r in roles:
-            with open(f'{r}.py', "w") as f:
-                for s in protocol.statements:
-                    self._project_local_statement(s)
-
-    def _project_local_statement(self, s: LocalStatement):
-        match s.statement:
-            case local_choice if isinstance(local_choice, LocalChoice):
-                self._project_local_choice(local_choice)
-            case local_action if isinstance(local_action, LocalAction):
-                self._project_local_action(local_action)
-
-    def _project_global_statement(self, s: GlobalStatement):
-        ...
-
-    def _project_local_choice(self, c: LocalChoice):
-        ...
-
-    def _project_global_choice(self, c: GlobalChoice):
-        ...
-
-    def _project_local_action(self, a: LocalAction):
-        match a.action:
-            case recurse if isinstance(recurse, Recurse):
-                ...
-            case local_transmit if isinstance(local_transmit, LocalTransmit):
-                self._project_local_transmit(local_transmit)
-            case end if isinstance(end, End):
-                ...
-
-    def _project_global_action(self, a : GlobalAction):
-        ...
-
-    def _project_local_transmit(self, t: LocalTransmit):
-        ...
-
-    def _project_global_transmit(self, t: GlobalTransmit):
-        ...
-
 class Parser:
     def __init__(self, tokens: List[Token]):
         self.tokens: List[Token] = tokens
