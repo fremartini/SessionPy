@@ -127,18 +127,19 @@ class TypeChecker(NodeVisitor):
         if isinstance(subj, Node):
             ch_name = node.subject.func.value.id
             nd = subj
+
             fail_if(not len(nd.outgoing) == 2, "Node should have 2 outgoing edges", SessionException)
             fail_if(not len(node.cases) == 2, "Matching on session type operations should always have 2 cases", SessionException)
             
             for case in node.cases:
                 match_value = case.pattern
                 attribute = match_value.value
-                left_right = attribute.attr
+                branch_pick = attribute.attr
                 fail_if(not attribute.value.id == 'Branch', "Match case did not contain a Branch", SessionException)
-                fail_if(not left_right in ['LEFT', 'RIGHT'], "Branching operation should either be left or right", SessionException)
+                fail_if(not branch_pick in ['LEFT', 'RIGHT'], "Branching operation should either be left or right", SessionException)
 
                 self.bind_var(ch_name, nd)
-                new_nd = nd.outgoing[TLeft if left_right == 'LEFT' else TRight]
+                new_nd = nd.outgoing[Branch.LEFT if branch_pick == 'LEFT' else Branch.RIGHT]
                 self.bind_var(ch_name, new_nd)
                 for s in case.body:
                     self.visit(s)
@@ -321,8 +322,6 @@ class TypeChecker(NodeVisitor):
                         items = args.items()
                         items[0] = parameterise(Tuple, items[0])
                         args = ImmutableList.of_list(items)
-                    print('nd', nd)
-                    print('out', nd.outgoing)
                     valid_action, valid_typ = nd.valid_action_type(op, args.head())
 
                     if not valid_action:
@@ -334,7 +333,7 @@ class TypeChecker(NodeVisitor):
                 case 'offer':
                     return nd
                 case 'choose':
-                    new_nd = nd.outgoing[TLeft if args.head()[1] == 'LEFT' else TRight]
+                    new_nd = nd.outgoing[Branch.LEFT if args.head()[1] == 'LEFT' else Branch.RIGHT]
                     fail_if(new_nd is None, "Choose outgoing node was none", SessionException)
                     # FIXME: sanitise goto-skips
                     if new_nd.outgoing and isinstance(new_nd.get_edge(), TGoto):

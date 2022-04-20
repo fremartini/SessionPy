@@ -3,7 +3,7 @@ from enum import Enum
 from typing import TypeVar, Generic, Any
 import typing
 
-from lib import Typ, parameterise, str_to_typ, to_typing
+from lib import Typ, parameterise, str_to_typ, to_typing, Branch, type_to_str
 from sessiontype import SessionException
 
 A = TypeVar('A')
@@ -11,42 +11,64 @@ A = TypeVar('A')
 class Action(str, Enum):
     SEND = 'send'
     RECV = 'recv'
+    LABEL = 'label'
     BRANCH = 'branch'
 
-class Direction(str, Enum):
-    LEFT = 'left'
-    RIGHT = 'right'
-    
 
-class Transition():
-    def __init__(self, action : Action, typ=Any, actor=Any) -> None:
-        self.typ = typ
+"""
+Send TYPE [@ Actor]
+Receive TYPE [@ Actor]
+Label NAME SESSIONTYPE [@ Actor]
+Offer   ST_LEFT ST_RIGHT [@ Actor]
+Choice  ST_LEFT ST_RIGHT [@ Actor]
+"""
+
+
+class Transition:
+
+    def __init__(self, action) -> None:
         self.action = action
-        self.actor = actor
-        if self.action == Action.BRANCH:
+        self.actor = None
+        if action in [Action.SEND, Action.RECV]:
+            self.typ = Any
+        elif action == Action.BRANCH:
             self.left = None
             self.right = None
+        elif action == Action.LABEL:
+            self.name = ''
+            self.st = None
+        
+    def __eq__(self, __o: object) -> bool:
+        if self.action in [Action.SEND, Action.RECV]:
+            return self.typ == __o.typ and self.actor == __o.actor
+        elif self.action == Action.BRANCH:
+            return self.left == __o.left and self.right == __o.right
+        elif self.action == Action.LABEL:
+            return self.name == __o.name and self.st == __o.st
+        return False
+
+
+    def __hash__(self) -> int:
+        if self.action in [Action.SEND, Action.RECV]:
+            return hash(self.action) + hash(self.typ) + hash(self.actor)
+        elif self.action == Action.BRANCH:
+            return hash(self.action) + hash(self.left) + hash(self.right)
+        elif self.action == Action.LABEL:
+            return hash(self.name) + hash(self.st)
 
     def __repr__(self) -> str:
-        return self.__str__()
-
-    def __str__(self) -> str:
-        if self.action == Action.BRANCH:
-            str_repr = f'Branch(Left: {self.left}, Right: {self.right})'
-            return f'{str_repr} @ {self.actor}' if self.actor else str_repr
-        str_repr = f'{self.action} {self.typ}'
+        res = ''
+        if self.action in [Action.SEND, Action.RECV]:
+            res += f'{self.action.value} {type_to_str(self.typ)}'
+        elif self.action == Action.BRANCH:
+            res += f'{self.action}(left: {self.left}, right: {self.right})'
+        elif self.action == Action.LABEL:
+            res += f'{self.name} => {self.st}'
         if self.actor:
-            str_repr += f' @ {self.actor}'
-        return str_repr
-
-    def __eq__(self, other: object) -> bool:
-        return self.typ == other.typ and self.action == other.action and self.actor == other.actor
+            return res + f" @ {self.actor}"
+        return res
     
-    def __hash__(self) -> int:
-        key = self.__str__()
-        return hash(key)
-
-
+        
 
 class TLabel(Generic[A]):
     def __repr__(self) -> str:
@@ -118,15 +140,11 @@ class Node:
         assert len(self.outgoing) == 1, "Function should not be called if it's not a single outgoing edge"
         key = self.get_edge()
         typ = key.typ
-        assert isinstance(typ, Typ)
+        assert isinstance(typ, Typ), typ
         return typ
 
     def valid_action_type(self, action: str, typ: type = Any):
         assert action in str_transition_map, action
-        print('action_str', action)
-        print('outgoing_action', self.outgoing_action())
-        print('typ', typ)
-        print('outgoing typ', self.outgoing_type())
         return action == self.outgoing_action(), typ == self.outgoing_type() or typ is Any
 
 
@@ -138,7 +156,6 @@ class STParser(NodeVisitor):
     """
 
     def __init__(self, src: str):
-        print(src)
         self.session_tuple = None
         self.id = 0
         tree = parse(src)
@@ -157,23 +174,17 @@ class STParser(NodeVisitor):
     def visit_Name(self, node: Name) -> Any:
         match node.id.lower():
             case 'send':
-                return Transition(Action.SEND, actor=None)
-            case 'send1':
                 return Transition(Action.SEND)
             case 'recv':
-                return Transition(Action.RECV, actor=None)
-            case 'recv1':
                 return Transition(Action.RECV)
             case 'end':
                 return STEnd()
             case 'offer':
-                return Transition(Action.BRANCH, actor=None)
-            case 'choice':
-                return Transition(Action.BRANCH, actor=None)
-            case 'choice1':
+                return Transition(Action.BRANCH)
+            case 'choose':
                 return Transition(Action.BRANCH)
             case 'label':
-                return TLabel()
+                return Transition(Action.LABEL)
             case 'channel':
                 return None
             case x:
@@ -187,40 +198,35 @@ class STParser(NodeVisitor):
     def visit_Subscript(self, node: Subscript) -> Any:
         value = self.visit(node.value)
         slice = self.visit(node.slice)
-        print('\nvalue', value)
-        print('slice', slice)
+        if isinstance(value, Transition):
+            if value.action in [Action.SEND, Action.RECV]:
+                value.typ = slice[0]
+                if len(slice) == 3:
+                    value.actor = slice[1]
+                    slice = slice[2:][0]
+                else:
+                    slice = slice[1:][0]
+            elif value.action == Action.BRANCH:
+                if len(slice) == 3:
+                    value.actor = slice[0]
+                    slice = slice[1:]
+                value.left = slice[0]
+                value.right = slice[1]
+            elif value.action == Action.LABEL:
+                value.name = slice[0]
+                if len(slice) == 3:
+                    value.actor = slice[1]
+                    value.st = slice[2]
+                    slice = slice[2:][0]
+                else:
+                    value.st = slice[1]
+                    slice = slice[1:][0]
+                    
+
+
         if not value:
             self.session_tuple = slice
             return
-
-        if isinstance(value, Transition):
-            if value.actor:
-                if value.action == Action.BRANCH:
-                    actor = slice[0]
-                else:
-                    actor = slice[1]
-                assert type(actor) is str, actor
-                value.actor = actor
-            if value.action == Action.BRANCH:
-                offset = 0
-                if value.actor:
-                    offset = 1
-                value.left = slice[0 + offset]
-                value.right = slice[1 + offset]
-                return value
-            else:
-                typ = slice[0]
-                #assert type(typ) is type, typ
-                value.typ = typ
-            if value.actor or value.action == Action.BRANCH:
-                slice = slice[2:]
-            else:
-                slice = slice[1:]
-        print('slice is', slice)
-        if type(slice) == list:
-            slice = slice[0]
-        print('new value', value)
-        print('new slice', slice)
         self.session_tuple = slice if not value else (value, slice)
         return value, slice
 
@@ -258,52 +264,42 @@ class STParser(NodeVisitor):
                     node.outgoing[goto_trans] = labels[lab]
                 else:
                     forwarded_labs[lab] = node
-            
             if isinstance(tup, Transition):
                 head = tup
             else:
                 head, tail = tup[0], tup[1]
-
-            if head.action in [Action.SEND, Action.RECV]:
-                nd = new_node()
-                go(tail,nd)
-                node.outgoing[head] = nd
-                return nd, head
-            elif head.action == Action.BRANCH:
-                print('we found a branch')
-                st1, st2 = head.left, head.right
-                l, r = new_node(), new_node()
-                go(st1, l)
-                go(st2, r)
-                node.outgoing[Direction.LEFT] = l
-                node.outgoing[Direction.RIGHT] = r
-                return l, r
-            else: 
-                head = head.__class__
-            if head in [TOffer, TChoose]:
-                st1, st2 = tail[0], tail[1]
-                l, r = new_node(), new_node()
-                go(st1, l)
-                go(st2, r)
-                tl, tr = TLeft, TRight
-                node.outgoing[tl] = l
-                node.outgoing[tr] = r
-                return l, r
-            elif head in [TLabel]:
-                lab = tail[0]
-                tl = tail[1]
-                labels[lab] = node
-                if lab in forwarded_labs:
-                    forwarded_labs[lab].outgoing[TGoto(lab)] = node
-                if isinstance(tl, str):
-                    assert tl in labels, tl
-                    goto_trans = TGoto(tl)
-                    node.outgoing[goto_trans] = labels[tl]
-                else:
-                    _, key = go(tl, node)
-            else:
-                if head == STEnd:
-                    node.accepting = True
+            if isinstance(head, Transition):
+                if head.action == Action.LABEL:
+                    lab = head.name
+                    tl = head.st
+                    labels[lab] = node
+                    if lab in forwarded_labs:
+                        forwarded_labs[lab].outgoing[TGoto(lab)] = node
+                    if isinstance(tl, str):
+                        assert tl in labels, tl
+                        goto_trans = TGoto(tl)
+                        node.outgoing[goto_trans] = labels[tl]
+                    else:
+                        go(tl, node)
+                elif head.action in [Action.SEND, Action.RECV]:
+                    nd = new_node()
+                    typ = head.typ
+                    if isinstance(typ, tuple):
+                        head.typ = parameterise(to_typing(head.typ[0]), [head.typ[1]])
+                    go(tail,nd)
+                    node.outgoing[head] = nd
+                    return nd, head
+                elif head.action == Action.BRANCH:
+                    st1, st2 = head.left, head.right
+                    l, r = new_node(), new_node()
+                    go(st1, l)
+                    go(st2, r)
+                    node.outgoing[Branch.LEFT] = l
+                    node.outgoing[Branch.RIGHT] = r
+                    return l, r
+            head = head.__class__
+            if head == STEnd:
+                node.accepting = True
 
         go(self.session_tuple, ref)
         return root
@@ -318,18 +314,11 @@ def print_node(n: Node):
         if key in seen:
             return
         s = ''
-        if isinstance(key, Transition):
-            if key.action in [Action.SEND, Action.RECV]:
-                typ = key.typ
-                s += f'{key} -> {n.outgoing[key]}'
-            else:
-                s += f'left  -> {key.left}'
-                s += f'right -> {key.right}'
+        if isinstance(key, Transition | Branch):
+            s += f'{key} -> {n.outgoing[key]}'
         elif isinstance(key, typing._GenericAlias):
             typ = key.__args__[0]
             s += f'{key()} {typ} -> {n.outgoing[key]}'
-        elif isinstance(key, Direction):
-            s += f'{key} -> {n.outgoing[key]}'
         else:
             assert isinstance(key, TGoto), key
             seen.add(key.get_label())
@@ -348,18 +337,6 @@ def print_node(n: Node):
 
 
 if __name__ == '__main__':
-    #st = STParser("Channel[Send[int, Recv[str, End]]]")
-    st1 = OldSTParser("Channel[Send[List[int], Send[Tuple[str, int], Send[Dict[int, float], End]]]]")
-    #st_actor = STParser("Channel[Send1[int, 'Alice', Recv1[str, 'Bob', End]]]")
-    print('tuple:', st1.session_tuple)
-    nd = st1.build()
-    print_node(nd)
-    # print('no actor:', st.session_tuple)
-    # print('w/ actor:', st_actor.session_tuple)
-
-    # print('no actor:')
-    # print_node(st.build())
-    # print('w/ actor:')
-    # print_node(st_actor.build())
-    # nd = st.build()
-    # print_node(nd)
+    graph = STParser("Channel[Send[int, End]]").build()
+    print('graph.outgoing', graph.outgoing)
+    print(Transition(Action.SEND) in graph.outgoing)

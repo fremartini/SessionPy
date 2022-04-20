@@ -3,11 +3,12 @@ import typing
 from types import GenericAlias
 import os
 from pydoc import locate
+from enum import Enum
 
 from debug import debug_print
 
 FunctionTyp = list  # of types
-ContainerType = Union[typing._GenericAlias, GenericAlias]
+ContainerType = Union[typing._GenericAlias, GenericAlias, tuple]
 Typ = Union[type, FunctionTyp, ContainerType]
 
 
@@ -194,6 +195,12 @@ def type_to_str(typ: Typ) -> str:
         return f'{typ.__origin__.__name__}[{",".join(elems)}]'
     elif typ == Any:
         return 'Any'
+    elif isinstance(typ, tuple):
+        return typ
     else:
-        assert False, ('unsupported type:', typ)
+        assert False, typ
 
+
+class Branch(str, Enum):
+    LEFT = 'LEFT'
+    RIGHT = 'RIGHT'
