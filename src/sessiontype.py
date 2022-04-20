@@ -30,26 +30,6 @@ class Label(SessionType, Generic[A, ST]):
     ...
 
 
-class Send1(SessionType, Generic[A, Actor, ST]):
-    ...
-
-
-class Recv1(SessionType, Generic[A, Actor, ST]):
-    ...
-
-
-class Offer1(SessionType, Generic[ST, Actor, ST1]):
-    ...
-
-
-class Choose1(SessionType, Generic[ST, Actor, ST1]):
-    ...
-
-
-class Label1(SessionType, Generic[A, Actor, ST]):
-    ...
-
-
 class End(SessionType):
     ...
 
