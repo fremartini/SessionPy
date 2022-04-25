@@ -3,6 +3,7 @@ from typing import TypeVar, Generic
 ST = TypeVar('ST')
 ST1 = TypeVar('ST1')
 A = TypeVar('A')
+Actor = TypeVar('Actor')
 
 
 class SessionType:

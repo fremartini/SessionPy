@@ -1,28 +1,74 @@
 from ast import *
+from enum import Enum
 from typing import TypeVar, Generic, Any
 import typing
 
-from lib import Typ, parameterise, str_to_typ, to_typing
+from lib import Typ, parameterise, str_to_typ, to_typing, Branch, type_to_str
 from sessiontype import SessionException
 
 A = TypeVar('A')
 
+class Action(str, Enum):
+    SEND = 'send'
+    RECV = 'recv'
+    LABEL = 'label'
+    BRANCH = 'branch'
 
-class TSend(Generic[A]):
+
+"""
+Send TYPE [@ Actor]
+Receive TYPE [@ Actor]
+Label NAME SESSIONTYPE [@ Actor]
+Offer   ST_LEFT ST_RIGHT [@ Actor]
+Choice  ST_LEFT ST_RIGHT [@ Actor]
+"""
+
+
+class Transition:
+
+    def __init__(self, action) -> None:
+        self.action = action
+        self.actor = None
+        if action in [Action.SEND, Action.RECV]:
+            self.typ = Any
+        elif action == Action.BRANCH:
+            self.left = None
+            self.right = None
+        elif action == Action.LABEL:
+            self.name = ''
+            self.st = None
+        
+    def __eq__(self, __o: object) -> bool:
+        if self.action in [Action.SEND, Action.RECV]:
+            return self.typ == __o.typ and self.actor == __o.actor
+        elif self.action == Action.BRANCH:
+            return self.left == __o.left and self.right == __o.right
+        elif self.action == Action.LABEL:
+            return self.name == __o.name and self.st == __o.st
+        return False
+
+
+    def __hash__(self) -> int:
+        if self.action in [Action.SEND, Action.RECV]:
+            return hash(self.action) + hash(self.typ) + hash(self.actor)
+        elif self.action == Action.BRANCH:
+            return hash(self.action) + hash(self.left) + hash(self.right)
+        elif self.action == Action.LABEL:
+            return hash(self.name) + hash(self.st)
+
     def __repr__(self) -> str:
-        return self.__str__()
-
-    def __str__(self) -> str:
-        return f'send'
-
-
-class TRecv(Generic[A]):
-    def __repr__(self) -> str:
-        return self.__str__()
-
-    def __str__(self) -> str:
-        return f'recv'
-
+        res = ''
+        if self.action in [Action.SEND, Action.RECV]:
+            res += f'{self.action.value} {type_to_str(self.typ)}'
+        elif self.action == Action.BRANCH:
+            res += f'{self.action}(left: {self.left}, right: {self.right})'
+        elif self.action == Action.LABEL:
+            res += f'{self.name} => {self.st}'
+        if self.actor:
+            return res + f" @ {self.actor}"
+        return res
+    
+        
 
 class TLabel(Generic[A]):
     def __repr__(self) -> str:
@@ -31,47 +77,12 @@ class TLabel(Generic[A]):
     def __str__(self) -> str:
         return f'label'
 
-
-class TOffer(Generic[A]):
-    def __repr__(self) -> str:
-        return self.__str__()
-
-    def __str__(self) -> str:
-        return f'offer'
-
-
-class TChoose(Generic[A]):
-    def __repr__(self) -> str:
-        return self.__str__()
-
-    def __str__(self) -> str:
-        return f'choose'
-
-
 class STEnd:
     def __str__(self) -> str:
         return 'end'
 
     def __repr__(self) -> str:
         return self.__str__()
-
-
-class TEps:
-    def __str__(self) -> str:
-        return 'ε'
-
-    def __repr__(self) -> str:
-        return self.__str__()
-
-
-class TLeft:
-    def __repr__(self) -> str:
-        return 'left'
-
-
-class TRight:
-    def __repr__(self) -> str:
-        return 'right'
 
 
 class TGoto:
@@ -85,13 +96,11 @@ class TGoto:
         return f'goto {self.lab}'
 
 
-Transition = TSend | TRecv | TGoto | TLeft | TRight
-
 str_transition_map = {
-    "recv": TRecv,
-    "send": TSend,
-    "offer": TOffer,
-    "choose": TChoose,
+    "recv": Transition(Action.RECV),
+    "send": Transition(Action.SEND),
+    "offer": Transition(Action.BRANCH),
+    "choice": Transition(Action.BRANCH),
 }
 
 
@@ -120,23 +129,22 @@ class Node:
         assert len(self.outgoing) > 0, "Function should at least contain a single edge"
         return list(self.outgoing.keys())[0]
 
-    def outgoing_action(self) -> TSend | TRecv:
+    def outgoing_action(self):
         if len(self.outgoing) == 0:
             raise SessionException(f'Channel {self} is done and exhausted')
         assert len(self.outgoing) == 1, "Function should not be called if it's not a single outgoing edge"
         key = self.get_edge()
-        return key.__origin__
+        return key.action
 
     def outgoing_type(self) -> type:
         assert len(self.outgoing) == 1, "Function should not be called if it's not a single outgoing edge"
         key = self.get_edge()
-        typ = key.__args__[0]
-        assert isinstance(typ, Typ)
+        typ = key.typ
+        assert isinstance(typ, Typ), typ
         return typ
 
     def valid_action_type(self, action: str, typ: type = Any):
         assert action in str_transition_map, action
-        action = str_transition_map[action]
         return action == self.outgoing_action(), typ == self.outgoing_type() or typ is Any
 
 
@@ -149,24 +157,34 @@ class STParser(NodeVisitor):
 
     def __init__(self, src: str):
         self.session_tuple = None
+        self.id = 0
         tree = parse(src)
+        self.root = self.new_node()
         self.visit(tree)
         assert self.session_tuple
+
+    def next_id(self) -> int:
+        res = self.id
+        self.id += 1
+        return res
+
+    def new_node(self) -> Node:
+        return Node(self.next_id())
 
     def visit_Name(self, node: Name) -> Any:
         match node.id.lower():
             case 'send':
-                return TSend()
+                return Transition(Action.SEND)
             case 'recv':
-                return TRecv()
+                return Transition(Action.RECV)
             case 'end':
                 return STEnd()
             case 'offer':
-                return TOffer()
+                return Transition(Action.BRANCH)
             case 'choose':
-                return TChoose()
+                return Transition(Action.BRANCH)
             case 'label':
-                return TLabel()
+                return Transition(Action.LABEL)
             case 'channel':
                 return None
             case x:
@@ -177,12 +195,38 @@ class STParser(NodeVisitor):
         elems = [self.visit(el) for el in node.elts]
         return tuple(elems)
 
-    def visit_Dict(self, node: Dict) -> Any:
-        print('will I ever hit this')
-
     def visit_Subscript(self, node: Subscript) -> Any:
         value = self.visit(node.value)
         slice = self.visit(node.slice)
+        if isinstance(value, Transition):
+            if value.action in [Action.SEND, Action.RECV]:
+                value.typ = slice[0]
+                if len(slice) == 3:
+                    value.actor = slice[1]
+                    slice = slice[2:][0]
+                else:
+                    slice = slice[1:][0]
+            elif value.action == Action.BRANCH:
+                if len(slice) == 3:
+                    value.actor = slice[0]
+                    slice = slice[1:]
+                value.left = slice[0]
+                value.right = slice[1]
+            elif value.action == Action.LABEL:
+                value.name = slice[0]
+                if len(slice) == 3:
+                    value.actor = slice[1]
+                    value.st = slice[2]
+                    slice = slice[2:][0]
+                else:
+                    value.st = slice[1]
+                    slice = slice[1:][0]
+                    
+
+
+        if not value:
+            self.session_tuple = slice
+            return
         self.session_tuple = slice if not value else (value, slice)
         return value, slice
 
@@ -220,42 +264,42 @@ class STParser(NodeVisitor):
                     node.outgoing[goto_trans] = labels[lab]
                 else:
                     forwarded_labs[lab] = node
-            head, tail = tup[0], tup[1]
-            head = head.__class__
-            if head in [TRecv, TSend]:
-                typ = tail[0]
-                assert isinstance(typ, type | tuple), typ
-                nd = new_node()
-                if isinstance(typ, tuple):
-                    typ = parameterise(to_typing(typ[0]), [typ[1]])
-                key = head[typ]
-                go(tail[1], nd)
-                node.outgoing[key] = nd
-                return nd, key
-            elif head in [TOffer, TChoose]:
-                st1, st2 = tail[0], tail[1]
-                l, r = new_node(), new_node()
-                go(st1, l)
-                go(st2, r)
-                tl, tr = TLeft, TRight
-                node.outgoing[tl] = l
-                node.outgoing[tr] = r
-                return l, r
-            elif head in [TLabel]:
-                lab = tail[0]
-                tl = tail[1]
-                labels[lab] = node
-                if lab in forwarded_labs:
-                    forwarded_labs[lab].outgoing[TGoto(lab)] = node
-                if isinstance(tl, str):
-                    assert tl in labels, tl
-                    goto_trans = TGoto(tl)
-                    node.outgoing[goto_trans] = labels[tl]
-                else:
-                    _, key = go(tl, node)
+            if isinstance(tup, Transition):
+                head = tup
             else:
-                if head == STEnd:
-                    node.accepting = True
+                head, tail = tup[0], tup[1]
+            if isinstance(head, Transition):
+                if head.action == Action.LABEL:
+                    lab = head.name
+                    tl = head.st
+                    labels[lab] = node
+                    if lab in forwarded_labs:
+                        forwarded_labs[lab].outgoing[TGoto(lab)] = node
+                    if isinstance(tl, str):
+                        assert tl in labels, tl
+                        goto_trans = TGoto(tl)
+                        node.outgoing[goto_trans] = labels[tl]
+                    else:
+                        go(tl, node)
+                elif head.action in [Action.SEND, Action.RECV]:
+                    nd = new_node()
+                    typ = head.typ
+                    if isinstance(typ, tuple):
+                        head.typ = parameterise(to_typing(head.typ[0]), [head.typ[1]])
+                    go(tail,nd)
+                    node.outgoing[head] = nd
+                    return nd, head
+                elif head.action == Action.BRANCH:
+                    st1, st2 = head.left, head.right
+                    l, r = new_node(), new_node()
+                    go(st1, l)
+                    go(st2, r)
+                    node.outgoing[Branch.LEFT] = l
+                    node.outgoing[Branch.RIGHT] = r
+                    return l, r
+            head = head.__class__
+            if head == STEnd:
+                node.accepting = True
 
         go(self.session_tuple, ref)
         return root
@@ -270,11 +314,11 @@ def print_node(n: Node):
         if key in seen:
             return
         s = ''
-        if isinstance(key, typing._GenericAlias):
+        if isinstance(key, Transition | Branch):
+            s += f'{key} -> {n.outgoing[key]}'
+        elif isinstance(key, typing._GenericAlias):
             typ = key.__args__[0]
             s += f'{key()} {typ} -> {n.outgoing[key]}'
-        elif key in [TLeft, TRight]:
-            s += f'{key()} -> {n.outgoing[key]}'
         else:
             assert isinstance(key, TGoto), key
             seen.add(key.get_label())
@@ -293,6 +337,6 @@ def print_node(n: Node):
 
 
 if __name__ == '__main__':
-    st = STParser("Channel[Send[List[int], Send[ Dict[str, int], Send[ Tuple[int, float], End]]]]")
-    print(st.session_tuple)
-    print_node(st.build())
+    graph = STParser("Channel[Send[int, End]]").build()
+    print('graph.outgoing', graph.outgoing)
+    print(Transition(Action.SEND) in graph.outgoing)

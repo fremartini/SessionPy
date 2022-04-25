@@ -2,17 +2,12 @@ import sys
 import traceback
 from typing import Any
 import pickle
-
+from lib import Branch
 from sessiontype import *
 from enum import Enum
 import socket
 
 T = TypeVar('T')
-
-
-class Branch(Enum):
-    LEFT = 0
-    RIGHT = 1
 
 
 class Channel(Generic[T]):

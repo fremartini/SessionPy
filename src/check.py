@@ -8,7 +8,7 @@ from debug import *
 from environment import Environment
 from immutable_list import ImmutableList
 from lib import *
-from statemachine import STParser, Node, TLeft, TRight, TGoto
+from statemachine import STParser, Node, TGoto
 from sessiontype import STR_ST_MAPPING, SessionException
 
 class TypeChecker(NodeVisitor):
@@ -127,18 +127,19 @@ class TypeChecker(NodeVisitor):
         if isinstance(subj, Node):
             ch_name = node.subject.func.value.id
             nd = subj
+
             fail_if(not len(nd.outgoing) == 2, "Node should have 2 outgoing edges", SessionException)
             fail_if(not len(node.cases) == 2, "Matching on session type operations should always have 2 cases", SessionException)
             
             for case in node.cases:
                 match_value = case.pattern
                 attribute = match_value.value
-                left_right = attribute.attr
+                branch_pick = attribute.attr
                 fail_if(not attribute.value.id == 'Branch', "Match case did not contain a Branch", SessionException)
-                fail_if(not left_right in ['LEFT', 'RIGHT'], "Branching operation should either be left or right", SessionException)
+                fail_if(not branch_pick in ['LEFT', 'RIGHT'], "Branching operation should either be left or right", SessionException)
 
                 self.bind_var(ch_name, nd)
-                new_nd = nd.outgoing[TLeft if left_right == 'LEFT' else TRight]
+                new_nd = nd.outgoing[Branch.LEFT if branch_pick == 'LEFT' else Branch.RIGHT]
                 self.bind_var(ch_name, new_nd)
                 for s in case.body:
                     self.visit(s)
@@ -312,7 +313,7 @@ class TypeChecker(NodeVisitor):
                 case 'recv':
                     valid_action, _ = nd.valid_action_type(op, None)
                     if not valid_action:
-                        raise SessionException(f'expected a {nd.outgoing_action()()}, but recv was called')
+                        raise SessionException(f'expected a {nd.outgoing_action()}, but recv was called')
                     next_nd = nd.next_nd()
                     self.bind_var(ch_name, next_nd)
                     return nd.outgoing_type()
@@ -322,8 +323,9 @@ class TypeChecker(NodeVisitor):
                         items[0] = parameterise(Tuple, items[0])
                         args = ImmutableList.of_list(items)
                     valid_action, valid_typ = nd.valid_action_type(op, args.head())
+
                     if not valid_action:
-                        raise SessionException(f'expected a {nd.outgoing_action()()}, but send was called')
+                        raise SessionException(f'expected a {nd.outgoing_action()}, but send was called')
                     elif not valid_typ:
                         raise SessionException(f'expected to send a {type_to_str(nd.outgoing_type())}, got {type_to_str(args.head())}')
                     next_nd = nd.next_nd()
@@ -331,7 +333,7 @@ class TypeChecker(NodeVisitor):
                 case 'offer':
                     return nd
                 case 'choose':
-                    new_nd = nd.outgoing[TLeft if args.head()[1] == 'LEFT' else TRight]
+                    new_nd = nd.outgoing[Branch.LEFT if args.head()[1] == 'LEFT' else Branch.RIGHT]
                     fail_if(new_nd is None, "Choose outgoing node was none", SessionException)
                     # FIXME: sanitise goto-skips
                     if new_nd.outgoing and isinstance(new_nd.get_edge(), TGoto):

@@ -9,7 +9,9 @@ class TestStatemachine(unittest.TestCase):
 
     def test_stparser_given_send_int_has_correct_edge_type(self):
         graph = STParser("Channel[Send[int, End]]").build()
-        self.assertTrue(TSend[int] in graph.outgoing)
+        send_int = Transition(Action.SEND)
+        send_int.typ = int
+        self.assertTrue(send_int in graph.outgoing)
 
     def test_stparser_given_send_int_has_accepting_end_node(self):
         graph = STParser("Channel[Send[int, End]]").build()
@@ -21,8 +23,8 @@ class TestStatemachine(unittest.TestCase):
 
     def test_stparser_given_offer_edges_have_correct_types(self):
         graph = STParser("Channel[Offer[Send[int, End],Recv[int, End]]]").build()
-        self.assertTrue(TLeft in graph.outgoing)
-        self.assertTrue(TRight in graph.outgoing)
+        self.assertTrue(Branch.LEFT in graph.outgoing)
+        self.assertTrue(Branch.RIGHT in graph.outgoing)
 
     def test_stparser_given_choose_has_two_outgoing_edges(self):
         graph = STParser("Channel[Choose[Send[int, End],Recv[int, End]]]").build()
@@ -30,8 +32,8 @@ class TestStatemachine(unittest.TestCase):
 
     def test_stparser_given_choose_edges_have_correct_types(self):
         graph = STParser("Channel[Choose[Send[int, End],Recv[int, End]]]").build()
-        self.assertTrue(TLeft in graph.outgoing)
-        self.assertTrue(TRight in graph.outgoing)
+        self.assertTrue(Branch.LEFT in graph.outgoing)
+        self.assertTrue(Branch.RIGHT in graph.outgoing)
 
     def test_stparser_given_label_builds_circular_reference(self):
         graph = STParser("Channel[Label[\"loop\", Send[int, \"loop\"]]]").build()

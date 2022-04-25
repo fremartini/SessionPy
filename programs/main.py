@@ -1,12 +1,15 @@
 from channel import Channel, Branch
 from sessiontype import *
 
-
 def ok():
-    def f(ch, ch1) -> str:
-        ch.send(42)
-        s = ch1.recv()
-        ch.send(100)
-        ch1.send(1239)
-        return s
-    f(Channel[Send[int, Send[int, End]]](), Channel[Recv[str, Send[int, End]]]())
+    LeftOffer = Send[Tuple[str, int], 'repeat']
+    RightOffer = Recv[str, Send[Dict[float, str], 'repeat']]
+    ch = Channel[Send[List[int], Label['repeat', Offer[LeftOffer, RightOffer]]]]()
+    ch.send([1, 2])
+    while 2 + 2 == 4:
+        match ch.offer():
+            case Branch.LEFT:
+                ch.send(('cool', 42))
+            case Branch.RIGHT:
+                s = ch.recv()
+                ch.send({3.14: 'pi'})
