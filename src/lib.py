@@ -1,3 +1,4 @@
+from sys import builtin_module_names
 from typing import *
 import typing
 from types import GenericAlias
@@ -181,10 +182,14 @@ def assert_eq(expected, actual):
         raise Exception("expected " + str(expected) + ", found " + str(actual))
 
 def str_to_typ(s: str) -> type:
+    if s in ['main', 'Channel'] or s in builtin_module_names:
+        return s
     opt = locate(s)
     opt_lower = locate(s.lower())
     if not opt and opt_lower:
         opt = to_typing(opt_lower)
+    if opt == 'builtins':
+        return str
     return opt
     
 def type_to_str(typ: Typ) -> str:

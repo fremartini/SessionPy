@@ -18,12 +18,14 @@ class TypeChecker(NodeVisitor):
         self.function_queue = {}
         self.functions_that_alter_channels = {}
         self.subst_var = {}
+        self.channels = {}
         self.environments: ImmutableList[Environment] = ImmutableList().add(Environment())
         self.in_functions: ImmutableList[FunctionDef] = ImmutableList()
         self.loop_entrypoints = set() # TODO: consider putting into environment
         self.visit(tree)
         self.visit_functions()
         self.validate_postcondition()
+        print('Typechecking done, found the channels =', self.channels)
 
     def visit_and_drop_function(self, key: str) -> None:
         env = self.get_latest_scope()
@@ -185,6 +187,7 @@ class TypeChecker(NodeVisitor):
             name = self.subst_var[name]
         if name in self.functions_that_alter_channels:
             return name
+        print('name', name)
         opt = str_to_typ(name)
         return opt or self.get_latest_scope().lookup_var_or_default(name,
                                                                     self.get_latest_scope().lookup_func_or_default(
@@ -275,7 +278,14 @@ class TypeChecker(NodeVisitor):
     def visit_Call(self, node: Call) -> Typ:
         debug_print('visit_Call', dump(node))
         call_func = self.visit(node.func)
-        if isinstance(call_func, str) and (call_func in self.function_queue or call_func in self.functions_that_alter_channels):
+        if isinstance(call_func, str) and call_func == 'Channel':
+            for arg in node.args:
+                print('arg=', arg)
+                v = self.visit(arg)
+                if isinstance(arg, Subscript):
+                    parsed = STParser(src=v)
+                    return parsed.build()
+        elif isinstance(call_func, str) and (call_func in self.function_queue or call_func in self.functions_that_alter_channels):
             visited_args = [self.visit(arg) for arg in node.args]
             function: FunctionDef = self.function_queue[call_func] if call_func in self.function_queue else self.functions_that_alter_channels[call_func]
             if any(isinstance(arg, Node) for arg in visited_args):
@@ -289,6 +299,7 @@ class TypeChecker(NodeVisitor):
                             self.subst_var[param] = arg_ast.id
                         else:
                             unioned = union(typ, arg)
+                            self.channels[param] = unioned
                             self.bind_var(param, unioned)
                     
                 
@@ -510,6 +521,7 @@ class TypeChecker(NodeVisitor):
                 fail_if(not key in channel_str, f"{key} was not found in {channel_str}", SessionException)
                 channel_str = channel_str.replace(key, val)
             nd = STParser(src=channel_str).build()
+            self.channels[target] = nd
             self.bind_var(target, nd)
 
     def compare_type_to_latest_func_return_type(self, return_type: Typ):
@@ -564,9 +576,13 @@ class TypeChecker(NodeVisitor):
 
 def typechecker_from_path(file) -> TypeChecker:
     src = read_src_from_file(file)
+    print('got the src', src)
     tree = parse(src)
     tc = TypeChecker(tree)
     return tc
+
+def typecheck_file():
+    return typechecker_from_path(sys.argv[0])
 
 
 if __name__ == '__main__':
@@ -575,3 +591,4 @@ if __name__ == '__main__':
         sys.exit()
     else:
         typechecker_from_path(sys.argv[1])
+
