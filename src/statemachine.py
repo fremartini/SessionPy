@@ -194,6 +194,7 @@ class STParser(NodeVisitor):
             case sessiontype.LabelA: return Transition(Action.LABEL)
             case sessiontype.End: return STEnd()
 
+
     def from_generic_alias(self, typ: GenericAlias):
         if typ == End:
             return STEnd()

@@ -1,11 +1,10 @@
 import sys
-from tokenize import maybe
 import traceback
-from typing import Any
+from typing import Any, Tuple
 import pickle
 from lib import Branch, type_to_str
+from session import Session
 from sessiontype import *
-from enum import Enum
 import socket
 import statemachine
 from statemachine import Action
@@ -14,10 +13,11 @@ T = TypeVar('T')
 
 
 class Channel(Generic[T]):
-    def __init__(self, session_type=Any, local: tuple[str, int] = None, remote: tuple[str, int] = None) -> None:
+    def __init__(self, session_type=Any, local: tuple[str, int] = None, remote: tuple[str, int] = None, contravariant = False) -> None:
+
         self.local_mode = True if local is None or remote is None else False
         self.session_type = statemachine.from_generic_alias(session_type) if session_type != Any else Any
-        print('Session type in channel =', self.session_type)
+        self.contravarint = contravariant
         if self.local_mode:
             self.queue = []
         else:
@@ -29,8 +29,6 @@ class Channel(Generic[T]):
     def send(self, e: Any) -> None:
         if self.session_type != Any:
             nd = self.session_type
-            print('nd is', nd)
-            print('nd outgoing', nd.outgoing)
             if nd.outgoing_action() == Action.SEND and nd.outgoing_type() == type(e):
                 self.session_type = nd.next_nd()
             else:
@@ -45,7 +43,7 @@ class Channel(Generic[T]):
                 self.session_type = nd.next_nd()
             else:
                 expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
-                raise RuntimeError(f'Expected to {nd.get_edge()}, tried to receive something')
+                raise RuntimeError(f'Expected to {expected_action}, tried to receive something')
         return self._recv_local() if self.local_mode else self._recv_remote()
 
     def offer(self) -> Branch:
@@ -66,7 +64,6 @@ class Channel(Generic[T]):
             print('nd is', nd)
             if nd.outgoing_action() == Action.BRANCH:
                 self.session_type = nd.outgoing[branch]
-                ...
             else:
                 expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
                 raise RuntimeError(f'Expected to {expected_action}, choose was called')
@@ -104,9 +101,7 @@ class Channel(Generic[T]):
         except Exception as ex:
             _trace(ex)
 
-    def join(self, other_channel: Channel):
 
-        
 
     def __del__(self):
         if not self.local_mode:
@@ -148,3 +143,6 @@ def _trace(ex: Exception) -> None:
 
 def _exit() -> None:
     sys.exit(0)
+
+def session_channel(s1: Session, s2: Session) -> Tuple[Channel, Channel]:
+    return Channel(s1.typ), Channel(s2.typ)

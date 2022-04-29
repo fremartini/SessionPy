@@ -52,6 +52,17 @@ class End(SessionType):
 class SessionException(TypeError):
     ...
 
+def has_dual(typ):
+    return typ in [Send, Recv, Offer, Choose]
+
+def get_dual(typ):
+    match typ():
+        case Send(): return Recv
+        case Recv(): return Send 
+        case Offer(): return Choose
+        case Choose(): return Offer
+
+
 STR_ST_MAPPING = {
     'recv': Recv,
     'send': Send,
