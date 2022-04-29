@@ -3,27 +3,30 @@ from lexer import Token, TokenType
 from typing import List
 
 """
-protocol            -> typedef* (global_protocol | local_protocol);
+protocol            -> typedef* (P | L)
 
-global_protocol     -> "global" "protocol" identifier "(" roles ")" "{" global_statement* "}";
-global_statement    -> global_choice | global_action;
-global_choice       -> "choice" "from" identifier "to" identifier "{" global_statement* "}" "or" "{" global_statement* "}";
-global_action       -> (recurse | global_transmit | end) ";";
-global_transmit     -> message "from" identifier ("to | "from") identifier;
+P                   -> "global" "protocol" identifier "(" roles ")" "{" G* "}"
+G                   -> global_interaction | global_choice | global_recursion | call | end
 
-local_protocol      -> "local" "protocol" identifier "at" identifier "(" roles ")" "{" local_statement* "}";
-local_statement     -> local_choice | local_action;
-local_choice        -> ("offer" "to" | "choice" "from") identifier "{" local_statement* "}" "or" "{" local_statement* "}"
-local_action        -> (recurse | local_transmit | end) ";";
-local_transmit      -> message ("to | "from") identifier;
+global_interaction  -> message "from" identifier "to" identifier ";"
+global_choice       -> "choice" "from" identifier "to" identifier "{" G* "}" "or" "{" G* "}"
+global_recursion    -> "rec" identifier "{" G* "}"
+
+L                   -> "local" "protocol" identifier "at" identifier "(" roles ")" "{" T* "}"
+T                   -> local_send | local_recv | local_choice | local_recursion | call | end
+
+local_send          -> message "to" identifier ";"
+local_recv          -> message "from" identifier ";"
+local_choice        -> ("offer" "to" | "choice" "from") identifier "{" T* "}" "or" "{" T* "}"
+local_recursion     -> "rec" identifier "{" T* "}"
 
 message             -> identifier "(" identifier ")";
-typedef             -> "type" "<" identifier ">" "as" identifier ";";
-recurse             -> "do" identifier;
-roles               -> role ("," role)*;
-role                -> "role" identifier;
-identifier          -> [A-Z] ([A-Z] | [a-z] | 0 - 9)*;
-end                 -> "end";
+typedef             -> "type" "<" identifier ">" "as" identifier ";"
+roles               -> role ("," role)*
+role                -> "role" identifier
+call                -> "continue" identifier ";"
+identifier          -> [A-Z] ([A-Z] | [a-z] | 0 - 9)*
+end                 -> "End" ";"
 """
 
 
@@ -37,6 +40,14 @@ class Identifier:
 
     def visit(self) -> str:
         return self.identifier
+
+
+class Call:
+    def __init__(self, identifier: Identifier):
+        self.identifier = identifier
+
+    def visit(self) -> str:
+        return self.identifier.visit()
 
 
 class Role:
@@ -55,14 +66,6 @@ class Roles:
         return [i.visit() for i in self.roles]
 
 
-class Recurse:
-    def __init__(self, identifier: Identifier):
-        self.identifier = identifier
-
-    def visit(self) -> str:
-        return self.identifier.visit()
-
-
 class TypeDef:
     def __init__(self, typ: Identifier, identifier: Identifier):
         self.typ = typ
@@ -75,74 +78,81 @@ class Message:
         self.payload = payload
 
 
-class LocalTransmit:
-    def __init__(self, message: Message, direction: str, identifier: Identifier):
-        self.message = message
-        self.direction = direction
+class LocalRecursion:
+    def __init__(self, identifier: Identifier, t: List):
         self.identifier = identifier
-
-
-class LocalAction:
-    def __init__(self, action: Recurse | LocalTransmit | End):
-        self.action = action
+        self.t = t
 
 
 class LocalChoice:
-    def __init__(self, identifier: Identifier, op: str, statementsDO, statementsOR):
+    def __init__(self, identifier: Identifier, op: str, t1: List, t2: List):
         self.identifier = identifier
         self.op = op
-        self.statementsDO = statementsDO
-        self.statementsOR = statementsOR
+        self.t1 = t1
+        self.t2 = t2
 
 
-class LocalStatement:
-    def __init__(self, statement: LocalChoice | LocalAction):
-        self.statement = statement
+class LocalRecv:
+    def __init__(self, message: Message, identifier: Identifier):
+        self.message = message
+        self.identifier = identifier
 
 
-class LocalProtocol:
+class LocalSend:
+    def __init__(self, message: Message, identifier: Identifier):
+        self.message = message
+        self.identifier = identifier
+
+
+class T:
+    def __init__(self, op: LocalSend | LocalRecv | LocalChoice | LocalRecursion | Call | str):
+        self.op = op
+
+
+class L:
     def __init__(self, protocol_name: Identifier, perspective: Identifier, roles: Roles,
-                 statements: List[LocalStatement]):
+                 t: List[T]):
         self.protocol_name = protocol_name
         self.perspective = perspective
         self.roles = roles
-        self.statements = statements
+        self.t = t
 
 
-class GlobalTransmit:
+class GlobalRecursion:
+    def __init__(self, identifier: Identifier, g: List):
+        self.identifier = identifier,
+        self.g = g
+
+
+class GlobalChoice:
+    def __init__(self, sender: Identifier, recipient: Identifier, g1, g2):
+        self.sender = sender
+        self.recipient = recipient
+        self.g1 = g1
+        self.g2 = g2
+
+
+class GlobalInteraction:
     def __init__(self, message: Message, sender: Identifier, recipient: Identifier):
         self.message = message
         self.sender = sender
         self.recipient = recipient
 
 
-class GlobalAction:
-    def __init__(self, action: Recurse | GlobalTransmit | End):
-        self.action = action
+class G:
+    def __init__(self, g: GlobalInteraction | GlobalChoice | GlobalRecursion | Call):
+        self.g = g
 
 
-class GlobalChoice:
-    def __init__(self, sender: Identifier, recipient: Identifier, statementsDO, statementsOR):
-        self.sender = sender
-        self.recipient = recipient
-        self.statementsDO = statementsDO
-        self.statementsOR = statementsOR
-
-
-class GlobalStatement:
-    def __init__(self, statement: GlobalChoice | GlobalAction):
-        self.statement = statement
-
-
-class GlobalProtocol:
-    def __init__(self, protocol_name: Identifier, roles: Roles, statements: List[GlobalStatement]):
+class P:
+    def __init__(self, protocol_name: Identifier, roles: Roles, g: List[G]):
         self.protocol_name = protocol_name
         self.roles = roles
-        self.statements = statements
+        self.g = g
 
 
 class Protocol:
-    def __init__(self, typedef: List[TypeDef], protocol: GlobalProtocol | LocalProtocol):
+    def __init__(self, typedef: List[TypeDef], protocol: P | L):
         self.typedef = typedef
         self.protocol = protocol
 
@@ -165,16 +175,16 @@ class Parser:
 
         protocol = None
         try:
-            protocol = self._global_protocol()
+            protocol = self._p()
         except:
             try:
-                protocol = self._local_protocol()
+                protocol = self._l()
             except:
-                self._throw('global_protocol | local_protocol')
+                self._throw('P | L')
 
         return Protocol(typedefs, protocol)
 
-    def _global_protocol(self) -> GlobalProtocol:
+    def _p(self) -> P:
         if not self._match(TokenType.GLOBAL):
             self._throw('global')
 
@@ -194,29 +204,56 @@ class Parser:
         if not self._match(TokenType.LEFT_BRACE):
             self._throw('{')
 
-        statements = []
+        g = []
         while True:
             try:
-                statements.append(self._global_statement())
+                g.append(self._g())
             except:
                 break
 
         if not self._match(TokenType.RIGHT_BRACE):
             self._throw('}')
 
-        return GlobalProtocol(protocol_name, roles, statements)
+        return P(protocol_name, roles, g)
 
-    def _global_statement(self) -> GlobalStatement:
+    def _g(self) -> G:
         statement = None
         try:
-            statement = self._global_choice()
+            statement = self._global_interaction()
         except:
             try:
-                statement = self._global_action()
+                statement = self._global_choice()
             except:
-                self._throw('global_choice | global_action')
+                try:
+                    statement = self._global_recursion()
+                except:
+                    try:
+                        statement = self._call()
+                    except:
+                        try:
+                            statement = self._end()
+                        except:
+                            self._throw('global_interaction | global_choice | global_recursion | call | "End"')
 
-        return GlobalStatement(statement)
+        return G(statement)
+
+    def _global_interaction(self) -> GlobalInteraction:
+        message = self._message()
+
+        if not self._match(TokenType.FROM):
+            self._throw('from')
+
+        sender = self._identifier()
+
+        if not self._match(TokenType.TO):
+            self._throw('to')
+
+        recipient = self._identifier()
+
+        if not self._match(TokenType.SEMICOLON):
+            self._throw(';')
+
+        return GlobalInteraction(message, sender, recipient)
 
     def _global_choice(self) -> GlobalChoice:
         if not self._match(TokenType.CHOICE):
@@ -235,10 +272,10 @@ class Parser:
         if not self._match(TokenType.LEFT_BRACE):
             self._throw('{')
 
-        statementsDO = []
+        g1 = []
         while True:
             try:
-                statementsDO.append(self._global_statement())
+                g1.append(self._g())
             except:
                 break
 
@@ -251,59 +288,40 @@ class Parser:
         if not self._match(TokenType.LEFT_BRACE):
             self._throw('{')
 
-        statementsOR = []
+        g2 = []
         while True:
             try:
-                statementsOR.append(self._global_statement())
+                g2.append(self._g())
             except:
                 break
 
         if not self._match(TokenType.RIGHT_BRACE):
             self._throw('}')
 
-        return GlobalChoice(sender, recipient, statementsDO, statementsOR)
+        return GlobalChoice(sender, recipient, g1, g2)
 
-    def _global_action(self) -> GlobalAction:
-        action = None
-        try:
-            action = self._recurse()
-        except:
+    def _global_recursion(self) -> GlobalRecursion:
+        if not self._match(TokenType.REC):
+            self._throw('rec')
+
+        identifier = self._identifier()
+
+        if not self._match(TokenType.LEFT_BRACE):
+            self._throw('{')
+
+        g: List[G] = []
+        while True:
             try:
-                action = self._global_transmit()
+                g.append(self._g())
             except:
-                try:
-                    action = self._end()
-                except:
-                    self._throw('recurse | global_transmit | end')
+                break
 
-        if not self._match(TokenType.SEMICOLON):
-            self._throw(';')
+        if not self._match(TokenType.RIGHT_BRACE):
+            self._throw('}')
 
-        return GlobalAction(action)
+        return GlobalRecursion(identifier, g)
 
-    def _global_transmit(self) -> GlobalTransmit:
-        message = self._message()
-
-        if not self._match(TokenType.FROM):
-            self._throw('from')
-
-        sender = self._identifier()
-
-        try:
-            if not self._match(TokenType.TO):
-                self._throw('to')
-        except:
-            try:
-                if not self._match(TokenType.FROM):
-                    self._throw('from')
-            except:
-                self._throw('"to" | "from"')
-
-        recipient = self._identifier()
-
-        return GlobalTransmit(message, sender, recipient)
-
-    def _local_protocol(self) -> LocalProtocol:
+    def _l(self) -> L:
         if not self._match(TokenType.LOCAL):
             self._throw('local')
 
@@ -328,29 +346,41 @@ class Parser:
         if not self._match(TokenType.LEFT_BRACE):
             self._throw('{')
 
-        statements = []
+        t = []
         while True:
             try:
-                statements.append(self._local_statement())
+                t.append(self._t())
             except:
                 break
 
         if not self._match(TokenType.RIGHT_BRACE):
             self._throw('}')
 
-        return LocalProtocol(protocol_name, perspective, roles, statements)
+        return L(protocol_name, perspective, roles, t)
 
-    def _local_statement(self) -> LocalStatement:
+    def _t(self) -> T:
         statement = None
         try:
-            statement = self._local_choice()
+            statement = self._local_send()
         except:
             try:
-                statement = self._local_action()
+                statement = self._local_recv()
             except:
-                self._throw('local_choice | local_action')
+                try:
+                    statement = self._local_choice()
+                except:
+                    try:
+                        statement = self._local_recursion()
+                    except:
+                        try:
+                            statement = self._call()
+                        except:
+                            try:
+                                statement = self._end()
+                            except:
+                                self._throw('local_send | local_recv | local_choice | local_recursion | call | "end"')
 
-        return LocalStatement(statement)
+        return T(statement)
 
     def _local_choice(self) -> LocalChoice:
         op = None
@@ -380,10 +410,10 @@ class Parser:
         if not self._match(TokenType.LEFT_BRACE):
             self._throw('{')
 
-        statementsDO = []
+        t1 = []
         while True:
             try:
-                statementsDO.append(self._local_statement())
+                t1.append(self._t())
             except:
                 break
 
@@ -396,57 +426,64 @@ class Parser:
         if not self._match(TokenType.LEFT_BRACE):
             self._throw('{')
 
-        statementsOR = []
+        t2 = []
         while True:
             try:
-                statementsOR.append(self._local_statement())
+                t2.append(self._t())
             except:
                 break
 
         if not self._match(TokenType.RIGHT_BRACE):
             self._throw('}')
 
-        return LocalChoice(identifier, op, statementsDO, statementsOR)
+        return LocalChoice(identifier, op, t1, t2)
 
-    def _local_action(self) -> LocalAction:
-        action = None
-        try:
-            action = self._recurse()
-        except:
+    def _local_recursion(self) -> LocalRecursion:
+        if not self._match(TokenType.REC):
+            self._throw('rec')
+
+        identifier = self._identifier()
+
+        if not self._match(TokenType.LEFT_BRACE):
+            self._throw('{')
+
+        t: List[T] = []
+        while True:
             try:
-                action = self._local_transmit()
+                t.append(self._t())
             except:
-                try:
-                    action = self._end()
-                except:
-                    self._throw('recurse | local_transmit | end')
+                break
+
+        if not self._match(TokenType.RIGHT_BRACE):
+            self._throw('}')
+
+        return LocalRecursion(identifier, t)
+
+    def _local_send(self) -> LocalSend:
+        message = self._message()
+
+        if not self._match(TokenType.TO):
+            self._throw('to')
+
+        identifier = self._identifier()
 
         if not self._match(TokenType.SEMICOLON):
             self._throw(';')
 
-        return LocalAction(action)
+        return LocalSend(message, identifier)
 
-    def _local_transmit(self) -> LocalTransmit:
+    def _local_recv(self) -> LocalRecv:
         message = self._message()
-        direction = None
 
-        try:
-            if not self._match(TokenType.TO):
-                self._throw('to')
-
-            direction = 'to'
-        except:
-            try:
-                if not self._match(TokenType.FROM):
-                    self._throw('from')
-
-                direction = 'from'
-            except:
-                self._throw('"to" | "from"')
+        if not self._match(TokenType.FROM):
+            self._throw('from')
 
         identifier = self._identifier()
 
-        return LocalTransmit(message, direction, identifier)
+        if not self._match(TokenType.SEMICOLON):
+            self._throw(';')
+
+        return LocalRecv(message, identifier)
 
     def _message(self) -> Message:
         label = self._identifier()
@@ -484,14 +521,6 @@ class Parser:
 
         return TypeDef(typ, identifier)
 
-    def _recurse(self) -> Recurse:
-        if not self._match(TokenType.DO):
-            self._throw('do')
-
-        identifier = self._identifier()
-
-        return Recurse(identifier)
-
     def _roles(self) -> Roles:
         roles: List[Role] = [self._role()]
 
@@ -512,11 +541,25 @@ class Parser:
             return Identifier(self._previous().literal)
         self._throw('identifier')
 
-    def _end(self) -> End:
-        if self._match(TokenType.END):
-            return End()
+    def _call(self) -> Call:
+        if not self._match(TokenType.CONTINUE):
+            self._throw('continue')
 
-        self._throw('end')
+        identifier = self._identifier()
+
+        if not self._match(TokenType.SEMICOLON):
+            self._throw(';')
+
+        return Call(identifier)
+
+    def _end(self) -> End:
+        if not self._match(TokenType.END):
+            self._throw('End')
+
+        if not self._match(TokenType.SEMICOLON):
+            self._throw(';')
+
+        return End()
 
     def _match(self, *types: TokenType) -> bool:
         for typ in types:
