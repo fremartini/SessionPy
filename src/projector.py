@@ -80,7 +80,7 @@ class Projector:
         return lines
 
     def _project_global_recursion(self, r: GlobalRecursion) -> str:
-        lines = f'rec {r.identifier}'
+        lines = f'rec {r.identifier.visit()} '
         lines = lines + '{\n'
 
         for s in r.g:
@@ -96,7 +96,7 @@ class Projector:
         return f'type <{t.typ.identifier}> as {t.identifier.identifier};\n'
 
     def _project_call(self, c: Call) -> str:
-        return f'continue {c.identifier.visit()}'
+        return f'continue {c.identifier.visit()};'
 
     def _project_end(self) -> str:
         return 'End;'
