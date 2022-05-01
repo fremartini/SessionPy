@@ -407,10 +407,11 @@ class Parser:
 
     def _try_many(self, err: str, *rules: Callable) -> Any:
         for rule in rules:
+            _token = self.current
             try:
                 return rule()
             except ParseError:
-                pass
+                self.current = _token
 
         self._throw(err)
 

@@ -5,14 +5,14 @@ class Projector:
     def __init__(self):
         self.current_role = None
 
-    def project(self, root: Protocol):
+    def project(self, root: Protocol) -> List[str] | str:
         match root.protocol:
             case g if isinstance(g, P):
-                self._project_p(g, root.typedef)
+                return self._project_p(g, root.typedef)
             case l if isinstance(l, L):
-                ...
+                return self._project_l(l, root.typedef)
 
-    def _project_p(self, protocol: P, typedefs: List[TypeDef]):
+    def _project_p(self, protocol: P, typedefs: List[TypeDef]) -> List[str]:
         roles = protocol.roles.visit()
         for r in roles:
             with open(f'{r}.scr', "w+") as f:
@@ -29,6 +29,7 @@ class Projector:
                     if to_write is not None:
                         f.write(f'{to_write}\n')
                 f.write('}')
+        return [f'{x}.scr' for x in roles]
 
     def _project_g(self, g: G) -> str | None:
         match g.g:
@@ -91,6 +92,59 @@ class Projector:
         lines = lines + '}'
 
         return lines
+
+    def _project_l(self, protocol: L, typedefs: List[TypeDef]) -> str:
+        role = protocol.perspective.visit()
+
+        self.type_mapping = {}
+        for ty in typedefs:
+            self.type_mapping[ty.identifier.visit()] = ty.typ.visit()
+
+        with open(f'{role}.py', "w+") as f:
+            f.write('from channel import Channel, Branch\n')
+            f.write('from sessiontype import *\n\n')
+
+            session_type = ''
+
+            for (idx, t) in enumerate(protocol.t):
+                self.is_last = idx == len(protocol.t) - 1
+                session_type = session_type + self._project_t(t)
+
+            for _ in protocol.t:
+                session_type = session_type + ']'
+
+            f.write(f'ch = Channel[{session_type}]()\n')
+
+        return f'{role}.py'
+
+    def _project_t(self, t: T) -> str:
+        match t.op:
+            case local_send if isinstance(local_send, LocalSend):
+                return self._project_local_send(local_send)
+            case local_recv if isinstance(local_recv, LocalRecv):
+                return self._project_local_recv(local_recv)
+            case local_choice if isinstance(local_choice, LocalChoice):
+                return self._project_local_choice(local_choice)
+            case local_recursion if isinstance(local_recursion, LocalRecursion):
+                return self._project_local_recursion(local_recursion)
+            case call if isinstance(call, Call):
+                return self._project_call(call)
+            case end if isinstance(end, End):
+                return self._project_end()
+
+    def _project_local_send(self, s: LocalSend) -> str:
+        typ = self.type_mapping[s.message.payload.visit()]
+        return f'Send[{typ}, {"End" if self.is_last else ""}'
+
+    def _project_local_recv(self, r: LocalRecv) -> str:
+        typ = self.type_mapping[r.message.payload.visit()]
+        return f'Recv[{typ}, {"End" if self.is_last else ""}'
+
+    def _project_local_choice(self, c: LocalChoice) -> str:
+        ...
+
+    def _project_local_recursion(self, r: LocalRecursion) -> str:
+        ...
 
     def _project_typedef(self, t: TypeDef) -> str:
         return f'type <{t.typ.identifier}> as {t.identifier.identifier};\n'
