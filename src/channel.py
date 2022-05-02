@@ -8,15 +8,19 @@ from sessiontype import *
 import socket
 import statemachine
 from statemachine import Action
+from check import typecheck_file
+
+
 
 T = TypeVar('T')
 
-
 class Channel(Generic[T]):
-    def __init__(self, session_type=Any, local: tuple[str, int] = None, remote: tuple[str, int] = None, contravariant = False) -> None:
+    def __init__(self, session_type=Any, local: tuple[str, int] = None, remote: tuple[str, int] = None, contravariant = False, static_check=True) -> None:
 
         self.local_mode = True if local is None or remote is None else False
         self.session_type = statemachine.from_generic_alias(session_type) if session_type != Any else Any
+        if self.session_type != Any and static_check:
+            typecheck_file()
         self.contravarint = contravariant
         if self.local_mode:
             self.queue = []
@@ -101,10 +105,11 @@ class Channel(Generic[T]):
             _trace(ex)
 
 
-
     def __del__(self):
         if not self.local_mode:
             self.server_socket.close()
+
+
 
 
 

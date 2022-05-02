@@ -5,7 +5,7 @@ from typing import ForwardRef, TypeVar, Generic, Any
 import typing
 import sessiontype
 
-from lib import Typ, parameterise, str_to_typ, to_typing, Branch, type_to_str
+from lib import ContainerType, Typ, parameterise, str_to_typ, to_typing, Branch, type_to_str
 from sessiontype import *
 
 A = TypeVar('A')
@@ -237,20 +237,20 @@ class STParser(NodeVisitor):
         return Node(self.next_id())
 
     def visit_Name(self, node: Name) -> Any:
-        match node.id.lower():
-            case sessiontype.Send | 'send':
+        match node.id:
+            case sessiontype.Send | 'Send':
                 return Transition(Action.SEND)
-            case sessiontype.Recv | 'recv':
+            case sessiontype.Recv | 'Recv':
                 return Transition(Action.RECV)
-            case sessiontype.End | 'end':
+            case sessiontype.End | 'End':
                 return STEnd()
-            case sessiontype.Offer | 'offer':
+            case sessiontype.Offer | 'Offer':
                 return Transition(Action.BRANCH)
-            case sessiontype.Choose | 'choose':
+            case sessiontype.Choose | 'Choose':
                 return Transition(Action.BRANCH)
-            case sessiontype.Label | 'label':
+            case sessiontype.Label | 'Label':
                 return Transition(Action.LABEL)
-            case 'channel':
+            case 'Channel':
                 return None
             case x:
                 res = str_to_typ(x) or x
@@ -350,7 +350,7 @@ class STParser(NodeVisitor):
                     nd = new_node()
                     typ = head.typ
                     if isinstance(typ, tuple):
-                        head.typ = parameterise(to_typing(head.typ[0]), [head.typ[1]])
+                        head.typ = parameterise(head.typ[0], [head.typ[1]])
                     go(tail,nd)
                     node.outgoing[head] = nd
                     return nd, head
@@ -403,3 +403,4 @@ def print_node(n: Node):
 
 if __name__ == '__main__':
     v = from_generic_alias(Recv[int, Recv[int, Send[int, End]]])
+    print_node(v)

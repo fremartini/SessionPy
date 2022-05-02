@@ -11,6 +11,8 @@ from lib import *
 from statemachine import STParser, Node, TGoto
 from sessiontype import STR_ST_MAPPING, SessionException
 
+visited_files = {}
+
 class TypeChecker(NodeVisitor):
 
     def __init__(self, tree, inside_class=False) -> None:
@@ -25,6 +27,7 @@ class TypeChecker(NodeVisitor):
         self.visit(tree)
         self.visit_functions()
         self.validate_postcondition()
+
 
     def visit_and_drop_function(self, key: str) -> None:
         env = self.get_latest_scope()
@@ -331,7 +334,6 @@ class TypeChecker(NodeVisitor):
                         items[0] = parameterise(Tuple, items[0])
                         args = ImmutableList.of_list(items)
                     valid_action, valid_typ = nd.valid_action_type(op, args.head())
-
                     if not valid_action:
                         raise SessionException(f'expected a {nd.outgoing_action()}, but send was called')
                     elif not valid_typ:
@@ -572,9 +574,12 @@ class TypeChecker(NodeVisitor):
 
 
 def typechecker_from_path(file) -> TypeChecker:
+    if file in visited_files:
+        return visited_files[file]
     src = read_src_from_file(file)
     tree = parse(src)
     tc = TypeChecker(tree)
+    visited_files[file] = tc
     return tc
 
 def typecheck_file():

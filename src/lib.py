@@ -1,3 +1,4 @@
+from pprint import pprint
 from sys import builtin_module_names
 from typing import *
 import typing
@@ -6,11 +7,12 @@ import os
 from pydoc import locate
 from enum import Enum
 
-from debug import debug_print
+from debug import debug_print, dump_object
 
 FunctionTyp = list  # of types
 ContainerType = Union[typing._GenericAlias, GenericAlias, tuple]
-Typ = Union[type, FunctionTyp, ContainerType]
+ClassTypes = str
+Typ = Union[type, FunctionTyp, ContainerType, ClassTypes]
 
 
 def is_type(opt_typ):
@@ -203,7 +205,7 @@ def type_to_str(typ: Typ) -> str:
     elif isinstance(typ, tuple):
         return typ
     else:
-        assert False, typ
+        return typ
 
 
 class Branch(str, Enum):
