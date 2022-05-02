@@ -20,7 +20,6 @@ class TypeChecker(NodeVisitor):
         self.function_queue = {}
         self.functions_that_alter_channels = {}
         self.subst_var = {}
-        self.channels = {}
         self.environments: ImmutableList[Environment] = ImmutableList().add(Environment())
         self.in_functions: ImmutableList[FunctionDef] = ImmutableList()
         self.loop_entrypoints = set() # TODO: consider putting into environment
@@ -299,7 +298,6 @@ class TypeChecker(NodeVisitor):
                             self.subst_var[param] = arg_ast.id
                         else:
                             unioned = union(typ, arg)
-                            self.channels[param] = unioned
                             self.bind_var(param, unioned)
                     
                 
@@ -520,7 +518,6 @@ class TypeChecker(NodeVisitor):
                 fail_if(not key in channel_str, f"{key} was not found in {channel_str}", SessionException)
                 channel_str = channel_str.replace(key, val)
             nd = STParser(src=channel_str).build()
-            self.channels[target] = nd
             self.bind_var(target, nd)
 
     def compare_type_to_latest_func_return_type(self, return_type: Typ):
