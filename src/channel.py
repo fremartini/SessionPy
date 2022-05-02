@@ -1,9 +1,8 @@
 import sys
 import traceback
-from typing import Any, Tuple
+from typing import Any
 import pickle
 from lib import Branch, type_to_str
-from session import Session
 from sessiontype import *
 import socket
 import statemachine
@@ -147,6 +146,3 @@ def _trace(ex: Exception) -> None:
 
 def _exit() -> None:
     sys.exit(0)
-
-def session_channel(s1: Session, s2: Session) -> Tuple[Channel, Channel]:
-    return Channel(s1.typ), Channel(s2.typ)
