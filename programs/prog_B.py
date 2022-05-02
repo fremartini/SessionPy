@@ -1,12 +1,7 @@
 from context import *
 
-ch = Channel[Choose[Send[str, End], Send[int, End]]](('localhost', 5011), ('localhost', 5006))
+ch = Channel(Choose[Recv[int, End], Send[int, End]], ('localhost', 5011), ('localhost', 5006))
 
-a = ch.recv()
-print('received ', a, type(a))
-
-print('dict? ', ch.recv())
-print('int ', ch.recv())
-
-for i in range(20):
-    print('recv ', ch.recv())
+ch.choose(Branch.LEFT)
+b = ch.recv()
+print('received ', b)

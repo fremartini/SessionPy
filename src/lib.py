@@ -206,8 +206,3 @@ def type_to_str(typ: Typ) -> str:
         return typ
     else:
         return typ
-
-
-class Branch(str, Enum):
-    LEFT = 'LEFT'
-    RIGHT = 'RIGHT'

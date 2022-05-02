@@ -1,10 +1,10 @@
 from context import *
 
-ch = Channel[Offer[Send[str, Recv[int, End]], Send[int, End]]](('localhost', 5006), ('localhost', 5011))
+ch = Channel(Offer[Send[int, End], Recv[int, End]], ('localhost', 5006), ('localhost', 5011))
 
-ch.send(1)
-ch.send({'str', 42})
-ch.send(42)
-
-for i in range(20):
-    ch.send(i)
+match ch.offer():
+    case Branch.LEFT:
+        ch.send(5)
+    case Branch.RIGHT:
+        a = ch.recv()
+        print(a)

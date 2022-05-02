@@ -4,8 +4,9 @@ from types import GenericAlias
 from typing import ForwardRef, TypeVar, Generic, Any
 import typing
 import sessiontype
+from sessiontype import Branch
 
-from lib import ContainerType, Typ, parameterise, str_to_typ, to_typing, Branch, type_to_str
+from lib import ContainerType, Typ, parameterise, str_to_typ, to_typing, type_to_str
 from sessiontype import *
 
 A = TypeVar('A')
