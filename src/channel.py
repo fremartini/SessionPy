@@ -2,7 +2,7 @@ import sys
 import traceback
 from typing import Any
 import pickle
-from lib import Branch, type_to_str
+from lib import type_to_str
 from sessiontype import *
 import socket
 import statemachine
@@ -45,16 +45,16 @@ class Channel(Generic[T]):
         return self._recv()
 
     def offer(self) -> Branch:
-        maybe_branch: Any = self._recv()
-        assert isinstance(maybe_branch, Branch)
+        branch : Branch = self._recv()
+        assert isinstance(branch, Branch)
         if self.session_type != Any:
             nd = self.session_type
-            if isinstance(nd.outgoing_action(), Branch):
-                self.session_type = nd.outgoing[maybe_branch]
+            if nd.outgoing_action() == Action.BRANCH:
+                self.session_type = nd.outgoing[branch]
             else:
                 expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
                 raise RuntimeError(f'Expected to {expected_action}, offer was called')
-        return maybe_branch
+        return branch
 
     def choose(self, branch: Branch) -> None:
         if self.session_type != Any:

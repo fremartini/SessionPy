@@ -9,7 +9,7 @@ from environment import Environment
 from immutable_list import ImmutableList
 from lib import *
 from statemachine import STParser, Node, TGoto
-from sessiontype import STR_ST_MAPPING, SessionException
+from sessiontype import STR_ST_MAPPING, SessionException, Branch
 
 visited_files = {}
 

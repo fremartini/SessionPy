@@ -1,10 +1,14 @@
 from typing import TypeVar, Generic
+from enum import Enum
 
 ST = TypeVar('ST')
 ST1 = TypeVar('ST1')
 A = TypeVar('A')
 Actor = TypeVar('Actor')
 
+class Branch(str, Enum):
+    LEFT = 'LEFT'
+    RIGHT = 'RIGHT'
 
 class SessionType:
     ...
