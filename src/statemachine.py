@@ -403,4 +403,3 @@ def print_node(n: Node):
 
 if __name__ == '__main__':
     v = from_generic_alias(Recv[int, Recv[int, Send[int, End]]])
-    print(v)

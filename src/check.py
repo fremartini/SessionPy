@@ -25,7 +25,6 @@ class TypeChecker(NodeVisitor):
         self.visit(tree)
         self.visit_functions()
         self.validate_postcondition()
-        print('Typechecking done, found the channels =', self.channels)
 
     def visit_and_drop_function(self, key: str) -> None:
         env = self.get_latest_scope()
@@ -187,7 +186,6 @@ class TypeChecker(NodeVisitor):
             name = self.subst_var[name]
         if name in self.functions_that_alter_channels:
             return name
-        print('name', name)
         opt = str_to_typ(name)
         return opt or self.get_latest_scope().lookup_var_or_default(name,
                                                                     self.get_latest_scope().lookup_func_or_default(
@@ -280,7 +278,6 @@ class TypeChecker(NodeVisitor):
         call_func = self.visit(node.func)
         if isinstance(call_func, str) and call_func == 'Channel':
             for arg in node.args:
-                print('arg=', arg)
                 v = self.visit(arg)
                 if isinstance(arg, Subscript):
                     parsed = STParser(src=v)
@@ -576,7 +573,6 @@ class TypeChecker(NodeVisitor):
 
 def typechecker_from_path(file) -> TypeChecker:
     src = read_src_from_file(file)
-    print('got the src', src)
     tree = parse(src)
     tc = TypeChecker(tree)
     return tc

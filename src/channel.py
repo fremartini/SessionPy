@@ -61,7 +61,6 @@ class Channel(Generic[T]):
     def choose(self, branch: Branch) -> None:
         if self.session_type != Any:
             nd = self.session_type
-            print('nd is', nd)
             if nd.outgoing_action() == Action.BRANCH:
                 self.session_type = nd.outgoing[branch]
             else:
