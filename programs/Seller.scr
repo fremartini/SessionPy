@@ -1,0 +1,14 @@
+type <str> as Message;
+type <float> as Price;
+local protocol BuyerSeller at Seller(role B1,role B2,role Seller) { 
+    Prompt(Message) from B1;
+    Answer(Message) to B1;
+    Quotation(Price) to B2;
+
+    choice from B2 {
+        Response(Message) from B2;
+        End;
+    } or {
+        End;
+    }
+}

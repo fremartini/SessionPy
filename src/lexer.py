@@ -27,10 +27,11 @@ class TokenType(Enum):
     OFFER = auto(),
     AS = auto(),
     AT = auto(),
-    DO = auto(),
     OR = auto(),
     END = auto(),
     TYPE = auto(),
+    REC = auto(),
+    CONTINUE = auto(),
 
     # types
     IDENTIFIER = auto(),
@@ -47,10 +48,11 @@ keywords = {
     "offer": TokenType.OFFER,
     "as": TokenType.AS,
     "at": TokenType.AT,
-    "do": TokenType.DO,
     "or": TokenType.OR,
     "End": TokenType.END,
     "type": TokenType.TYPE,
+    "rec": TokenType.REC,
+    "continue": TokenType.CONTINUE,
 }
 
 
@@ -126,9 +128,9 @@ class Lexer:
         text: str = self.source[self.start:self.current]
         typ: TokenType = TokenType.IDENTIFIER
         if text in keywords:
-            typ = keywords[text]
-
-        self._add_token_literal(typ, text)
+            self._add_token(keywords[text])
+        else:
+            self._add_token_literal(typ, text)
 
     def _advance(self) -> str:
         c = self.source[self.current]

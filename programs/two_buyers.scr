@@ -1,14 +1,14 @@
 type <str> as Message;
 type <float> as Price;
 
-global protocol BuyerSeller(role Alice, role Bob, role Seller) {
-    Prompt(Message) from Alice to Seller;
-    Answer(Message) from Seller to Alice;
-    Quotation(Price) from Seller to Bob;
-    Quotation(Price) from Alice to Bob;
+global protocol BuyerSeller(role B1, role B2, role Seller) {
+    Prompt(Message) from B1 to Seller;
+    Answer(Message) from Seller to B1;
+    Quotation(Price) from Seller to B2;
+    Quotation(Price) from B1 to B2;
 
-    choice from Bob to Seller {
-        Response(Message) from Bob to Seller;
+    choice from B2 to Seller {
+        Response(Message) from B2 to Seller;
         End;
     } or {
         End;
