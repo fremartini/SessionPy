@@ -1,10 +1,12 @@
 from ast import *
 from enum import Enum
-from typing import TypeVar, Generic, Any
+from types import GenericAlias
+from typing import ForwardRef, TypeVar, Generic, Any
 import typing
+import sessiontype
 
-from lib import Typ, parameterise, str_to_typ, to_typing, Branch, type_to_str
-from sessiontype import SessionException
+from lib import ContainerType, Typ, parameterise, str_to_typ, to_typing, Branch, type_to_str
+from sessiontype import *
 
 A = TypeVar('A')
 
@@ -125,15 +127,16 @@ class Node:
             assert not isinstance(points_to.get_edge(), TGoto), "Wow now, are you trying to break something?"
         return points_to
 
-    def get_edge(self):
+    def get_edge(self, opt_branch=None):
         assert len(self.outgoing) > 0, "Function should at least contain a single edge"
         return list(self.outgoing.keys())[0]
 
     def outgoing_action(self):
         if len(self.outgoing) == 0:
             raise SessionException(f'Channel {self} is done and exhausted')
-        assert len(self.outgoing) == 1, "Function should not be called if it's not a single outgoing edge"
         key = self.get_edge()
+        if isinstance(key, Branch):
+            return Action.BRANCH
         return key.action
 
     def outgoing_type(self) -> type:
@@ -147,6 +150,15 @@ class Node:
         assert action in str_transition_map, action
         return action == self.outgoing_action(), typ == self.outgoing_type() or typ is Any
 
+    def progress(self, opt_branch=None):
+        if not opt_branch:
+            assert len(self.outgoing) == 1
+
+
+def from_generic_alias(typ: GenericAlias) -> Node:
+    stp = STParser(typ=typ)
+    return stp.build()
+
 
 class STParser(NodeVisitor):
     """
@@ -155,13 +167,66 @@ class STParser(NodeVisitor):
         parsed.res # (recv, (<class 'str'>, (offer, ((send, (<class 'bool'>, end)), (loop, (send, (<class 'int'>, end)))))))
     """
 
-    def __init__(self, src: str):
+    def __init__(self, src: str = '', typ: GenericAlias = None):
         self.session_tuple = None
         self.id = 0
-        tree = parse(src)
-        self.root = self.new_node()
-        self.visit(tree)
+        if src:
+            tree = parse(src)
+            self.root = self.new_node()
+            self.visit(tree)
+        else:
+            self.session_tuple = self.from_generic_alias(typ)
         assert self.session_tuple
+
+
+    
+    def get_transition(self, key):
+        match key:
+            case sessiontype.Send: return Transition(Action.SEND)
+            case sessiontype.SendA: return Transition(Action.SEND)
+            case sessiontype.Recv: return Transition(Action.RECV)
+            case sessiontype.RecvA: return Transition(Action.RECV)
+            case sessiontype.Offer: return Transition(Action.BRANCH)
+            case sessiontype.OfferA: return Transition(Action.BRANCH)
+            case sessiontype.Choose: return Transition(Action.BRANCH)
+            case sessiontype.ChooseA: return Transition(Action.BRANCH)
+            case sessiontype.Label: return Transition(Action.LABEL)
+            case sessiontype.LabelA: return Transition(Action.LABEL)
+            case sessiontype.End: return STEnd()
+
+
+    def from_generic_alias(self, typ: GenericAlias):
+        if typ == End:
+            return STEnd()
+        if isinstance(typ, ForwardRef):
+            return typ.__forward_arg__
+        base = self.get_transition(typ.__origin__)
+        assert isinstance(base, Transition), base
+        offset = 0
+        if len(typ.__args__) == 3:
+            offset = 1
+        if base.action in [Action.SEND, Action.RECV]:
+            base.typ = typ.__args__[0]
+            if offset:
+                base.actor = typ.__args__[1].__forward_arg__
+            return base, self.from_generic_alias(typ.__args__[1 + offset])
+        elif base.action == Action.BRANCH:
+            if offset:
+                base.actor = typ.__args__[0].__forward_arg__
+            ltyp, rtyp = typ.__args__[0+offset], typ.__args__[1+offset]
+            base.left  = self.from_generic_alias(ltyp)
+            base.right = self.from_generic_alias(rtyp)
+            return base
+        elif base.action == Action.LABEL:
+            if offset:
+                base.actor = typ.__args__[1].__forward_arg__
+            base.name = typ.__args__[0].__forward_arg__
+            base.st = self.from_generic_alias(typ.__args__[1+offset])
+            return base
+
+
+
+
 
     def next_id(self) -> int:
         res = self.id
@@ -172,20 +237,20 @@ class STParser(NodeVisitor):
         return Node(self.next_id())
 
     def visit_Name(self, node: Name) -> Any:
-        match node.id.lower():
-            case 'send':
+        match node.id:
+            case sessiontype.Send | 'Send':
                 return Transition(Action.SEND)
-            case 'recv':
+            case sessiontype.Recv | 'Recv':
                 return Transition(Action.RECV)
-            case 'end':
+            case sessiontype.End | 'End':
                 return STEnd()
-            case 'offer':
+            case sessiontype.Offer | 'Offer':
                 return Transition(Action.BRANCH)
-            case 'choose':
+            case sessiontype.Choose | 'Choose':
                 return Transition(Action.BRANCH)
-            case 'label':
+            case sessiontype.Label | 'Label':
                 return Transition(Action.LABEL)
-            case 'channel':
+            case 'Channel':
                 return None
             case x:
                 res = str_to_typ(x) or x
@@ -285,7 +350,7 @@ class STParser(NodeVisitor):
                     nd = new_node()
                     typ = head.typ
                     if isinstance(typ, tuple):
-                        head.typ = parameterise(to_typing(head.typ[0]), [head.typ[1]])
+                        head.typ = parameterise(head.typ[0], [head.typ[1]])
                     go(tail,nd)
                     node.outgoing[head] = nd
                     return nd, head
@@ -337,6 +402,5 @@ def print_node(n: Node):
 
 
 if __name__ == '__main__':
-    graph = STParser("Channel[Send[int, End]]").build()
-    print('graph.outgoing', graph.outgoing)
-    print(Transition(Action.SEND) in graph.outgoing)
+    v = from_generic_alias(Recv[int, Recv[int, Send[int, End]]])
+    print_node(v)

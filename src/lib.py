@@ -1,3 +1,5 @@
+from pprint import pprint
+from sys import builtin_module_names
 from typing import *
 import typing
 from types import GenericAlias
@@ -9,7 +11,8 @@ from debug import debug_print
 
 FunctionTyp = list  # of types
 ContainerType = Union[typing._GenericAlias, GenericAlias, tuple]
-Typ = Union[type, FunctionTyp, ContainerType]
+ClassTypes = str
+Typ = Union[type, FunctionTyp, ContainerType, ClassTypes]
 
 
 def is_type(opt_typ):
@@ -181,10 +184,14 @@ def assert_eq(expected, actual):
         raise Exception("expected " + str(expected) + ", found " + str(actual))
 
 def str_to_typ(s: str) -> type:
+    if s in ['main', 'Channel'] or s in builtin_module_names:
+        return s
     opt = locate(s)
     opt_lower = locate(s.lower())
     if not opt and opt_lower:
         opt = to_typing(opt_lower)
+    if opt == 'builtins':
+        return str
     return opt
     
 def type_to_str(typ: Typ) -> str:
@@ -198,7 +205,7 @@ def type_to_str(typ: Typ) -> str:
     elif isinstance(typ, tuple):
         return typ
     else:
-        assert False, typ
+        return typ
 
 
 class Branch(str, Enum):

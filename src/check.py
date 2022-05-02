@@ -11,6 +11,8 @@ from lib import *
 from statemachine import STParser, Node, TGoto
 from sessiontype import STR_ST_MAPPING, SessionException
 
+visited_files = {}
+
 class TypeChecker(NodeVisitor):
 
     def __init__(self, tree, inside_class=False) -> None:
@@ -24,6 +26,7 @@ class TypeChecker(NodeVisitor):
         self.visit(tree)
         self.visit_functions()
         self.validate_postcondition()
+
 
     def visit_and_drop_function(self, key: str) -> None:
         env = self.get_latest_scope()
@@ -275,7 +278,13 @@ class TypeChecker(NodeVisitor):
     def visit_Call(self, node: Call) -> Typ:
         debug_print('visit_Call', dump(node))
         call_func = self.visit(node.func)
-        if isinstance(call_func, str) and (call_func in self.function_queue or call_func in self.functions_that_alter_channels):
+        if isinstance(call_func, str) and call_func == 'Channel':
+            for arg in node.args:
+                v = self.visit(arg)
+                if isinstance(arg, Subscript):
+                    parsed = STParser(src=v)
+                    return parsed.build()
+        elif isinstance(call_func, str) and (call_func in self.function_queue or call_func in self.functions_that_alter_channels):
             visited_args = [self.visit(arg) for arg in node.args]
             function: FunctionDef = self.function_queue[call_func] if call_func in self.function_queue else self.functions_that_alter_channels[call_func]
             if any(isinstance(arg, Node) for arg in visited_args):
@@ -323,7 +332,6 @@ class TypeChecker(NodeVisitor):
                         items[0] = parameterise(Tuple, items[0])
                         args = ImmutableList.of_list(items)
                     valid_action, valid_typ = nd.valid_action_type(op, args.head())
-
                     if not valid_action:
                         raise SessionException(f'expected a {nd.outgoing_action()}, but send was called')
                     elif not valid_typ:
@@ -563,10 +571,16 @@ class TypeChecker(NodeVisitor):
 
 
 def typechecker_from_path(file) -> TypeChecker:
+    if file in visited_files:
+        return visited_files[file]
     src = read_src_from_file(file)
     tree = parse(src)
     tc = TypeChecker(tree)
+    visited_files[file] = tc
     return tc
+
+def typecheck_file():
+    return typechecker_from_path(sys.argv[0])
 
 
 if __name__ == '__main__':
@@ -575,3 +589,4 @@ if __name__ == '__main__':
         sys.exit()
     else:
         typechecker_from_path(sys.argv[1])
+
