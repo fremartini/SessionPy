@@ -104,13 +104,7 @@ class Projector:
             f.write('from channel import Channel\n')
             f.write('from sessiontype import *\n\n')
 
-            session_type = ''
-            for (idx, t) in enumerate(protocol.t):
-                self.insert_end = idx == len(protocol.t) -1 and not isinstance(t.op, LocalChoice)
-                session_type = session_type + self._project_t(t)
-
-            session_type = session_type + self._parens(protocol.t)
-
+            session_type = self._project_session_type(protocol.t)
             f.write(f'ch = Channel[{session_type}]()\n')
 
         return f'{role}.py'
@@ -126,7 +120,7 @@ class Projector:
             case local_recursion if isinstance(local_recursion, LocalRecursion):
                 return self._project_local_recursion(local_recursion)
             case call if isinstance(call, Call):
-                return f'"{call.identifier.visit()}"'
+                return f'"{call}"'
             case end if isinstance(end, End):
                 return 'End'
 
@@ -139,33 +133,28 @@ class Projector:
         return f'Recv[{typ}, {"End" if self.insert_end else ""}'
 
     def _project_local_choice(self, c: LocalChoice) -> str:
-        def _choice(ts: List[T]) -> str:
-            st = ''
-            for t in ts:
-                st = st + self._project_t(t)
+        left_st = self._project_session_type(c.t1)
+        right_st = self._project_session_type(c.t2)
+        st = f'{left_st}, {right_st}'
 
-            st = st + self._parens(ts)
-            return st
-
-        left_st = _choice(c.t1)
-        right_st = _choice(c.t2)
-
-        match c.op:
-            case 'offer':
-                return f'Offer[{left_st}, {right_st}]'
-            case 'choice':
-                return f'Choose[{left_st}, {right_st}]'
+        if c.op == 'offer':
+            return f'Offer[{st}]'
+        elif c.op == 'choice':
+            return f'Choose[{st}]'
+        else:
+            raise Exception(f'unknown operation {c.op}')
 
     def _project_local_recursion(self, r: LocalRecursion) -> str:
-
-        st = ''
-        for (idx, t) in enumerate(r.t):
-            self.insert_end = idx == len(r.t) - 1 and not isinstance(t.op, LocalChoice)
-            st = st + self._project_t(t)
-
-        st = st + self._parens(r.t)
-
+        st = self._project_session_type(r.t)
         return f'Label["{r.identifier.visit()}", {st}'
+
+    def _project_session_type(self, ts: List[T]) -> str:
+        st = ''
+        for (idx, t) in enumerate(ts):
+            self.insert_end = idx == len(ts) - 1 and not isinstance(t.op, LocalChoice)
+            st = st + self._project_t(t)
+        st = st + self._parens(ts)
+        return st
 
     def _project_typedef(self, t: TypeDef) -> str:
         return f'type <{t.typ.identifier}> as {t.identifier.identifier};\n'

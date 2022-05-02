@@ -45,6 +45,9 @@ class Identifier:
     def visit(self) -> str:
         return self.identifier
 
+    def __repr__(self):
+        return self.visit()
+
 
 class Call:
     def __init__(self, identifier: Identifier):
@@ -53,6 +56,9 @@ class Call:
     def visit(self) -> str:
         return self.identifier.visit()
 
+    def __repr__(self):
+        return self.visit()
+
 
 class Role:
     def __init__(self, identifier: Identifier):
@@ -60,6 +66,9 @@ class Role:
 
     def visit(self) -> str:
         return self.identifier.visit()
+
+    def __repr__(self):
+        return self.visit()
 
 
 class Roles:
@@ -171,7 +180,7 @@ class Parser:
 
     def _protocol(self) -> Protocol:
         typedefs = _many(self._typedef)
-        protocol: P | L = self._or(self._p, self._l, 'P | L')
+        protocol: P | L = self._or_else('P | L', self._p, self._l)
 
         return Protocol(typedefs, protocol)
 
@@ -193,9 +202,9 @@ class Parser:
         return P(protocol_name, roles, g)
 
     def _g(self) -> G:
-        statement = self._try_many('global_interaction | global_choice | global_recursion | call | "End"',
-                                   self._global_interaction, self._global_choice, self._global_recursion, self._call,
-                                   self._end)
+        statement = self._or_else('global_interaction | global_choice | global_recursion | call | "End"',
+                                  self._global_interaction, self._global_choice, self._global_recursion, self._call,
+                                  self._end)
 
         return G(statement)
 
@@ -270,9 +279,9 @@ class Parser:
         return L(protocol_name, perspective, roles, t)
 
     def _t(self) -> T:
-        statement = self._try_many('local_send | local_recv | local_choice | local_recursion | call | "end"',
-                                   self._local_send, self._local_recv, self._local_choice, self._local_recursion,
-                                   self._call, self._end)
+        statement = self._or_else('local_send | local_recv | local_choice | local_recursion | call | "end"',
+                                  self._local_send, self._local_recv, self._local_choice, self._local_recursion,
+                                  self._call, self._end)
 
         return T(statement)
 
@@ -287,7 +296,7 @@ class Parser:
 
             return 'choice'
 
-        op = self._or(_offer_to, _choice_from, '"offer" "to" | "choice" "from"')
+        op = self._or_else('"offer" "to" | "choice" "from"', _offer_to, _choice_from)
 
         identifier = self._identifier()
 
@@ -396,16 +405,7 @@ class Parser:
 
         return End()
 
-    def _or(self, rule1: Callable, rule2: Callable, err: str) -> Any:
-        try:
-            return rule1()
-        except ParseError:
-            try:
-                return rule2()
-            except ParseError:
-                self._throw(err)
-
-    def _try_many(self, err: str, *rules: Callable) -> Any:
+    def _or_else(self, err: str, *rules: Callable) -> Any:
         for rule in rules:
             _token = self.current
             try:
