@@ -126,7 +126,7 @@ class Projector:
             case local_recursion if isinstance(local_recursion, LocalRecursion):
                 return self._project_local_recursion(local_recursion)
             case call if isinstance(call, Call):
-                return self._project_call(call)
+                return f'"{call.identifier.visit()}"'
             case end if isinstance(end, End):
                 return 'End'
 
@@ -151,13 +151,21 @@ class Projector:
         right_st = _choice(c.t2)
 
         match c.op:
-            case "offer":
+            case 'offer':
                 return f'Offer[{left_st}, {right_st}]'
-            case "choice":
+            case 'choice':
                 return f'Choose[{left_st}, {right_st}]'
 
     def _project_local_recursion(self, r: LocalRecursion) -> str:
-        return "Loop["
+
+        st = ''
+        for (idx, t) in enumerate(r.t):
+            self.insert_end = idx == len(r.t) - 1 and not isinstance(t.op, LocalChoice)
+            st = st + self._project_t(t)
+
+        st = st + self._parens(r.t)
+
+        return f'Label["{r.identifier.visit()}", {st}'
 
     def _project_typedef(self, t: TypeDef) -> str:
         return f'type <{t.typ.identifier}> as {t.identifier.identifier};\n'
@@ -169,7 +177,7 @@ class Projector:
         parens = ''
         for i in ts:
             i = i.op
-            if isinstance(i, LocalChoice) or isinstance(i, GlobalChoice) or isinstance(i, End):
+            if isinstance(i, LocalChoice) or isinstance(i, GlobalChoice) or isinstance(i, End) or isinstance(i, Call):
                 continue
             parens = parens + ']'
         return parens
