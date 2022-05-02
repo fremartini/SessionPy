@@ -42,7 +42,7 @@ class Projector:
             case call if isinstance(call, Call):
                 return self._project_call(call)
             case end if isinstance(end, End):
-                return self._project_end()
+                return 'End;'
 
     def _project_global_interaction(self, i: GlobalInteraction):
         if self.current_role not in [i.sender.identifier, i.recipient.identifier]:
@@ -101,17 +101,15 @@ class Projector:
             self.type_mapping[ty.identifier.visit()] = ty.typ.visit()
 
         with open(f'{role}.py', "w+") as f:
-            f.write('from channel import Channel, Branch\n')
+            f.write('from channel import Channel\n')
             f.write('from sessiontype import *\n\n')
 
             session_type = ''
-
             for (idx, t) in enumerate(protocol.t):
-                self.is_last = idx == len(protocol.t) - 1
+                self.insert_end = idx == len(protocol.t) -1 and not isinstance(t.op, LocalChoice)
                 session_type = session_type + self._project_t(t)
 
-            for _ in protocol.t:
-                session_type = session_type + ']'
+            session_type = session_type + self._parens(protocol.t)
 
             f.write(f'ch = Channel[{session_type}]()\n')
 
@@ -130,21 +128,36 @@ class Projector:
             case call if isinstance(call, Call):
                 return self._project_call(call)
             case end if isinstance(end, End):
-                return self._project_end()
+                return 'End'
 
     def _project_local_send(self, s: LocalSend) -> str:
         typ = self.type_mapping[s.message.payload.visit()]
-        return f'Send[{typ}, {"End" if self.is_last else ""}'
+        return f'Send[{typ}, {"End" if self.insert_end else ""}'
 
     def _project_local_recv(self, r: LocalRecv) -> str:
         typ = self.type_mapping[r.message.payload.visit()]
-        return f'Recv[{typ}, {"End" if self.is_last else ""}'
+        return f'Recv[{typ}, {"End" if self.insert_end else ""}'
 
     def _project_local_choice(self, c: LocalChoice) -> str:
-        ...
+        def _choice(ts: List[T]) -> str:
+            st = ''
+            for t in ts:
+                st = st + self._project_t(t)
+
+            st = st + self._parens(ts)
+            return st
+
+        left_st = _choice(c.t1)
+        right_st = _choice(c.t2)
+
+        match c.op:
+            case "offer":
+                return f'Offer[{left_st}, {right_st}]'
+            case "choice":
+                return f'Choose[{left_st}, {right_st}]'
 
     def _project_local_recursion(self, r: LocalRecursion) -> str:
-        ...
+        return "Loop["
 
     def _project_typedef(self, t: TypeDef) -> str:
         return f'type <{t.typ.identifier}> as {t.identifier.identifier};\n'
@@ -152,5 +165,11 @@ class Projector:
     def _project_call(self, c: Call) -> str:
         return f'continue {c.identifier.visit()};'
 
-    def _project_end(self) -> str:
-        return 'End;'
+    def _parens(self, ts: List[T]) -> str:
+        parens = ''
+        for i in ts:
+            i = i.op
+            if isinstance(i, LocalChoice) or isinstance(i, GlobalChoice) or isinstance(i, End):
+                continue
+            parens = parens + ']'
+        return parens
