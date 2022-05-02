@@ -6,9 +6,11 @@ ST1 = TypeVar('ST1')
 A = TypeVar('A')
 Actor = TypeVar('Actor')
 
+
 class Branch(str, Enum):
     LEFT = 'LEFT'
     RIGHT = 'RIGHT'
+
 
 class SessionType:
     ...
@@ -39,7 +41,6 @@ class End(SessionType):
 
 class SessionException(TypeError):
     ...
-
 
 
 STR_ST_MAPPING = {

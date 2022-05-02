@@ -126,11 +126,11 @@ class Projector:
 
     def _project_local_send(self, s: LocalSend) -> str:
         typ = self.type_mapping[s.message.payload.visit()]
-        return f'Send[{typ}, {"End" if self.insert_end else ""}'
+        return f'SendA[{typ}, \'{s.identifier.visit()}\', {"End" if self.insert_end else ""}'
 
     def _project_local_recv(self, r: LocalRecv) -> str:
         typ = self.type_mapping[r.message.payload.visit()]
-        return f'Recv[{typ}, {"End" if self.insert_end else ""}'
+        return f'RecvA[{typ}, \'{r.identifier.visit()}\', {"End" if self.insert_end else ""}'
 
     def _project_local_choice(self, c: LocalChoice) -> str:
         left_st = self._project_session_type(c.t1)
@@ -138,9 +138,9 @@ class Projector:
         st = f'{left_st}, {right_st}'
 
         if c.op == 'offer':
-            return f'Offer[{st}]'
+            return f'OfferA[\'{c.identifier.visit()}\', {st}]'
         elif c.op == 'choice':
-            return f'Choose[{st}]'
+            return f'ChooseA[\'{c.identifier.visit()}\', {st}]'
         else:
             raise Exception(f'unknown operation {c.op}')
 
