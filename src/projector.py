@@ -105,7 +105,7 @@ class Projector:
             f.write('from sessiontype import *\n\n')
 
             session_type = self._project_session_type(protocol.t)
-            f.write(f'ch = Channel[{session_type}]()\n')
+            f.write(f'ch = Channel({session_type})\n')
 
         return f'{role}.py'
 
