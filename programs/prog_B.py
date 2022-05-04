@@ -1,7 +1,6 @@
 from context import *
 
-ch = Channel(Choose[Recv[int, End], Send[int, End]], ('localhost', 5011), ('localhost', 5006))
+ch = Channel(Recv[int, 'other', End], {'self': ('localhost', 5005), 'other': ('localhost', 5000)})
 
-ch.choose(Branch.LEFT)
 b = ch.recv()
 print('received ', b)

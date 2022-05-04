@@ -1,6 +1,6 @@
 import sys
 import traceback
-from typing import Any
+from typing import Any, Dict
 import pickle
 from lib import type_to_str
 from sessiontype import *
@@ -13,64 +13,65 @@ T = TypeVar('T')
 
 
 class Channel(Generic[T]):
-    def __init__(self, session_type=Any, local: tuple[str, int] = None, remote: tuple[str, int] = None,
+    def __init__(self, session_type, roles: Dict[str, tuple[str, int]],
                  static_check=True) -> None:
-        self.session_type = statemachine.from_generic_alias(session_type) if session_type != Any else Any
-        if self.session_type != Any and static_check:
+
+        self.session_type = statemachine.from_generic_alias(session_type)
+        if static_check:
             typecheck_file()
 
-        self.local = local
-        self.remote = remote
+        self.local = roles['self']
+        self.roles = roles
         self.server_socket = _spawn_socket()
         self.server_socket.bind(self.local)
 
     def send(self, e: Any) -> None:
-        if self.session_type != Any:
-            nd = self.session_type
-            if nd.outgoing_action() == Action.SEND and nd.outgoing_type() == type(e):
-                self.session_type = nd.next_nd()
-            else:
-                expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
-                raise RuntimeError(f'Expected to {expected_action}, tried to send {type_to_str(type(e))}')
-        self._send(e)
+        nd = self.session_type
+        action, actor = nd.outgoing_action()
+        if action == Action.SEND and nd.outgoing_type() == type(e):
+            self.session_type = nd.next_nd()
+        else:
+            expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
+            raise RuntimeError(f'Expected to {expected_action}, tried to send {type_to_str(type(e))}')
+        #self._send(e, self.roles[actor])
 
     def recv(self) -> Any:
-        if self.session_type != Any:
-            nd = self.session_type
-            if nd.outgoing_action() == Action.RECV:
-                self.session_type = nd.next_nd()
-            else:
-                expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
-                raise RuntimeError(f'Expected to {expected_action}, tried to receive something')
+        nd = self.session_type
+        action, actor = nd.outgoing_action()
+        if action == Action.RECV:
+            self.session_type = nd.next_nd()
+        else:
+            expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
+            raise RuntimeError(f'Expected to {expected_action}, tried to receive something')
         return self._recv()
 
     def offer(self) -> Branch:
         branch : Branch = self._recv()
         assert isinstance(branch, Branch)
-        if self.session_type != Any:
-            nd = self.session_type
-            if nd.outgoing_action() == Action.BRANCH:
-                self.session_type = nd.outgoing[branch]
-            else:
-                expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
-                raise RuntimeError(f'Expected to {expected_action}, offer was called')
+        nd = self.session_type
+        action, actor = nd.outgoing_action()
+        if action == Action.BRANCH:
+            self.session_type = nd.outgoing[branch]
+        else:
+            expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
+            raise RuntimeError(f'Expected to {expected_action}, offer was called')
         return branch
 
     def choose(self, branch: Branch) -> None:
-        if self.session_type != Any:
-            nd = self.session_type
-            if nd.outgoing_action() == Action.BRANCH:
-                self.session_type = nd.outgoing[branch]
-            else:
-                expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
-                raise RuntimeError(f'Expected to {expected_action}, choose was called')
+        nd = self.session_type
+        action, actor = nd.outgoing_action()
+        if action == Action.BRANCH:
+            self.session_type = nd.outgoing[branch]
+        else:
+            expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
+            raise RuntimeError(f'Expected to {expected_action}, choose was called')
         assert isinstance(branch, Branch)
-        self._send(branch)
+        self._send(branch, self.roles[actor])
 
-    def _send(self, e: Any) -> None:
+    def _send(self, e: Any, to : tuple[str, int]) -> None:
         with _spawn_socket() as client_socket:
             try:
-                _wait_until_connected_to(client_socket, self.remote)
+                _wait_until_connected_to(client_socket, to)
 
                 client_socket.send(_encode(e))
             except Exception as ex:
