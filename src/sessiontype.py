@@ -6,9 +6,11 @@ ST1 = TypeVar('ST1')
 A = TypeVar('A')
 Actor = TypeVar('Actor')
 
+
 class Branch(str, Enum):
     LEFT = 'LEFT'
     RIGHT = 'RIGHT'
+
 
 class SessionType:
     ...
@@ -25,6 +27,7 @@ class Recv(SessionType, Generic[A, Actor, ST]):
 class Offer(SessionType, Generic[Actor, ST, ST1]):
     ...
 
+
 class Choose(SessionType, Generic[Actor, ST, ST1]):
     ...
 
@@ -39,7 +42,6 @@ class End(SessionType):
 
 class SessionException(TypeError):
     ...
-
 
 
 STR_ST_MAPPING = {

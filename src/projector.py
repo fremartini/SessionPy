@@ -105,7 +105,7 @@ class Projector:
             f.write('from sessiontype import *\n\n')
 
             session_type = self._project_session_type(protocol.t)
-            f.write(f'ch = Channel[{session_type}]()\n')
+            f.write(f'ch = Channel({session_type})\n')
 
         return f'{role}.py'
 
@@ -126,11 +126,11 @@ class Projector:
 
     def _project_local_send(self, s: LocalSend) -> str:
         typ = self.type_mapping[s.message.payload.visit()]
-        return f'Send[{typ}, {"End" if self.insert_end else ""}'
+        return f'Send[{typ}, \'{s.identifier.visit()}\', {"End" if self.insert_end else ""}'
 
     def _project_local_recv(self, r: LocalRecv) -> str:
         typ = self.type_mapping[r.message.payload.visit()]
-        return f'Recv[{typ}, {"End" if self.insert_end else ""}'
+        return f'Recv[{typ}, \'{r.identifier.visit()}\', {"End" if self.insert_end else ""}'
 
     def _project_local_choice(self, c: LocalChoice) -> str:
         left_st = self._project_session_type(c.t1)
@@ -138,9 +138,9 @@ class Projector:
         st = f'{left_st}, {right_st}'
 
         if c.op == 'offer':
-            return f'Offer[{st}]'
+            return f'Offer[\'{c.identifier.visit()}\', {st}]'
         elif c.op == 'choice':
-            return f'Choose[{st}]'
+            return f'Choose[\'{c.identifier.visit()}\', {st}]'
         else:
             raise Exception(f'unknown operation {c.op}')
 
