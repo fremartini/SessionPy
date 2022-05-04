@@ -92,7 +92,6 @@ class Channel(Generic[T]):
         """
         nd = self.session_type
         action, actor = nd.outgoing_action(), nd.outgoing_actor()
-
         if action == Action.RECV:
             self.session_type = nd.next_nd()
         else:
