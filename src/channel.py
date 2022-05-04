@@ -27,17 +27,17 @@ class Channel(Generic[T]):
 
     def send(self, e: Any) -> None:
         nd = self.session_type
-        action, actor = nd.outgoing_action()
+        action, actor = nd.outgoing_action(), nd.outgoing_actor()
         if action == Action.SEND and nd.outgoing_type() == type(e):
             self.session_type = nd.next_nd()
         else:
             expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
             raise RuntimeError(f'Expected to {expected_action}, tried to send {type_to_str(type(e))}')
-        #self._send(e, self.roles[actor])
+        self._send(e, self.roles[actor])
 
     def recv(self) -> Any:
         nd = self.session_type
-        action, actor = nd.outgoing_action()
+        action, actor = nd.outgoing_action(), nd.outgoing_actor()
         if action == Action.RECV:
             self.session_type = nd.next_nd()
         else:
@@ -49,7 +49,7 @@ class Channel(Generic[T]):
         branch : Branch = self._recv()
         assert isinstance(branch, Branch)
         nd = self.session_type
-        action, actor = nd.outgoing_action()
+        action, actor = nd.outgoing_action(), nd.outgoing_actor()
         if action == Action.BRANCH:
             self.session_type = nd.outgoing[branch]
         else:
@@ -59,7 +59,7 @@ class Channel(Generic[T]):
 
     def choose(self, branch: Branch) -> None:
         nd = self.session_type
-        action, actor = nd.outgoing_action()
+        action, actor = nd.outgoing_action(), nd.outgoing_actor()
         if action == Action.BRANCH:
             self.session_type = nd.outgoing[branch]
         else:
