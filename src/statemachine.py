@@ -6,7 +6,7 @@ import typing
 import sessiontype
 from sessiontype import Branch
 
-from lib import ContainerType, Typ, parameterise, str_to_typ, to_typing, type_to_str
+from lib import Typ, parameterise, str_to_typ, type_to_str
 from sessiontype import *
 
 A = TypeVar('A')
@@ -184,15 +184,10 @@ class STParser(NodeVisitor):
     def get_transition(self, key):
         match key:
             case sessiontype.Send: return Transition(Action.SEND)
-            case sessiontype.SendA: return Transition(Action.SEND)
             case sessiontype.Recv: return Transition(Action.RECV)
-            case sessiontype.RecvA: return Transition(Action.RECV)
             case sessiontype.Offer: return Transition(Action.BRANCH)
-            case sessiontype.OfferA: return Transition(Action.BRANCH)
             case sessiontype.Choose: return Transition(Action.BRANCH)
-            case sessiontype.ChooseA: return Transition(Action.BRANCH)
             case sessiontype.Label: return Transition(Action.LABEL)
-            case sessiontype.LabelA: return Transition(Action.LABEL)
             case sessiontype.End: return STEnd()
 
 
@@ -203,26 +198,17 @@ class STParser(NodeVisitor):
             return typ.__forward_arg__
         base = self.get_transition(typ.__origin__)
         assert isinstance(base, Transition), base
-        offset = 0
-        if len(typ.__args__) == 3:
-            offset = 1
         if base.action in [Action.SEND, Action.RECV]:
             base.typ = typ.__args__[0]
-            if offset:
-                base.actor = typ.__args__[1].__forward_arg__
-            return base, self.from_generic_alias(typ.__args__[1 + offset])
+            return base, self.from_generic_alias(typ.__args__[1])
         elif base.action == Action.BRANCH:
-            if offset:
-                base.actor = typ.__args__[0].__forward_arg__
-            ltyp, rtyp = typ.__args__[0+offset], typ.__args__[1+offset]
+            ltyp, rtyp = typ.__args__[0], typ.__args__[1]
             base.left  = self.from_generic_alias(ltyp)
             base.right = self.from_generic_alias(rtyp)
             return base
         elif base.action == Action.LABEL:
-            if offset:
-                base.actor = typ.__args__[1].__forward_arg__
             base.name = typ.__args__[0].__forward_arg__
-            base.st = self.from_generic_alias(typ.__args__[1+offset])
+            base.st = self.from_generic_alias(typ.__args__[1])
             return base
 
 
@@ -280,13 +266,8 @@ class STParser(NodeVisitor):
                 value.right = slice[1]
             elif value.action == Action.LABEL:
                 value.name = slice[0]
-                if len(slice) == 3:
-                    value.actor = slice[1]
-                    value.st = slice[2]
-                    slice = slice[2:][0]
-                else:
-                    value.st = slice[1]
-                    slice = slice[1:][0]
+                value.st = slice[1]
+                slice = slice[1:][0]
                     
 
 
