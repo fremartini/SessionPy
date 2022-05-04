@@ -365,7 +365,7 @@ class TypeChecker(NodeVisitor):
                 case 'recv':
                     valid_action, _ = nd.valid_action_type(op, None)
                     if not valid_action:
-                        raise SessionException(f'expected a {nd.outgoing_action()}, but recv was called')
+                        raise SessionException(f'expected a {nd.outgoing_action()[0]}, but recv was called')
                     next_nd = nd.next_nd()
                     self.bind_var(ch_name, next_nd)
                     return nd.outgoing_type()
@@ -376,7 +376,7 @@ class TypeChecker(NodeVisitor):
                         args = ImmutableList.of_list(items)
                     valid_action, valid_typ = nd.valid_action_type(op, args.head())
                     if not valid_action:
-                        raise SessionException(f'expected a {nd.outgoing_action()}, but send was called')
+                        raise SessionException(f'expected a {nd.outgoing_action()[0]}, but send was called')
                     elif not valid_typ:
                         raise SessionException(f'expected to send a {type_to_str(nd.outgoing_type())}, got {type_to_str(args.head())}')
                     next_nd = nd.next_nd()
