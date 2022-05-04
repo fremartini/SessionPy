@@ -1,15 +1,16 @@
+from __future__ import annotations
+
 from ast import *
-from enum import Enum
 from types import GenericAlias
-from typing import ForwardRef, TypeVar, Generic, Any
+from typing import ForwardRef, Any, Tuple
 import typing
 import sessiontype
-from sessiontype import Branch
 
 from lib import Typ, parameterise, str_to_typ, type_to_str
 from sessiontype import *
 
 A = TypeVar('A')
+
 
 class Action(str, Enum):
     SEND = 'send'
@@ -18,17 +19,7 @@ class Action(str, Enum):
     BRANCH = 'branch'
 
 
-"""
-Send TYPE [@ Actor]
-Receive TYPE [@ Actor]
-Label NAME SESSIONTYPE [@ Actor]
-Offer   ST_LEFT ST_RIGHT [@ Actor]
-Choice  ST_LEFT ST_RIGHT [@ Actor]
-"""
-
-
 class Transition:
-
     def __init__(self, action) -> None:
         self.action = action
         self.actor = None
@@ -40,7 +31,7 @@ class Transition:
         elif action == Action.LABEL:
             self.name = ''
             self.st = None
-        
+
     def __eq__(self, __o: object) -> bool:
         if self.action in [Action.SEND, Action.RECV]:
             return self.typ == __o.typ and self.actor == __o.actor
@@ -49,7 +40,6 @@ class Transition:
         elif self.action == Action.LABEL:
             return self.name == __o.name and self.st == __o.st
         return False
-
 
     def __hash__(self) -> int:
         if self.action in [Action.SEND, Action.RECV]:
@@ -70,8 +60,7 @@ class Transition:
         if self.actor:
             return res + f" @ {self.actor}"
         return res
-    
-        
+
 
 class TLabel(Generic[A]):
     def __repr__(self) -> str:
@@ -79,6 +68,7 @@ class TLabel(Generic[A]):
 
     def __str__(self) -> str:
         return f'label'
+
 
 class STEnd:
     def __str__(self) -> str:
@@ -99,28 +89,20 @@ class TGoto:
         return f'goto {self.lab}'
 
 
-str_transition_map = {
-    "recv": Transition(Action.RECV),
-    "send": Transition(Action.SEND),
-    "offer": Transition(Action.BRANCH),
-    "choice": Transition(Action.BRANCH),
-}
-
-
 class Node:
-    def __init__(self, id: int, accepting_state: bool = False) -> None:
-        self.id = id
+    def __init__(self, identifier: int, accepting_state: bool = False) -> None:
+        self.identifier = identifier
         self.accepting = accepting_state
         self.outgoing: dict[Transition, Node] = {}
 
     def __str__(self) -> str:
-        state = f'(s{self.id})' if self.accepting else f's{self.id}'
+        state = f'(s{self.identifier})' if self.accepting else f's{self.identifier}'
         return state
 
     def __repr__(self) -> str:
-        return f'Node(state={self.id})'
+        return f'Node(state={self.identifier})'
 
-    def next_nd(self):
+    def next_nd(self) -> Node:
         assert len(self.outgoing) == 1, "Function should not be called if it's not a single outgoing edge"
         points_to = list(self.outgoing.values())[0]
         if points_to.outgoing and isinstance(points_to.get_edge(), TGoto):
@@ -128,17 +110,18 @@ class Node:
             assert not isinstance(points_to.get_edge(), TGoto), "Wow now, are you trying to break something?"
         return points_to
 
-    def get_edge(self, opt_branch=None):
+    def get_edge(self) -> Transition:
         assert len(self.outgoing) > 0, "Function should at least contain a single edge"
         return list(self.outgoing.keys())[0]
 
-    def outgoing_action(self):
+    def outgoing_action(self) -> tuple[Action, None] | tuple[Transition, None]:
         if len(self.outgoing) == 0:
-            raise SessionException(f'Channel {self} is done and exhausted')
-        key = self.get_edge()
-        if isinstance(key, Branch):
-            return Action.BRANCH
-        return key.action
+            raise SessionException(f'Channel {self} is exhausted')
+        edge = self.get_edge()
+
+        if isinstance(edge, Branch):
+            return Action.BRANCH, None
+        return edge.action, edge.actor
 
     def outgoing_type(self) -> type:
         assert len(self.outgoing) == 1, "Function should not be called if it's not a single outgoing edge"
@@ -147,13 +130,16 @@ class Node:
         assert isinstance(typ, Typ), typ
         return typ
 
-    def valid_action_type(self, action: str, typ: type = Any):
-        assert action in str_transition_map, action
-        return action == self.outgoing_action(), typ == self.outgoing_type() or typ is Any
+    def valid_action_type(self, action: str, typ: type = Any) -> tuple[bool, bool]:
+        str_transition_map = {
+            "recv": Transition(Action.RECV),
+            "send": Transition(Action.SEND),
+            "offer": Transition(Action.BRANCH),
+            "choice": Transition(Action.BRANCH),
+        }
 
-    def progress(self, opt_branch=None):
-        if not opt_branch:
-            assert len(self.outgoing) == 1
+        assert action in str_transition_map, action
+        return action == self.outgoing_action()[0], typ == self.outgoing_type() or typ is Any
 
 
 def from_generic_alias(typ: GenericAlias) -> Node:
@@ -168,9 +154,9 @@ class STParser(NodeVisitor):
         parsed.res # (recv, (<class 'str'>, (offer, ((send, (<class 'bool'>, end)), (loop, (send, (<class 'int'>, end)))))))
     """
 
-    def __init__(self, src: str = '', typ: GenericAlias = None):
+    def __init__(self, src: str = '', typ: GenericAlias = None) -> None:
         self.session_tuple = None
-        self.id = 0
+        self.identifier = 0
         if src:
             tree = parse(src)
             self.root = self.new_node()
@@ -179,17 +165,20 @@ class STParser(NodeVisitor):
             self.session_tuple = self.from_generic_alias(typ)
         assert self.session_tuple
 
-
-    
-    def get_transition(self, key):
+    def get_transition(self, key) -> Transition | STEnd:
         match key:
-            case sessiontype.Send: return Transition(Action.SEND)
-            case sessiontype.Recv: return Transition(Action.RECV)
-            case sessiontype.Offer: return Transition(Action.BRANCH)
-            case sessiontype.Choose: return Transition(Action.BRANCH)
-            case sessiontype.Label: return Transition(Action.LABEL)
-            case sessiontype.End: return STEnd()
-
+            case sessiontype.Send:
+                return Transition(Action.SEND)
+            case sessiontype.Recv:
+                return Transition(Action.RECV)
+            case sessiontype.Offer:
+                return Transition(Action.BRANCH)
+            case sessiontype.Choose:
+                return Transition(Action.BRANCH)
+            case sessiontype.Label:
+                return Transition(Action.LABEL)
+            case sessiontype.End:
+                return STEnd()
 
     def from_generic_alias(self, typ: GenericAlias):
         if typ == End:
@@ -203,7 +192,7 @@ class STParser(NodeVisitor):
             return base, self.from_generic_alias(typ.__args__[1])
         elif base.action == Action.BRANCH:
             ltyp, rtyp = typ.__args__[0], typ.__args__[1]
-            base.left  = self.from_generic_alias(ltyp)
+            base.left = self.from_generic_alias(ltyp)
             base.right = self.from_generic_alias(rtyp)
             return base
         elif base.action == Action.LABEL:
@@ -211,13 +200,9 @@ class STParser(NodeVisitor):
             base.st = self.from_generic_alias(typ.__args__[1])
             return base
 
-
-
-
-
     def next_id(self) -> int:
-        res = self.id
-        self.id += 1
+        res = self.identifier
+        self.identifier += 1
         return res
 
     def new_node(self) -> Node:
@@ -243,11 +228,11 @@ class STParser(NodeVisitor):
                 res = str_to_typ(x) or x
                 return res
 
-    def visit_Tuple(self, node: Tuple) -> Any:
-        elems = [self.visit(el) for el in node.elts]
-        return tuple(elems)
+    def visit_Tuple(self, node: Tuple) -> tuple[Any]:
+        elements = [self.visit(el) for el in node.elts]
+        return tuple(elements)
 
-    def visit_Subscript(self, node: Subscript) -> Any:
+    def visit_Subscript(self, node: Subscript) -> tuple[Any, Any] | None:
         value = self.visit(node.value)
         slice = self.visit(node.slice)
         if isinstance(value, Transition):
@@ -268,8 +253,6 @@ class STParser(NodeVisitor):
                 value.name = slice[0]
                 value.st = slice[1]
                 slice = slice[1:][0]
-                    
-
 
         if not value:
             self.session_tuple = slice
@@ -281,7 +264,7 @@ class STParser(NodeVisitor):
         assert isinstance(node.value, str)
         return self.visit(Name(node.value))
 
-    def build(self):
+    def build(self) -> Node:
         global ident
         ident = 0
 
@@ -333,7 +316,7 @@ class STParser(NodeVisitor):
                     typ = head.typ
                     if isinstance(typ, tuple):
                         head.typ = parameterise(head.typ[0], [head.typ[1]])
-                    go(tail,nd)
+                    go(tail, nd)
                     node.outgoing[head] = nd
                     return nd, head
                 elif head.action == Action.BRANCH:
@@ -352,7 +335,7 @@ class STParser(NodeVisitor):
         return root
 
 
-def print_node(n: Node):
+def print_node(n: Node) -> None:
     if not n.outgoing:
         return
     print(n)
@@ -379,10 +362,5 @@ def print_node(n: Node):
             return
         seen.add(key)
         n1 = n.outgoing[key]
-        if n1.id != n.id:
+        if n1.identifier != n.identifier:
             print_node(n1)
-
-
-if __name__ == '__main__':
-    v = from_generic_alias(Recv[int, Recv[int, Send[int, End]]])
-    print_node(v)
