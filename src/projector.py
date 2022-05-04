@@ -21,7 +21,7 @@ class Projector:
                 for t in typedefs:
                     f.write(self._project_typedef(t))
 
-                role_str = ''.join([f'role {x},' for x in roles])[:-1]
+                role_str = remove_last_char(''.join([f'role {x},' for x in roles]))
                 f.write(f'local protocol {protocol.protocol_name.identifier} at {r}({role_str}) {{ \n')
 
                 for g in protocol.g:
@@ -105,9 +105,26 @@ class Projector:
             f.write('from sessiontype import *\n\n')
 
             session_type = self._project_session_type(protocol.t)
-            f.write(f'ch = Channel({session_type})\n')
+            role_mapping = self._project_roles(role, protocol.roles.visit())
+            f.write(f'roles = {role_mapping}\n\n')
+            f.write(f'ch = Channel({session_type}, roles)\n')
 
         return f'{role}.py'
+
+    def _project_roles(self, me : str, roles: List[str]) -> str:
+        lines = '{'
+        address = ('localhost', 0)
+
+        for role in roles:
+            if role == me:
+                to_append = f"'self': {address},"
+            else:
+                to_append = f"'{role}': {address},"
+            lines = lines + to_append
+
+        lines = remove_last_char(lines)
+        lines = lines + '}'
+        return lines
 
     def _project_t(self, t: T) -> str:
         match t.op:
@@ -125,11 +142,11 @@ class Projector:
                 return 'End'
 
     def _project_local_send(self, s: LocalSend) -> str:
-        typ = self.type_mapping[s.message.payload.visit()]
+        typ = self._lookup_or_self(s.message.payload.visit())
         return f'Send[{typ}, \'{s.identifier.visit()}\', {"End" if self.insert_end else ""}'
 
     def _project_local_recv(self, r: LocalRecv) -> str:
-        typ = self.type_mapping[r.message.payload.visit()]
+        typ = self._lookup_or_self(r.message.payload.visit())
         return f'Recv[{typ}, \'{r.identifier.visit()}\', {"End" if self.insert_end else ""}'
 
     def _project_local_choice(self, c: LocalChoice) -> str:
@@ -170,3 +187,13 @@ class Projector:
                 continue
             parens = parens + ']'
         return parens
+
+    def _lookup_or_self(self, t: str) -> str:
+        try:
+            return self.type_mapping[t]
+        except:
+            return t
+
+
+def remove_last_char(s: str) -> str:
+    return s[:-1]

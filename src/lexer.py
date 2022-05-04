@@ -114,7 +114,7 @@ class Lexer:
                     raise Exception(f'Unexpected character \'{x}\'')
 
     def _is_alphanumeric(self, c: str) -> bool:
-        return c.isalpha() or c.isdigit()
+        return c.isalpha() or c.isdigit() or c == '_'
 
     def _peek(self):
         if self._is_at_end():

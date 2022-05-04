@@ -20,9 +20,9 @@ class Action(str, Enum):
 
 
 class Transition:
-    def __init__(self, action) -> None:
-        self.action = action
-        self.actor = None
+    def __init__(self, action: Action) -> None:
+        self.action : Action = action
+        self.actor : str | None = None
         if action in [Action.SEND, Action.RECV]:
             self.typ = Any
         elif action == Action.BRANCH:
@@ -114,14 +114,22 @@ class Node:
         assert len(self.outgoing) > 0, "Function should at least contain a single edge"
         return list(self.outgoing.keys())[0]
 
-    def outgoing_action(self) -> tuple[Action, None] | tuple[Transition, None]:
+    def outgoing_actor(self) -> str:
+        if len(self.outgoing) == 0:
+            raise SessionException(f'Channel {self} is exhausted')
+        edge = self.get_edge()
+
+        return edge.actor
+
+    def outgoing_action(self) -> Action | Transition:
         if len(self.outgoing) == 0:
             raise SessionException(f'Channel {self} is exhausted')
         edge = self.get_edge()
 
         if isinstance(edge, Branch):
-            return Action.BRANCH, None
-        return edge.action, edge.actor
+            return Action.BRANCH
+        else:
+            return edge.action
 
     def outgoing_type(self) -> type:
         assert len(self.outgoing) == 1, "Function should not be called if it's not a single outgoing edge"
@@ -139,7 +147,7 @@ class Node:
         }
 
         assert action in str_transition_map, action
-        return action == self.outgoing_action()[0], typ == self.outgoing_type() or typ is Any
+        return action == self.outgoing_action(), typ == self.outgoing_type() or typ is Any
 
 
 def from_generic_alias(typ: GenericAlias) -> Node:
@@ -189,6 +197,7 @@ class STParser(NodeVisitor):
         assert isinstance(base, Transition), base
         if base.action in [Action.SEND, Action.RECV]:
             base.typ = typ.__args__[0]
+            base.actor = typ.__args__[1].__forward_arg__
             return base, self.from_generic_alias(typ.__args__[1])
         elif base.action == Action.BRANCH:
             ltyp, rtyp = typ.__args__[0], typ.__args__[1]
