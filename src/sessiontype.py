@@ -27,6 +27,7 @@ class Recv(SessionType, Generic[A, Actor, ST]):
 class Offer(SessionType, Generic[Actor, ST, ST1]):
     ...
 
+
 class Choose(SessionType, Generic[Actor, ST, ST1]):
     ...
 
