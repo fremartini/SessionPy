@@ -198,9 +198,10 @@ class STParser(NodeVisitor):
         if base.action in [Action.SEND, Action.RECV]:
             base.typ = typ.__args__[0]
             base.actor = typ.__args__[1].__forward_arg__
-            return base, self.from_generic_alias(typ.__args__[1])
+            return base, self.from_generic_alias(typ.__args__[2])
         elif base.action == Action.BRANCH:
-            ltyp, rtyp = typ.__args__[0], typ.__args__[1]
+            base.actor = typ.__args__[0].__forward_arg__
+            ltyp, rtyp = typ.__args__[1], typ.__args__[2]
             base.left = self.from_generic_alias(ltyp)
             base.right = self.from_generic_alias(rtyp)
             return base
@@ -373,3 +374,4 @@ def print_node(n: Node) -> None:
         n1 = n.outgoing[key]
         if n1.identifier != n.identifier:
             print_node(n1)
+
