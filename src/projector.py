@@ -120,9 +120,9 @@ class Projector:
 
         for role in roles:
             if role == me:
-                to_append = f"'self': {address},"
+                to_append = f"'self': {address}, "
             else:
-                to_append = f"'{role}': {address},"
+                to_append = f"'{role}': {address}, "
             lines = lines + to_append
 
         lines = remove_last_char(lines)

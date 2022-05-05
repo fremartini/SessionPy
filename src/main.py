@@ -12,6 +12,6 @@ if __name__ == '__main__':
         return Projector().project(ast)
 
 
-    files = run('../programs/progs.scr')
+    files = run('../programs/two_buyers.scr')
     for f in files:
         run(f)

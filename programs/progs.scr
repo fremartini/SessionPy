@@ -1,0 +1,4 @@
+global protocol Progs(role progA, role progB, role progC) {
+    Msg(int) from progA to progB;
+    Msg(int) from progA to progC;
+}
