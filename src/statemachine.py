@@ -400,9 +400,3 @@ def print_node(n: Node, title='') -> None:
         if n1.identifier != n.identifier:
             print_node(n1)
 
-
-if __name__ == "__main__":
-    parsed = STParser("Send[List[int], 'Bobby', Offer['Bobby', {'option1': Send[Tuple[str, int], 'Charlie', End], 'option2': Recv[str, 'Alice', Send[Dict[float, str], 'Bobby', End]], 'option3': End}]]")
-    nd = parsed.build()
-    print_node(nd)
-
