@@ -1,5 +1,6 @@
 import sys
 import traceback
+import time
 from typing import Any, Dict
 import pickle
 from lib import type_to_str
@@ -20,10 +21,11 @@ class Channel(Generic[T]):
         if static_check:
             typecheck_file()
 
-        self.local = roles['self']
-        self.roles = roles
+        self.rolesToPorts = roles
+        self.portsToRoles = {v: k for k, v in roles.items()}
         self.server_socket = _spawn_socket()
-        self.server_socket.bind(self.local)
+        self.server_socket.bind(roles['self'])
+        self.queue = []
 
     def send(self, e: Any) -> None:
         nd = self.session_type
@@ -33,7 +35,7 @@ class Channel(Generic[T]):
         else:
             expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
             raise RuntimeError(f'Expected to {expected_action}, tried to send {type_to_str(type(e))}')
-        self._send(e, self.roles[actor])
+        self._send(e, self.rolesToPorts[actor])
 
     def recv(self) -> Any:
         nd = self.session_type
@@ -43,13 +45,14 @@ class Channel(Generic[T]):
         else:
             expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
             raise RuntimeError(f'Expected to {expected_action}, tried to receive something')
-        return self._recv()
+        return self._recv(actor)
 
     def offer(self) -> Branch:
-        branch : Branch = self._recv()
-        assert isinstance(branch, Branch)
         nd = self.session_type
-        action, actor = nd.outgoing_action(), nd.outgoing_actor()
+        actor = nd.outgoing_actor()
+        branch : Branch = self._recv(actor)
+        assert isinstance(branch, Branch)
+        action = nd.outgoing_action()
         if action == Action.BRANCH:
             self.session_type = nd.outgoing[branch]
         else:
@@ -66,23 +69,33 @@ class Channel(Generic[T]):
             expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
             raise RuntimeError(f'Expected to {expected_action}, choose was called')
         assert isinstance(branch, Branch)
-        self._send(branch, self.roles[actor])
+        self._send(branch, self.rolesToPorts[actor])
 
     def _send(self, e: Any, to : tuple[str, int]) -> None:
         with _spawn_socket() as client_socket:
             try:
                 _wait_until_connected_to(client_socket, to)
 
-                client_socket.send(_encode(e))
+                payload = (e, self.rolesToPorts['self'])
+                client_socket.send(_encode(payload))
             except Exception as ex:
                 _trace(ex)
 
-    def _recv(self) -> Any:
+    def _recv(self, sender: str) -> Any:
         try:
             self.server_socket.listen()
             conn, _ = self.server_socket.accept()
             with conn:
-                return _decode(conn.recv(1024))
+                msg, addr = _decode(conn.recv(1024))
+                received_from = self.portsToRoles[addr]
+                expected_recipient = sender == received_from
+
+                if expected_recipient:
+                    return msg
+                else:
+                    self.queue.append(msg)
+                    time.sleep(2) #FIXME: wait until next actor is expected
+                    return self.queue.pop(0)
         except KeyboardInterrupt:
             _exit()
         except Exception as ex:
@@ -105,7 +118,7 @@ def _wait_until_connected_to(sock: socket.socket, address: tuple[str, int]) -> N
             _connected = True
         except KeyboardInterrupt:
             _exit()
-        except Exception:
+        except:
             pass
 
 
