@@ -377,9 +377,7 @@ class TypeChecker(NodeVisitor):
                         raise SessionException(f'expected a {nd.outgoing_action()}, but send was called')
                     elif not valid_typ:
                         raise SessionException(f'expected to send a {type_to_str(nd.outgoing_type())}, got {type_to_str(args.head())}')
-                    print('nd.outgoing', nd.outgoing)
                     next_nd = nd.next_nd()
-                    print('next_nd.outgoing', next_nd.outgoing)
                     self.bind_var(ch_name, next_nd)
                 case 'offer':
                     return nd
