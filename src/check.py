@@ -164,7 +164,7 @@ class TypeChecker(NodeVisitor):
                         new_nd = nd.outgoing[edge]
                         break
                 if new_nd == None:
-                    raise SessionException(f"Case option '{branch_pick}' not an available offer")
+                    raise SessionException(f"Case option '{ast.unparse(match_value)}' not an available offer")
                 self.bind_var(ch_name, new_nd)
                 for s in case.body:
                     self.visit(s)
@@ -376,9 +376,18 @@ class TypeChecker(NodeVisitor):
                 case 'offer':
                     return nd
                 case 'choose':
-                    new_nd = nd.outgoing[Branch.LEFT if args.head()[1] == 'LEFT' else Branch.RIGHT]
-                    fail_if(new_nd is None, "Choose outgoing node was none", SessionException)
-                    # FIXME: sanitise goto-skips
+                    pick = args.head()
+                    if isinstance(node.args[0], Constant):
+                        pick = node.args[0].value
+                    new_nd = None
+                    for edge in nd.outgoing:
+                        assert isinstance(edge, BranchEdge)
+                        if pick == edge.key:
+                            new_nd = nd.outgoing[edge]
+                            break
+                    if not new_nd:
+                        options = ', '.join(k.key for k in nd.outgoing.keys())
+                        raise SessionException(f"The choice of '{pick}' is not one of: {options}")
                     if new_nd.outgoing and isinstance(new_nd.get_edge(), TGoto):
                         new_nd = new_nd.next_nd()
                     self.bind_var(ch_name, new_nd)
