@@ -184,7 +184,8 @@ def assert_eq(expected, actual):
         raise Exception("expected " + str(expected) + ", found " + str(actual))
 
 def str_to_typ(s: str) -> type:
-    if s in ['main', 'Channel'] or s in builtin_module_names:
+    py_files_in_dir = [fname.split('.')[0].lower() for fname in os.listdir() if os.path.splitext(fname)[1] == '.py']
+    if s in ['main', 'Channel'] or s in builtin_module_names or s.lower() in py_files_in_dir:
         return s
     opt = locate(s)
     opt_lower = locate(s.lower())

@@ -9,9 +9,19 @@ from environment import Environment
 from immutable_list import ImmutableList
 from lib import *
 from statemachine import STParser, Node, TGoto
-from sessiontype import STR_ST_MAPPING, SessionException, Branch
+from sessiontype import STR_ST_MAPPING, SessionException
 
 visited_files = {}
+
+class Closure:
+
+    def __init__(self, args, body) -> None:
+        self.args = args
+        self.body = body
+
+    def __str__(self) -> str:
+        return f"Closure({self.args}, {self.body})"
+
 
 class TypeChecker(NodeVisitor):
 
@@ -54,7 +64,7 @@ class TypeChecker(NodeVisitor):
         failing_chans = []
         for (k,v) in latest.get_vars():
             if isinstance(v, Node):
-                if not v.accepting and v.id not in self.loop_entrypoints:
+                if not v.accepting and v.identifier not in self.loop_entrypoints:
                     err_msg = f'\nchannel <{k}> not exhausted - next up is:'
                     for edge in v.outgoing.keys():
                         err_msg += f'\n- {str(edge)}'
@@ -131,8 +141,9 @@ class TypeChecker(NodeVisitor):
             ch_name = node.subject.func.value.id
             nd = subj
 
-            fail_if(not len(nd.outgoing) == 2, "Node should have 2 outgoing edges", SessionException)
-            fail_if(not len(node.cases) == 2, "Matching on session type operations should always have 2 cases", SessionException)
+            # More branches; no limits on 2
+            #fail_if(not len(nd.outgoing) == 2, "Node should have 2 outgoing edges", SessionException)
+            #fail_if(not len(node.cases) == 2, "Matching on session type operations should always have 2 cases", SessionException)
             
             for case in node.cases:
                 match_value = case.pattern
@@ -267,6 +278,8 @@ class TypeChecker(NodeVisitor):
         debug_print('visit_BinOp', dump(node))
         l_typ = self.visit(node.left)
         r_typ = self.visit(node.right)
+        print('left', l_typ)
+        print('right', r_typ)
         return union(l_typ, r_typ)
 
     def visit_Constant(self, node: Constant) -> type:
@@ -274,6 +287,9 @@ class TypeChecker(NodeVisitor):
 
     def in_function_queue(self, key) -> bool:
         return type(key) is str and key in self.function_queue
+
+    def visit_Lambda(self, node: Lambda) -> Any:
+        return Closure(node.args, node.body)
 
     def visit_Call(self, node: Call) -> Typ:
         debug_print('visit_Call', dump(node))
@@ -308,7 +324,16 @@ class TypeChecker(NodeVisitor):
             else:
                 self.visit_and_drop_function(call_func)
                 call_func = self.visit(node.func)
-        
+
+        if isinstance(call_func, Closure):
+            visited_args = []
+            for arg in node.args:
+                visited_args.append(self.visit(arg))
+            for (arg, (var, typ)) in zip(visited_args, self.visit(call_func.args)):
+                self.bind_var(var, union(arg, typ))
+
+            return self.visit(call_func.body)
+
         if isinstance(call_func, tuple):
             args = self.get_function_args(node.args)
             op = call_func[1]
@@ -341,6 +366,7 @@ class TypeChecker(NodeVisitor):
                 case 'offer':
                     return nd
                 case 'choose':
+                    print('nd.outgoing', nd.outgoing)
                     new_nd = nd.outgoing[Branch.LEFT if args.head()[1] == 'LEFT' else Branch.RIGHT]
                     fail_if(new_nd is None, "Choose outgoing node was none", SessionException)
                     # FIXME: sanitise goto-skips
@@ -393,6 +419,8 @@ class TypeChecker(NodeVisitor):
         debug_print('visit_Dict', dump(node))
         key_typ = reduce(union, ((self.visit(k)) for k in node.keys)) if node.keys else Any
         val_typ = reduce(union, ((self.visit(v)) for v in node.values)) if node.values else Any
+        if isinstance(val_typ, list):
+            val_typ = parameterise(Tuple, val_typ)
         res = Dict[key_typ, val_typ]
         return res
 
@@ -437,7 +465,7 @@ class TypeChecker(NodeVisitor):
             chans1 = env_else.get_kind(Node)
             for (ch1, nd1), (ch2, nd2) in zip(chans, chans1):
                 # This is the scenario after and if-then-else block
-                valid = nd1.accepting and nd2.accepting or nd1.id == nd2.id
+                valid = nd1.accepting and nd2.accepting or nd1.identifier == nd2.identifier
                 if ch1 == ch2 and not valid:
                     raise SessionException(f'after conditional block, channel <{ch1}> ended up in two different states')
         elif chans:
@@ -498,7 +526,7 @@ class TypeChecker(NodeVisitor):
         if pre_chans:
             nds = [chs[1] for chs in pre_chans]
             for nd in nds:
-                self.loop_entrypoints.add(nd.id) 
+                self.loop_entrypoints.add(nd.identifier) 
             pre_chans = nds
         if isinstance(node, While):
             self.visit(node.test)
@@ -508,7 +536,7 @@ class TypeChecker(NodeVisitor):
         if pre_chans and post_chans:
             post_chans = [chs[1] for chs in post_chans]
             for post_chan in post_chans:
-                if post_chan.id not in self.loop_entrypoints:
+                if post_chan.identifier not in self.loop_entrypoints:
                     raise SessionException(f'loop error: needs to {post_chan.outgoing_action()()} {post_chan.outgoing_type()}')
 
     def bind_session_type(self, node, target):

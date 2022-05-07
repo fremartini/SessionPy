@@ -14,9 +14,9 @@ T = TypeVar('T')
 
 class Channel(Generic[T]):
     def __init__(self, session_type, roles: Dict[str, tuple[str, int]],
-                 static_check=True) -> None:
-
+                 static_check=True, dynamic_check=True) -> None:
         self.session_type = statemachine.from_generic_alias(session_type)
+        self.dynamic_check = dynamic_check
         if static_check:
             typecheck_file()
 
@@ -26,46 +26,53 @@ class Channel(Generic[T]):
         self.server_socket.bind(self.local)
 
     def send(self, e: Any) -> None:
-        nd = self.session_type
-        action, actor = nd.outgoing_action(), nd.outgoing_actor()
-        if action == Action.SEND and nd.outgoing_type() == type(e):
-            self.session_type = nd.next_nd()
-        else:
-            expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
-            raise RuntimeError(f'Expected to {expected_action}, tried to send {type_to_str(type(e))}')
+        if self.dynamic_check:
+            nd = self.session_type
+            action, actor = nd.outgoing_action(), nd.outgoing_actor()
+            if action == Action.SEND and nd.outgoing_type() == type(e):
+                self.session_type = nd.next_nd()
+            else:
+                expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
+                raise RuntimeError(f'Expected to {expected_action}, tried to send {type_to_str(type(e))}')
         self._send(e, self.roles[actor])
 
+
+
     def recv(self) -> Any:
-        nd = self.session_type
-        action, actor = nd.outgoing_action(), nd.outgoing_actor()
-        if action == Action.RECV:
-            self.session_type = nd.next_nd()
-        else:
-            expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
-            raise RuntimeError(f'Expected to {expected_action}, tried to receive something')
+        if self.dynamic_check:
+            nd = self.session_type
+            action, actor = nd.outgoing_action(), nd.outgoing_actor()
+
+            if action == Action.RECV:
+                self.session_type = nd.next_nd()
+            else:
+                expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
+                raise RuntimeError(f'Expected to {expected_action}, tried to receive something')
         return self._recv()
 
     def offer(self) -> Branch:
         branch : Branch = self._recv()
-        assert isinstance(branch, Branch)
-        nd = self.session_type
-        action, actor = nd.outgoing_action(), nd.outgoing_actor()
-        if action == Action.BRANCH:
-            self.session_type = nd.outgoing[branch]
-        else:
-            expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
-            raise RuntimeError(f'Expected to {expected_action}, offer was called')
+        if self.dynamic_check: 
+            assert isinstance(branch, Branch)
+            nd = self.session_type
+            action, actor = nd.outgoing_action(), nd.outgoing_actor()
+            if action == Action.BRANCH:
+                self.session_type = nd.outgoing[branch]
+            else:
+                expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
+                raise RuntimeError(f'Expected to {expected_action}, offer was called')
         return branch
 
     def choose(self, branch: Branch) -> None:
-        nd = self.session_type
-        action, actor = nd.outgoing_action(), nd.outgoing_actor()
-        if action == Action.BRANCH:
-            self.session_type = nd.outgoing[branch]
-        else:
-            expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
-            raise RuntimeError(f'Expected to {expected_action}, choose was called')
-        assert isinstance(branch, Branch)
+        if self.dynamic_check:
+            nd = self.session_type
+            action, actor = nd.outgoing_action(), nd.outgoing_actor()
+            if action == Action.BRANCH:
+                self.session_type = nd.outgoing[branch]
+            else:
+                expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
+                raise RuntimeError(f'Expected to {expected_action}, choose was called')
+            assert isinstance(branch, Branch)
         self._send(branch, self.roles[actor])
 
     def _send(self, e: Any, to : tuple[str, int]) -> None:
