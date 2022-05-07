@@ -1,17 +1,17 @@
-if __name__ == '__main__':
-    from typing import List
+from sessiontype import *
+from channel import Channel
+from typing import *
 
-    from lexer import Lexer
-    from parser import Parser
-    from projector import Projector
-
-
-    def run(file: str) -> List[str] | str:
-        tokens = Lexer(file).lex()
-        ast = Parser(tokens).parse()
-        return Projector().project(ast)
-
-
-    files = run('../programs/progs.scr')
-    for f in files:
-        run(f)
+LeftOffer = Send[Tuple[str, int], "Charlie", End]
+RightOffer = Recv[str, "Alice", Send[Dict[float, str], "Bobby", End]]
+ch = Channel(Send[List[int], "Bobby", Offer["Bobby", {'option1': LeftOffer, 'option2': RightOffer, 'option3': End}]], {'self': ('localhost', 4200)})
+ch.send([1, 2])
+match ch.offer():
+    case "option1":
+        ch.send(('cool', 42))
+    case "option2":
+        s = ch.recv()
+        ch.send({3.14: 'pi'})
+    case "option3":
+        2+2
+    

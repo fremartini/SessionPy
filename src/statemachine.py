@@ -25,7 +25,7 @@ class BranchEdge:
         self.actor = actor
 
     def __eq__(self, __o: object) -> bool:
-        return self.key == __o.key and self.actor == __o.actor
+        return self.key == __o.key
     
     def __hash__(self) -> int:
         return hash(self.key + self.actor)
@@ -219,7 +219,6 @@ class STParser(NodeVisitor):
                 value = typ.__args__[1][branch_key]
                 edge = BranchEdge(branch_key, base.actor)
                 base.branch_options[edge] = self.from_generic_alias(value)
-            print(base.branch_options)
             return base
         elif base.action == Action.LABEL:
             base.name = typ.__args__[0].__forward_arg__
@@ -258,6 +257,11 @@ class STParser(NodeVisitor):
         elements = [self.visit(el) for el in node.elts]
         return tuple(elements)
 
+    def visit_Dict(self, node: Dict) -> Any:
+        keys_vals = zip([self.visit(k) for k in node.keys], [self.visit(v) for v in node.values])
+        return keys_vals
+        
+
     def visit_Subscript(self, node: Subscript) -> tuple[Any, Any] | None:
         value = self.visit(node.value)
         slice = self.visit(node.slice)
@@ -270,11 +274,12 @@ class STParser(NodeVisitor):
                 else:
                     slice = slice[1:][0]
             elif value.action == Action.BRANCH:
-                if len(slice) == 3:
-                    value.actor = slice[0]
-                    slice = slice[1:]
-                value.left = slice[0]
-                value.right = slice[1]
+                actor, keyvals = slice
+                for key, val in keyvals:
+                    edge = BranchEdge(key, actor)
+                    value.branch_options[edge] = val
+                value.actor = slice[0]
+                slice = slice[1:]
             elif value.action == Action.LABEL:
                 value.name = slice[0]
                 value.st = slice[1]
@@ -289,9 +294,6 @@ class STParser(NodeVisitor):
     def visit_Constant(self, node: Constant) -> Any:
         assert isinstance(node.value, str)
         return self.visit(Name(node.value))
-
-    def visit_Dict(self, node: Dict) -> Any:
-        print("TIME 2 PARSE DICT")
 
     def build(self) -> Node:
         global ident
@@ -354,11 +356,7 @@ class STParser(NodeVisitor):
                         branch_nd = new_node()
                         branch_st = options[branch_key]
                         go(branch_st, branch_nd)
-                        print('branch_key', branch_key)
-                        print('branch_st', branch_st)
-                        head = branch_st
-                        node.outgoing[branch_key] = branch_st
-                    print('node.outgoing.values', node.outgoing.values())
+                        node.outgoing[branch_key] = branch_nd
                     return list(node.outgoing.values())
             head = head.__class__
             if head == STEnd:
@@ -368,7 +366,8 @@ class STParser(NodeVisitor):
         return root
 
 
-def print_node(n: Node) -> None:
+def print_node(n: Node, title='') -> None:
+    if title: print(title)
     if not n.outgoing:
         return
     print(n)
@@ -382,8 +381,10 @@ def print_node(n: Node) -> None:
         elif isinstance(key, typing._GenericAlias):
             typ = key.__args__[0]
             s += f'{key()} {typ} -> {n.outgoing[key]}'
+        elif isinstance(key, Transition):
+            s += f'{str(key)} -> {n.outgoing[key]}'
         else:
-            assert isinstance(key, TGoto), key
+            assert isinstance(key, TGoto | BranchEdge), (key, type(key))
             seen.add(key.get_label())
             s += f'goto {n.outgoing[key]}'
         print(s)
@@ -400,9 +401,7 @@ def print_node(n: Node) -> None:
 
 
 if __name__ == "__main__":
-    Server = Offer["Client", {"add": Recv[int, "Client", Recv[int, "Client", Send[int, "Client", End]]], "neg": Recv[int, "Client", Send[int, "Client", End]]}]
-    parsed = STParser(typ = Server)
+    parsed = STParser("Send[List[int], 'Bobby', Offer['Bobby', {'option1': Send[Tuple[str, int], 'Charlie', End], 'option2': Recv[str, 'Alice', Send[Dict[float, str], 'Bobby', End]], 'option3': End}]]")
     nd = parsed.build()
-    print('nd', nd)
-    print('nd.outgoing', nd.outgoing)
+    print_node(nd)
 

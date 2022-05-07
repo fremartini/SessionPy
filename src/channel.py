@@ -6,7 +6,7 @@ from lib import type_to_str
 from sessiontype import *
 import socket
 import statemachine
-from statemachine import Action
+from statemachine import Action, print_node
 from check import typecheck_file
 
 T = TypeVar('T')
@@ -16,10 +16,14 @@ class Channel(Generic[T]):
     def __init__(self, session_type, roles: Dict[str, tuple[str, int]],
                  static_check=True, dynamic_check=True) -> None:
         self.session_type = statemachine.from_generic_alias(session_type)
-        self.dynamic_check = dynamic_check
+        self.dynamic_check = False
+        print('MY SES TYP:')
+        print_node(self.session_type)
+        print('lets see next')
+        nd = self.session_type.next_nd()
         if static_check:
             typecheck_file()
-
+        assert False, "Done statically checking"
         self.local = roles['self']
         self.roles = roles
         self.server_socket = _spawn_socket()
