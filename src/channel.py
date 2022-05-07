@@ -82,6 +82,8 @@ class Channel(Generic[T]):
         self._send(e, self.rolesToPorts[actor])
         self._close_if_complete()
 
+
+
     def recv(self) -> Any:
         """Receive a message from the role specified in the session type
 
