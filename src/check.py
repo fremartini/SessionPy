@@ -8,7 +8,7 @@ from debug import *
 from environment import Environment
 from immutable_list import ImmutableList
 from lib import *
-from statemachine import BranchEdge, STParser, Node, TGoto, print_node
+from statemachine import BranchEdge, STParser, Node, TGoto
 from sessiontype import STR_ST_MAPPING, SessionException
 
 visited_files = {}
@@ -144,36 +144,33 @@ class TypeChecker(NodeVisitor):
             # More branches; no limits on 2
             #fail_if(not len(nd.outgoing) == 2, "Node should have 2 outgoing edges", SessionException)
             #fail_if(not len(node.cases) == 2, "Matching on session type operations should always have 2 cases", SessionException)
-            
+            offers = [key.key for key in nd.outgoing.keys()]
             for case in node.cases:
-                match_value = case.pattern
-                attribute = self.visit(match_value.value)
+                match_value = case.pattern.value
                 branch_pick = None
-                if isinstance(match_value.value, Constant):
-                    branch_pick = match_value.value.value
+                if isinstance(match_value, Constant):
+                    branch_pick = match_value.value
                 else:
-                    branch_pick = self.visit(attribute.attr)
-                print('BRANCH PICK', branch_pick)
+                    branch_pick = self.visit(match_value)
 
-                print('visit_Match: node.outgoing', nd.outgoing)
-                print_node(nd, 'visit_Match: nd')
                 self.bind_var(ch_name, nd)
-                print('visit_Match: node.outgoing', nd.outgoing)
                 new_nd = None
                 for edge in nd.outgoing:
                     assert isinstance(edge, BranchEdge)
                     if branch_pick == edge.key:
+                        if branch_pick not in offers:
+                            raise SessionException(f"Case '{branch_pick}' already visited")
+                        offers.remove(branch_pick)
                         new_nd = nd.outgoing[edge]
                         break
-                print('new nd is', new_nd)
-                print_node(new_nd, "new_nd")
-                print('new nd is', new_nd.outgoing)
                 if new_nd == None:
-                    raise SessionException(f"Case option {branch_pick} not an available offer")
+                    raise SessionException(f"Case option '{branch_pick}' not an available offer")
                 self.bind_var(ch_name, new_nd)
                 for s in case.body:
                     self.visit(s)
                 self.validate_postcondition()
+            if offers:
+                raise SessionException(f"Match cases were not exhaustive; paths not covered: {', '.join(offers)}")
             
         else:
             for case in node.cases:
@@ -294,8 +291,6 @@ class TypeChecker(NodeVisitor):
         debug_print('visit_BinOp', dump(node))
         l_typ = self.visit(node.left)
         r_typ = self.visit(node.right)
-        print('left', l_typ)
-        print('right', r_typ)
         return union(l_typ, r_typ)
 
     def visit_Constant(self, node: Constant) -> type:
@@ -312,12 +307,8 @@ class TypeChecker(NodeVisitor):
         call_func = self.visit(node.func)
         if isinstance(call_func, str) and call_func == 'Channel':
             for arg in node.args:
-                v = self.visit(arg)
                 if isinstance(arg, Subscript):
-                    print(v)
-                    print(ast.unparse(arg))
                     nd = self.build_session_type(arg)
-                    print_node(nd, 'node in visitcall')
                     return nd
         elif isinstance(call_func, str) and (call_func in self.function_queue or call_func in self.functions_that_alter_channels):
             visited_args = [self.visit(arg) for arg in node.args]
@@ -380,14 +371,11 @@ class TypeChecker(NodeVisitor):
                         raise SessionException(f'expected a {nd.outgoing_action()}, but send was called')
                     elif not valid_typ:
                         raise SessionException(f'expected to send a {type_to_str(nd.outgoing_type())}, got {type_to_str(args.head())}')
-                    print('nd.outgoing', nd.outgoing)
                     next_nd = nd.next_nd()
-                    print('next_nd.outgoing', next_nd.outgoing)
                     self.bind_var(ch_name, next_nd)
                 case 'offer':
                     return nd
                 case 'choose':
-                    print('visitCall: nd.outgoing', nd.outgoing)
                     new_nd = nd.outgoing[Branch.LEFT if args.head()[1] == 'LEFT' else Branch.RIGHT]
                     fail_if(new_nd is None, "Choose outgoing node was none", SessionException)
                     # FIXME: sanitise goto-skips
