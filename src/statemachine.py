@@ -25,7 +25,7 @@ class BranchEdge:
         self.actor = actor
 
     def __eq__(self, __o: object) -> bool:
-        return self.key == __o.key and self.actor == __o.actor
+        return self.key == __o.key
     
     def __hash__(self) -> int:
         return hash(self.key + self.actor)
@@ -296,9 +296,6 @@ class STParser(NodeVisitor):
         assert isinstance(node.value, str)
         return self.visit(Name(node.value))
 
-    def visit_Dict(self, node: Dict) -> Any:
-        print("TIME 2 PARSE DICT")
-
     def build(self) -> Node:
         global ident
         ident = 0
@@ -405,9 +402,7 @@ def print_node(n: Node, title='') -> None:
 
 
 if __name__ == "__main__":
-    Server = Offer["Client", {"add": Recv[int, "Client", Recv[int, "Client", Send[int, "Client", End]]], "neg": Recv[int, "Client", Send[int, "Client", End]]}]
-    parsed = STParser(typ = Server)
+    parsed = STParser("Send[List[int], 'Bobby', Offer['Bobby', {'option1': Send[Tuple[str, int], 'Charlie', End], 'option2': Recv[str, 'Alice', Send[Dict[float, str], 'Bobby', End]], 'option3': End}]]")
     nd = parsed.build()
-    print('nd', nd)
-    print('nd.outgoing', nd.outgoing)
+    print_node(nd)
 

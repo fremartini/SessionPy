@@ -1,5 +1,6 @@
-if __name__ == '__main__':
-    from typing import List
+from sessiontype import *
+from channel import Channel
+from typing import *
 
     from lexer import Lexer
     from parser import Parser
