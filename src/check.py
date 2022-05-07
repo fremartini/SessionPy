@@ -123,6 +123,9 @@ class TypeChecker(NodeVisitor):
     def visit_Compare(self, node: Compare) -> None:
         left = self.lookup_or_self(self.visit(node.left))
         right = self.lookup_or_self(self.visit(node.comparators[0]))
+        print(dump(node))
+        print('left', left)
+        print('right', right)
         fail_if_cannot_cast(left, right, f"{left} did not equal {right}")
         return bool
 
@@ -380,6 +383,8 @@ class TypeChecker(NodeVisitor):
                     if isinstance(node.args[0], Constant):
                         pick = node.args[0].value
                     new_nd = None
+                    print('nd is', nd)
+                    print(self.subst_var)
                     for edge in nd.outgoing:
                         assert isinstance(edge, BranchEdge)
                         if pick == edge.key:

@@ -1,10 +1,14 @@
+from check import typecheck_file
 from sessiontype import *
 from channel import Channel
 from typing import *
 
-LeftOffer = Send[Tuple[str, int], "Marco", End]
-RightOffer = Recv[str, "Frank", Send[Dict[float, str], "Marco", End]]
-ch = Channel(Send[List[int], "Bobby", Choose["Marco", { 'a': LeftOffer, 'b': RightOffer}]], {'self': ('localhost', 50000)})
-ch.send([1, 2])
-ch.choose('a')
-ch.send(("hi",2))
+typecheck_file()
+
+def f(n, m) -> str:
+    if n == 0:
+        return "hi"
+    else:
+        return "hello" + f(n-1, "ignored")
+
+f(100, "ok")

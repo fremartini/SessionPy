@@ -6,7 +6,7 @@ from lib import type_to_str
 from sessiontype import *
 import socket
 import statemachine
-from statemachine import Action
+from statemachine import Action, BranchEdge
 from check import typecheck_file
 
 T = TypeVar('T')
@@ -19,12 +19,14 @@ class Channel(Generic[T]):
         self.dynamic_check = dynamic_check
         if static_check:
             typecheck_file()
+        print('> Static check succeeded ✅')
         self.local = roles['self']
         self.roles = roles
         self.server_socket = _spawn_socket()
         self.server_socket.bind(self.local)
 
     def send(self, e: Any) -> None:
+        actor = None
         if self.dynamic_check:
             nd = self.session_type
             action, actor = nd.outgoing_action(), nd.outgoing_actor()
@@ -62,17 +64,21 @@ class Channel(Generic[T]):
                 raise RuntimeError(f'Expected to {expected_action}, offer was called')
         return branch
 
-    def choose(self, branch: Branch) -> None:
+    def choose(self, pick: str) -> None:
+        actor = 'self'
         if self.dynamic_check:
             nd = self.session_type
             action, actor = nd.outgoing_action(), nd.outgoing_actor()
             if action == Action.BRANCH:
-                self.session_type = nd.outgoing[branch]
+                for edge in nd.outgoing:
+                    assert isinstance(edge, BranchEdge)
+                    if edge.key == pick:
+                        self.session_type = nd.outgoing[edge]
+                        break
             else:
                 expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
                 raise RuntimeError(f'Expected to {expected_action}, choose was called')
-            assert isinstance(branch, Branch)
-        self._send(branch, self.roles[actor])
+        self._send(pick, self.roles[actor])
 
     def _send(self, e: Any, to : tuple[str, int]) -> None:
         with _spawn_socket() as client_socket:

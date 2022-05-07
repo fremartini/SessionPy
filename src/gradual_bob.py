@@ -21,6 +21,6 @@ def serveOp(n, op, c):
         c.send(op)
     else:
         v = c.recv()
-        serveOp(n-1, op(v), c)
+        return serveOp(n-1, op(v), c)
 
 
