@@ -8,10 +8,20 @@ from debug import *
 from environment import Environment
 from immutable_list import ImmutableList
 from lib import *
-from statemachine import STParser, Node, TGoto
-from sessiontype import STR_ST_MAPPING, SessionException, Branch
+from statemachine import BranchEdge, STParser, Node, TGoto
+from sessiontype import STR_ST_MAPPING, SessionException
 
 visited_files = {}
+
+class Closure:
+
+    def __init__(self, args, body) -> None:
+        self.args = args
+        self.body = body
+
+    def __str__(self) -> str:
+        return f"Closure({self.args}, {self.body})"
+
 
 class TypeChecker(NodeVisitor):
 
@@ -20,11 +30,12 @@ class TypeChecker(NodeVisitor):
         self.function_queue = {}
         self.functions_that_alter_channels = {}
         self.subst_var = {}
+        self.acknowledge_any_session = False
         self.environments: ImmutableList[Environment] = ImmutableList().add(Environment())
         self.in_functions: ImmutableList[FunctionDef] = ImmutableList()
         self.loop_entrypoints = set() # TODO: consider putting into environment
         self.visit(tree)
-        self.visit_functions()
+        #self.visit_functions()
         self.validate_postcondition()
 
 
@@ -43,6 +54,7 @@ class TypeChecker(NodeVisitor):
         before checking post-conditions.
         Due to nested function, we need to do it inside a loop.
         """
+        self.acknowledge_any_session = True
         while self.function_queue:
             for name in list(self.function_queue.keys()):
                 self.visit_and_drop_function(name)
@@ -54,7 +66,7 @@ class TypeChecker(NodeVisitor):
         failing_chans = []
         for (k,v) in latest.get_vars():
             if isinstance(v, Node):
-                if not v.accepting and v.id not in self.loop_entrypoints:
+                if not v.accepting and v.identifier not in self.loop_entrypoints:
                     err_msg = f'\nchannel <{k}> not exhausted - next up is:'
                     for edge in v.outgoing.keys():
                         err_msg += f'\n- {str(edge)}'
@@ -113,8 +125,11 @@ class TypeChecker(NodeVisitor):
     def visit_Compare(self, node: Compare) -> None:
         left = self.lookup_or_self(self.visit(node.left))
         right = self.lookup_or_self(self.visit(node.comparators[0]))
+        self.print_envs()
+        if isinstance(left, str):
+            left = Any
         fail_if_cannot_cast(left, right, f"{left} did not equal {right}")
-        return bool
+        return union(left, right) 
 
     def visit_AugAssign(self, node: AugAssign) -> None:
         debug_print('visit_AugAssign', dump(node))
@@ -126,27 +141,41 @@ class TypeChecker(NodeVisitor):
     def visit_Match(self, node: ast.Match) -> None:
         debug_print('visit_Match', dump(node))
         subj = self.visit(node.subject)
-        
+
         if isinstance(subj, Node):
             ch_name = node.subject.func.value.id
             nd = subj
 
-            fail_if(not len(nd.outgoing) == 2, "Node should have 2 outgoing edges", SessionException)
-            fail_if(not len(node.cases) == 2, "Matching on session type operations should always have 2 cases", SessionException)
-            
+            # More branches; no limits on 2
+            #fail_if(not len(nd.outgoing) == 2, "Node should have 2 outgoing edges", SessionException)
+            #fail_if(not len(node.cases) == 2, "Matching on session type operations should always have 2 cases", SessionException)
+            offers = [key.key for key in nd.outgoing.keys()]
             for case in node.cases:
-                match_value = case.pattern
-                attribute = match_value.value
-                branch_pick = attribute.attr
-                fail_if(not attribute.value.id == 'Branch', "Match case did not contain a Branch", SessionException)
-                fail_if(not branch_pick in ['LEFT', 'RIGHT'], "Branching operation should either be left or right", SessionException)
+                match_value = case.pattern.value
+                branch_pick = None
+                if isinstance(match_value, Constant):
+                    branch_pick = match_value.value
+                else:
+                    branch_pick = self.visit(match_value)
 
                 self.bind_var(ch_name, nd)
-                new_nd = nd.outgoing[Branch.LEFT if branch_pick == 'LEFT' else Branch.RIGHT]
+                new_nd = None
+                for edge in nd.outgoing:
+                    assert isinstance(edge, BranchEdge)
+                    if branch_pick == edge.key:
+                        if branch_pick not in offers:
+                            raise SessionException(f"Case '{branch_pick}' already visited")
+                        offers.remove(branch_pick)
+                        new_nd = nd.outgoing[edge]
+                        break
+                if new_nd == None:
+                    raise SessionException(f"Case option '{ast.unparse(match_value)}' not an available offer")
                 self.bind_var(ch_name, new_nd)
                 for s in case.body:
                     self.visit(s)
                 self.validate_postcondition()
+            if offers:
+                raise SessionException(f"Match cases were not exhaustive; paths not covered: {', '.join(offers)}")
             
         else:
             for case in node.cases:
@@ -236,7 +265,7 @@ class TypeChecker(NodeVisitor):
         target = self.visit(node.targets[0])
 
         if self.is_session_type(node.value):
-            self.bind_session_type(node, target)
+            self.bind_session_type(node.value, target)
         else:
             value = self.visit(node.value)
             if isinstance(node.value, ast.Tuple):
@@ -247,7 +276,7 @@ class TypeChecker(NodeVisitor):
         debug_print('visit_AnnAssign', dump(node))
         target: str = self.visit(node.target)
         if self.is_session_type(node.value):
-            self.bind_session_type(node, target)
+            self.bind_session_type(node.value, target)
         else:
             name_or_type = self.visit(node.annotation)
             rhs_type = self.visit(node.value)
@@ -267,6 +296,8 @@ class TypeChecker(NodeVisitor):
         debug_print('visit_BinOp', dump(node))
         l_typ = self.visit(node.left)
         r_typ = self.visit(node.right)
+        if isinstance(l_typ, str):
+            l_typ = Any
         return union(l_typ, r_typ)
 
     def visit_Constant(self, node: Constant) -> type:
@@ -275,15 +306,16 @@ class TypeChecker(NodeVisitor):
     def in_function_queue(self, key) -> bool:
         return type(key) is str and key in self.function_queue
 
+    def visit_Lambda(self, node: Lambda) -> Any:
+        return Closure(node.args, node.body)
+
     def visit_Call(self, node: Call) -> Typ:
         debug_print('visit_Call', dump(node))
         call_func = self.visit(node.func)
         if isinstance(call_func, str) and call_func == 'Channel':
             for arg in node.args:
-                v = self.visit(arg)
                 if isinstance(arg, Subscript):
-                    parsed = STParser(src=v)
-                    return parsed.build()
+                    return self.build_session_type(arg)
         elif isinstance(call_func, str) and (call_func in self.function_queue or call_func in self.functions_that_alter_channels):
             visited_args = [self.visit(arg) for arg in node.args]
             function: FunctionDef = self.function_queue[call_func] if call_func in self.function_queue else self.functions_that_alter_channels[call_func]
@@ -308,7 +340,16 @@ class TypeChecker(NodeVisitor):
             else:
                 self.visit_and_drop_function(call_func)
                 call_func = self.visit(node.func)
-        
+
+        if isinstance(call_func, Closure):
+            visited_args = []
+            for arg in node.args:
+                visited_args.append(self.visit(arg))
+            for (arg, (var, typ)) in zip(visited_args, self.visit(call_func.args)):
+                self.bind_var(var, union(arg, typ))
+
+            return self.visit(call_func.body)
+
         if isinstance(call_func, tuple):
             args = self.get_function_args(node.args)
             op = call_func[1]
@@ -318,6 +359,8 @@ class TypeChecker(NodeVisitor):
                 nd = call_func[0]
             if ch_name in self.subst_var:
                 ch_name = self.subst_var[ch_name]
+            if self.acknowledge_any_session:
+                return Any
             match op:
                 case 'recv':
                     valid_action, _ = nd.valid_action_type(op, None)
@@ -341,9 +384,18 @@ class TypeChecker(NodeVisitor):
                 case 'offer':
                     return nd
                 case 'choose':
-                    new_nd = nd.outgoing[Branch.LEFT if args.head()[1] == 'LEFT' else Branch.RIGHT]
-                    fail_if(new_nd is None, "Choose outgoing node was none", SessionException)
-                    # FIXME: sanitise goto-skips
+                    pick = args.head()
+                    if isinstance(node.args[0], Constant):
+                        pick = node.args[0].value
+                    new_nd = None
+                    for edge in nd.outgoing:
+                        assert isinstance(edge, BranchEdge)
+                        if pick == edge.key:
+                            new_nd = nd.outgoing[edge]
+                            break
+                    if not new_nd:
+                        options = ', '.join(k.key for k in nd.outgoing.keys())
+                        raise SessionException(f"The choice of '{pick}' is not one of: {options}")
                     if new_nd.outgoing and isinstance(new_nd.get_edge(), TGoto):
                         new_nd = new_nd.next_nd()
                     self.bind_var(ch_name, new_nd)
@@ -439,7 +491,7 @@ class TypeChecker(NodeVisitor):
             chans1 = env_else.get_kind(Node)
             for (ch1, nd1), (ch2, nd2) in zip(chans, chans1):
                 # This is the scenario after and if-then-else block
-                valid = nd1.accepting and nd2.accepting or nd1.id == nd2.id
+                valid = nd1.accepting and nd2.accepting or nd1.identifier == nd2.identifier
                 if ch1 == ch2 and not valid:
                     raise SessionException(f'after conditional block, channel <{ch1}> ended up in two different states')
         elif chans:
@@ -500,7 +552,7 @@ class TypeChecker(NodeVisitor):
         if pre_chans:
             nds = [chs[1] for chs in pre_chans]
             for nd in nds:
-                self.loop_entrypoints.add(nd.id) 
+                self.loop_entrypoints.add(nd.identifier) 
             pre_chans = nds
         if isinstance(node, While):
             self.visit(node.test)
@@ -510,17 +562,21 @@ class TypeChecker(NodeVisitor):
         if pre_chans and post_chans:
             post_chans = [chs[1] for chs in post_chans]
             for post_chan in post_chans:
-                if post_chan.id not in self.loop_entrypoints:
+                if post_chan.identifier not in self.loop_entrypoints:
                     raise SessionException(f'loop error: needs to {post_chan.outgoing_action()()} {post_chan.outgoing_type()}')
 
+    def build_session_type(self, node):
+        alias_opts = self.get_latest_scope().get_kind(str)
+        channel_str = ast.unparse(node) # 'Channel[Send[..., <Alias>]]'
+        for key, val in alias_opts:
+            fail_if(not key in channel_str, f"{key} was not found in {channel_str}", SessionException)
+            channel_str = channel_str.replace(key, val)
+        nd = STParser(src=channel_str).build()
+        return nd
+
     def bind_session_type(self, node, target):
-            alias_opts = self.get_latest_scope().get_kind(str)
-            channel_str = ast.unparse(node.value) # 'Channel[Send[..., <Alias>]]'
-            for key, val in alias_opts:
-                fail_if(not key in channel_str, f"{key} was not found in {channel_str}", SessionException)
-                channel_str = channel_str.replace(key, val)
-            nd = STParser(src=channel_str).build()
-            self.bind_var(target, nd)
+        nd = self.build_session_type(node)
+        self.bind_var(target, nd)
 
     def compare_type_to_latest_func_return_type(self, return_type: Typ):
         expected_return_type = self.get_current_function_return_type()
@@ -563,6 +619,7 @@ class TypeChecker(NodeVisitor):
         return self.get_latest_scope().lookup_or_default(k, k)
 
     def bind_var(self, var: str, typ: Typ) -> None:
+        debug_print(f'bind_var: binding {var} to {typ}')
         self.get_latest_scope().bind_var(var, typ)
 
     def print_envs(self, opt_title='') -> None:
