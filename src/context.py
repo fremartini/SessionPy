@@ -10,4 +10,3 @@ from lib import *
 from sessiontype import *
 from statemachine import *
 from immutable_list import *
-from immutable_map import *

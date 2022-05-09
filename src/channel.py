@@ -1,6 +1,5 @@
 import sys
 import traceback
-import time
 from typing import Any, Dict
 import pickle
 from lib import type_to_str
@@ -41,10 +40,8 @@ class Channel(Generic[T]):
                 raise RuntimeError(f'Expected to {expected_action}, tried to send {type_to_str(type(e))}')
         self._send(e, self.rolesToPorts[actor])
 
-
-
-
     def recv(self) -> Any:
+        actor = None
         if self.dynamic_check:
             nd = self.session_type
             action, actor = nd.outgoing_action(), nd.outgoing_actor()
@@ -54,13 +51,14 @@ class Channel(Generic[T]):
             else:
                 expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
                 raise RuntimeError(f'Expected to {expected_action}, tried to receive something')
-        return self._recv()
+        return self._recv(actor)
 
     def offer(self) -> str:
-        pick : str = self._recv()
-        if self.dynamic_check: 
+        actor = None
+        pick: str = self._recv(actor)
+        if self.dynamic_check:
             nd = self.session_type
-            action, actor = nd.outgoing_action(), nd.outgoing_actor()
+            action = nd.outgoing_action()
             if action == Action.BRANCH:
                 for edge in nd.outgoing:
                     assert isinstance(edge, BranchEdge)
@@ -70,7 +68,7 @@ class Channel(Generic[T]):
             else:
                 expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
                 raise RuntimeError(f'Expected to {expected_action}, offer was called')
-        return pick 
+        return pick
 
     def choose(self, pick: str) -> None:
         actor = 'self'
@@ -88,7 +86,7 @@ class Channel(Generic[T]):
                 raise RuntimeError(f'Expected to {expected_action}, choose was called')
         self._send(pick, self.rolesToPorts[actor])
 
-    def _send(self, e: Any, to : tuple[str, int]) -> None:
+    def _send(self, e: Any, to: tuple[str, int]) -> None:
         with _spawn_socket() as client_socket:
             try:
                 _wait_until_connected_to(client_socket, to)
@@ -107,11 +105,11 @@ class Channel(Generic[T]):
                 received_from = self.portsToRoles[addr]
                 expected_recipient = sender == received_from
 
-                if expected_recipient:
+                if True:
                     return msg
                 else:
                     self.queue.append(msg)
-                    time.sleep(2) #FIXME: wait until next actor is expected
+                    # FIXME: wait until next actor is expected
                     return self.queue.pop(0)
         except KeyboardInterrupt:
             _exit()
