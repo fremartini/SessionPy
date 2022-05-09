@@ -327,7 +327,6 @@ class TypeChecker(NodeVisitor):
                             self.subst_var[param] = arg_ast.id
                         else:
                             unioned = union(typ, arg)
-                            print('unioned', typ, 'and', arg, 'to', unioned)
                             self.bind_var(param, unioned)
                     
                 
