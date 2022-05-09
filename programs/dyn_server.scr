@@ -1,0 +1,16 @@
+type <int> as n;
+
+global protocol DynServer(role Sy, role Rob) {
+    choice from Sy to Rob {
+        @neg;
+        Num(n) from Rob to Sy;
+        Num(n) from Sy to Rob;
+        End;
+    } or {
+        @add;
+        Num(n) from Rob to Sy;
+        Num(n) from Rob to Sy;
+        Num(n) from Sy to Rob;
+        End;
+    }
+}

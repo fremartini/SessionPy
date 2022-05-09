@@ -55,6 +55,15 @@ class Projector:
 
         return f'{i.message.label.identifier}({i.message.payload.identifier}) {remainder};'
 
+    def _project_global_branch(self, b: GlobalBranch) -> str:
+        st = ''
+        for g in b.g:
+            st = st + self._project_g(g) + '\n'
+
+        st = f'@{b.label.label.visit()};\n{st}'
+
+        return st
+
     def _project_global_choice(self, c: GlobalChoice) -> str | None:
         if self.current_role not in [c.sender.identifier, c.recipient.identifier]:
             return None
@@ -64,17 +73,11 @@ class Projector:
         else:
             lines = f'choice from {c.sender.identifier} {{\n'
 
-        for s in c.g1:
-            to_write = self._project_g(s)
-            if to_write is not None:
-                lines = lines + to_write + '\n'
+        lines = lines + self._project_global_branch(c.b1)
 
         lines = lines + '} or {\n'
 
-        for s in c.g2:
-            to_write = self._project_g(s)
-            if to_write is not None:
-                lines = lines + to_write + '\n'
+        lines = lines + self._project_global_branch(c.b2)
 
         lines = lines + '}'
 
@@ -132,10 +135,20 @@ class Projector:
         typ = self.type_mapping[r.message.payload.visit()]
         return f'Recv[{typ}, \'{r.identifier.visit()}\', {"End" if self.insert_end else ""}'
 
+    def _project_local_branch(self, b: LocalBranch) -> str:
+        st = f'"{b.label.visit()}": '
+        for t in b.t:
+            st = st + self._project_t(t)
+
+        st = st + self._parens(b.t)
+        return st
+
     def _project_local_choice(self, c: LocalChoice) -> str:
-        left_st = self._project_session_type(c.t1)
-        right_st = self._project_session_type(c.t2)
-        st = f'{left_st}, {right_st}'
+        left_st = self._project_local_branch(c.b1)
+        right_st = self._project_local_branch(c.b2)
+        st = '{'
+        st = st + f'{left_st}, {right_st}'
+        st = st + '}'
 
         if c.op == 'offer':
             return f'Offer[\'{c.identifier.visit()}\', {st}]'

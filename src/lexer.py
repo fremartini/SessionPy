@@ -15,6 +15,7 @@ class TokenType(Enum):
     COMMA = auto(),
     LT = auto(),
     GT = auto(),
+    AT_SIGN = auto(),
 
     # keywords
     GLOBAL = auto(),
@@ -105,6 +106,8 @@ class Lexer:
                 self._add_token(TokenType.LT)
             case '>':
                 self._add_token(TokenType.GT)
+            case '@':
+                self._add_token(TokenType.AT_SIGN)
             case x if x in [' ', '\r', '\t', '\n']:
                 return
             case x:

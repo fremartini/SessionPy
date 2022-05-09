@@ -8,9 +8,11 @@ global protocol BuyerSeller(role B1, role B2, role Seller) {
     Quotation(Price) from B1 to B2;
 
     choice from B2 to Seller {
+        @succeed;
         Response(Message) from B2 to Seller;
         End;
     } or {
+        @abort;
         End;
     }
 }

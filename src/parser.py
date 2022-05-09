@@ -9,7 +9,8 @@ P                   -> "global" "protocol" identifier "(" roles ")" "{" G* "}"
 G                   -> global_interaction | global_choice | global_recursion | call | end
 
 global_interaction  -> message "from" identifier "to" identifier ";"
-global_choice       -> "choice" "from" identifier "to" identifier "{" G* "}" "or" "{" G* "}"
+global_choice       -> "choice" "from" identifier "to" identifier global_branch "or" global_branch ("or" global_branch)*
+global_branch       -> "{" branch_label G* "}"
 global_recursion    -> "rec" identifier "{" G* "}"
 
 L                   -> "local" "protocol" identifier "at" identifier "(" roles ")" "{" T* "}"
@@ -17,9 +18,11 @@ T                   -> local_send | local_recv | local_choice | local_recursion 
 
 local_send          -> message "to" identifier ";"
 local_recv          -> message "from" identifier ";"
-local_choice        -> ("offer" "to" | "choice" "from") identifier "{" T* "}" "or" "{" T* "}"
+local_choice        -> ("offer" "to" | "choice" "from") identifier local_branch "or" local_branch ("or" local_branch)*
+local_branch        -> "{" branch_label T* "}"
 local_recursion     -> "rec" identifier "{" T* "}"
 
+branch_label        -> "@" identifier ";"
 message             -> identifier "(" identifier ")";
 typedef             -> "type" "<" identifier ">" "as" identifier ";"
 roles               -> role ("," role)*
@@ -91,6 +94,20 @@ class Message:
         self.payload = payload
 
 
+class BranchLabel:
+    def __init__(self, label: Identifier):
+        self.label = label
+
+    def visit(self) -> str:
+        return self.label.visit()
+
+
+class LocalBranch:
+    def __init__(self, label: BranchLabel, t: List):
+        self.label = label
+        self.t = t
+
+
 class LocalRecursion:
     def __init__(self, identifier: Identifier, t: List):
         self.identifier = identifier
@@ -98,11 +115,11 @@ class LocalRecursion:
 
 
 class LocalChoice:
-    def __init__(self, identifier: Identifier, op: str, t1: List, t2: List):
+    def __init__(self, identifier: Identifier, op: str, b1: LocalBranch, b2: LocalBranch):
         self.identifier = identifier
         self.op = op
-        self.t1 = t1
-        self.t2 = t2
+        self.b1 = b1
+        self.b2 = b2
 
 
 class LocalRecv:
@@ -137,12 +154,18 @@ class GlobalRecursion:
         self.g = g
 
 
+class GlobalBranch:
+    def __init__(self, label: BranchLabel, g: List):
+        self.label = label
+        self.g = g
+
+
 class GlobalChoice:
-    def __init__(self, sender: Identifier, recipient: Identifier, g1, g2):
+    def __init__(self, sender: Identifier, recipient: Identifier, b1: GlobalBranch, b2: GlobalBranch):
         self.sender = sender
         self.recipient = recipient
-        self.g1 = g1
-        self.g2 = g2
+        self.b1 = b1
+        self.b2 = b2
 
 
 class GlobalInteraction:
@@ -223,6 +246,17 @@ class Parser:
 
         return GlobalInteraction(message, sender, recipient)
 
+    def _global_branch(self) -> GlobalBranch:
+        self._match(TokenType.LEFT_BRACE)
+
+        label = self._branch_label()
+
+        gs = _many(self._g)
+
+        self._match(TokenType.RIGHT_BRACE)
+
+        return GlobalBranch(label, gs)
+
     def _global_choice(self) -> GlobalChoice:
         self._match(TokenType.CHOICE, TokenType.FROM)
 
@@ -232,17 +266,13 @@ class Parser:
 
         recipient = self._identifier()
 
-        self._match(TokenType.LEFT_BRACE)
+        b1 = self._global_branch()
 
-        g1 = _many(self._g)
+        self._match(TokenType.OR)
 
-        self._match(TokenType.RIGHT_BRACE, TokenType.OR, TokenType.LEFT_BRACE)
+        b2 = self._global_branch()
 
-        g2 = _many(self._g)
-
-        self._match(TokenType.RIGHT_BRACE)
-
-        return GlobalChoice(sender, recipient, g1, g2)
+        return GlobalChoice(sender, recipient, b1, b2)
 
     def _global_recursion(self) -> GlobalRecursion:
         self._match(TokenType.REC)
@@ -285,6 +315,18 @@ class Parser:
 
         return T(statement)
 
+    def _local_branch(self) -> LocalBranch:
+
+        self._match(TokenType.LEFT_BRACE)
+
+        label = self._branch_label()
+
+        ts = _many(self._t)
+
+        self._match(TokenType.RIGHT_BRACE)
+
+        return LocalBranch(label, ts)
+
     def _local_choice(self) -> LocalChoice:
         def _offer_to() -> str:
             self._match(TokenType.OFFER, TokenType.TO)
@@ -300,17 +342,13 @@ class Parser:
 
         identifier = self._identifier()
 
-        self._match(TokenType.LEFT_BRACE)
+        b1 = self._local_branch()
 
-        t1 = _many(self._t)
+        self._match(TokenType.OR)
 
-        self._match(TokenType.RIGHT_BRACE, TokenType.OR, TokenType.LEFT_BRACE)
+        b2 = self._local_branch()
 
-        t2 = _many(self._t)
-
-        self._match(TokenType.RIGHT_BRACE)
-
-        return LocalChoice(identifier, op, t1, t2)
+        return LocalChoice(identifier, op, b1, b2)
 
     def _local_recursion(self) -> LocalRecursion:
         self._match(TokenType.REC)
@@ -346,6 +384,16 @@ class Parser:
         self._match(TokenType.SEMICOLON)
 
         return LocalRecv(message, identifier)
+
+    def _branch_label(self) -> BranchLabel:
+
+        self._match(TokenType.AT_SIGN)
+
+        identifier = self._identifier()
+
+        self._match(TokenType.SEMICOLON)
+
+        return BranchLabel(identifier)
 
     def _message(self) -> Message:
         label = self._identifier()
