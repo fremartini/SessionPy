@@ -315,8 +315,7 @@ class TypeChecker(NodeVisitor):
         if isinstance(call_func, str) and call_func == 'Channel':
             for arg in node.args:
                 if isinstance(arg, Subscript):
-                    nd = self.build_session_type(arg)
-                    return nd
+                    return self.build_session_type(arg)
         elif isinstance(call_func, str) and (call_func in self.function_queue or call_func in self.functions_that_alter_channels):
             visited_args = [self.visit(arg) for arg in node.args]
             function: FunctionDef = self.function_queue[call_func] if call_func in self.function_queue else self.functions_that_alter_channels[call_func]

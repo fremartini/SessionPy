@@ -8,6 +8,7 @@ import socket
 import statemachine
 from statemachine import Action, BranchEdge
 from check import typecheck_file
+from debug import debug_print
 
 T = TypeVar('T')
 
@@ -19,7 +20,7 @@ class Channel(Generic[T]):
         self.dynamic_check = dynamic_check
         if static_check:
             typecheck_file()
-            print('> Static check succeeded ✅')
+            debug_print('> Static check succeeded ✅')
         self.local = roles['self']
         self.roles = roles
         self.server_socket = _spawn_socket()
