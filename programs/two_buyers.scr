@@ -4,7 +4,7 @@ type <float> as Price;
 global protocol BuyerSeller(role B1, role B2, role Seller) {
     Prompt(Message) from B1 to Seller;
     Answer(Message) from Seller to B1;
-    Quotation(Price) from Seller to B2;
+    Prompt(Message) from Seller to B2;
     Quotation(Price) from B1 to B2;
 
     choice from B2 to Seller {
