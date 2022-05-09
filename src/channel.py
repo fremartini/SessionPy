@@ -19,7 +19,7 @@ class Channel(Generic[T]):
         self.dynamic_check = dynamic_check
         if static_check:
             typecheck_file()
-        print('> Static check succeeded ✅')
+            print('> Static check succeeded ✅')
         self.local = roles['self']
         self.roles = roles
         self.server_socket = _spawn_socket()
@@ -51,18 +51,21 @@ class Channel(Generic[T]):
                 raise RuntimeError(f'Expected to {expected_action}, tried to receive something')
         return self._recv()
 
-    def offer(self) -> Branch:
-        branch : Branch = self._recv()
+    def offer(self) -> str:
+        pick : str = self._recv()
         if self.dynamic_check: 
-            assert isinstance(branch, Branch)
             nd = self.session_type
             action, actor = nd.outgoing_action(), nd.outgoing_actor()
             if action == Action.BRANCH:
-                self.session_type = nd.outgoing[branch]
+                for edge in nd.outgoing:
+                    assert isinstance(edge, BranchEdge)
+                    if edge.key == pick:
+                        self.session_type = nd.outgoing[edge]
+                        break
             else:
                 expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
                 raise RuntimeError(f'Expected to {expected_action}, offer was called')
-        return branch
+        return pick 
 
     def choose(self, pick: str) -> None:
         actor = 'self'

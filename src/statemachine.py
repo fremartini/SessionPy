@@ -140,7 +140,6 @@ class Node:
         if len(self.outgoing) == 0:
             raise SessionException(f'Channel {self} is exhausted')
         edge = self.get_edge()
-        print('edge is', edge)
         if isinstance(edge, BranchEdge):
             return Action.BRANCH
         else:

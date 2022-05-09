@@ -30,11 +30,12 @@ class TypeChecker(NodeVisitor):
         self.function_queue = {}
         self.functions_that_alter_channels = {}
         self.subst_var = {}
+        self.acknowledge_any_session = False
         self.environments: ImmutableList[Environment] = ImmutableList().add(Environment())
         self.in_functions: ImmutableList[FunctionDef] = ImmutableList()
         self.loop_entrypoints = set() # TODO: consider putting into environment
         self.visit(tree)
-        self.visit_functions()
+        #self.visit_functions()
         self.validate_postcondition()
 
 
@@ -53,6 +54,7 @@ class TypeChecker(NodeVisitor):
         before checking post-conditions.
         Due to nested function, we need to do it inside a loop.
         """
+        self.acknowledge_any_session = True
         while self.function_queue:
             for name in list(self.function_queue.keys()):
                 self.visit_and_drop_function(name)
@@ -123,11 +125,11 @@ class TypeChecker(NodeVisitor):
     def visit_Compare(self, node: Compare) -> None:
         left = self.lookup_or_self(self.visit(node.left))
         right = self.lookup_or_self(self.visit(node.comparators[0]))
-        print(dump(node))
-        print('left', left)
-        print('right', right)
+        self.print_envs()
+        if isinstance(left, str):
+            left = Any
         fail_if_cannot_cast(left, right, f"{left} did not equal {right}")
-        return bool
+        return union(left, right) 
 
     def visit_AugAssign(self, node: AugAssign) -> None:
         debug_print('visit_AugAssign', dump(node))
@@ -294,6 +296,8 @@ class TypeChecker(NodeVisitor):
         debug_print('visit_BinOp', dump(node))
         l_typ = self.visit(node.left)
         r_typ = self.visit(node.right)
+        if isinstance(l_typ, str):
+            l_typ = Any
         return union(l_typ, r_typ)
 
     def visit_Constant(self, node: Constant) -> type:
@@ -327,6 +331,7 @@ class TypeChecker(NodeVisitor):
                             self.subst_var[param] = arg_ast.id
                         else:
                             unioned = union(typ, arg)
+                            print('unioned', typ, 'and', arg, 'to', unioned)
                             self.bind_var(param, unioned)
                     
                 
@@ -356,6 +361,8 @@ class TypeChecker(NodeVisitor):
                 nd = call_func[0]
             if ch_name in self.subst_var:
                 ch_name = self.subst_var[ch_name]
+            if self.acknowledge_any_session:
+                return Any
             match op:
                 case 'recv':
                     valid_action, _ = nd.valid_action_type(op, None)
@@ -383,8 +390,6 @@ class TypeChecker(NodeVisitor):
                     if isinstance(node.args[0], Constant):
                         pick = node.args[0].value
                     new_nd = None
-                    print('nd is', nd)
-                    print(self.subst_var)
                     for edge in nd.outgoing:
                         assert isinstance(edge, BranchEdge)
                         if pick == edge.key:
@@ -616,6 +621,7 @@ class TypeChecker(NodeVisitor):
         return self.get_latest_scope().lookup_or_default(k, k)
 
     def bind_var(self, var: str, typ: Typ) -> None:
+        debug_print(f'bind_var: binding {var} to {typ}')
         self.get_latest_scope().bind_var(var, typ)
 
     def print_envs(self, opt_title='') -> None:

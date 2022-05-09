@@ -3,12 +3,18 @@ from sessiontype import *
 from channel import Channel
 from typing import *
 
-typecheck_file()
+from sessiontype import *
+from channel import Channel
 
-def f(n, m) -> str:
-    if n == 0:
-        return "hi"
+routing = {'self': ('localhost', 50_000), 'Alice': ('localhost', 50_505)}
+
+ch = Channel(Send[int, 'Alice', Recv[str, 'Charlie', End]], routing, static_check=False)
+
+
+def func(flag, c):
+    if flag:
+        s = c.recv()
     else:
-        return "hello" + f(n-1, "ignored")
+        c.send(42)
 
-f(100, "ok")
+func(False, ch)
