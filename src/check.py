@@ -293,6 +293,8 @@ class TypeChecker(NodeVisitor):
         debug_print('visit_BinOp', dump(node))
         l_typ = self.visit(node.left)
         r_typ = self.visit(node.right)
+        if isinstance(l_typ, str):
+            l_typ = Any
         return union(l_typ, r_typ)
 
     def visit_Constant(self, node: Constant) -> type:
@@ -325,6 +327,7 @@ class TypeChecker(NodeVisitor):
                             self.subst_var[param] = arg_ast.id
                         else:
                             unioned = union(typ, arg)
+                            print('unioned', typ, 'and', arg, 'to', unioned)
                             self.bind_var(param, unioned)
                     
                 
@@ -383,8 +386,6 @@ class TypeChecker(NodeVisitor):
                     if isinstance(node.args[0], Constant):
                         pick = node.args[0].value
                     new_nd = None
-                    print('nd is', nd)
-                    print(self.subst_var)
                     for edge in nd.outgoing:
                         assert isinstance(edge, BranchEdge)
                         if pick == edge.key:
