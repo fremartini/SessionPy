@@ -114,10 +114,7 @@ class Lexer:
                 if c.isalpha():
                     self._identifier()
                 else:
-                    raise Exception(f'Unexpected character \'{x}\'')
-
-    def _is_alphanumeric(self, c: str) -> bool:
-        return c.isalpha() or c.isdigit()
+                    raise Exception(f"Unexpected character '{x}'")
 
     def _peek(self):
         if self._is_at_end():
@@ -125,15 +122,14 @@ class Lexer:
         return self.source[self.current]
 
     def _identifier(self) -> None:
-        while self._is_alphanumeric(self._peek()):
+        while _is_alphanumeric(self._peek()):
             self._advance()
 
         text: str = self.source[self.start:self.current]
-        typ: TokenType = TokenType.IDENTIFIER
-        if text in keywords:
+        if _is_keyword(text):
             self._add_token(keywords[text])
         else:
-            self._add_token_literal(typ, text)
+            self._add_token_literal(TokenType.IDENTIFIER, text)
 
     def _advance(self) -> str:
         c = self.source[self.current]
@@ -145,3 +141,11 @@ class Lexer:
 
     def _add_token_literal(self, typ: TokenType, literal: str) -> None:
         self.tokens.append(Token(typ, literal))
+
+
+def _is_alphanumeric(c: str) -> bool:
+    return c.isalpha() or c.isdigit()
+
+
+def _is_keyword(t: str) -> bool:
+    return t in keywords

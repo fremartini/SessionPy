@@ -12,5 +12,11 @@ global protocol DynServer(role Sy, role Rob) {
         Num(n) from Rob to Sy;
         Num(n) from Sy to Rob;
         End;
+    } or {
+        @mul;
+        Num(n) from Rob to Sy;
+        Num(n) from Rob to Sy;
+        Num(n) from Sy to Rob;
+        End;
     }
 }

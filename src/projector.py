@@ -59,9 +59,7 @@ class Projector:
         st = ''
         for g in b.g:
             st = st + self._project_g(g) + '\n'
-
         st = f'@{b.label.label.visit()};\n{st}'
-
         return st
 
     def _project_global_choice(self, c: GlobalChoice) -> str | None:
@@ -74,12 +72,14 @@ class Projector:
             lines = f'choice from {c.sender.identifier} {{\n'
 
         lines = lines + self._project_global_branch(c.b1)
-
         lines = lines + '} or {\n'
-
         lines = lines + self._project_global_branch(c.b2)
-
         lines = lines + '}'
+
+        for c in c.bn:
+            lines = lines + ' or {\n'
+            lines = lines + self._project_global_branch(c)
+            lines = lines + '}\n'
 
         return lines
 
@@ -129,11 +129,11 @@ class Projector:
 
     def _project_local_send(self, s: LocalSend) -> str:
         typ = self.type_mapping[s.message.payload.visit()]
-        return f'Send[{typ}, \'{s.identifier.visit()}\', {"End" if self.insert_end else ""}'
+        return f"Send[{typ}, '{s.identifier.visit()}', {'End' if self.insert_end else ''}"
 
     def _project_local_recv(self, r: LocalRecv) -> str:
         typ = self.type_mapping[r.message.payload.visit()]
-        return f'Recv[{typ}, \'{r.identifier.visit()}\', {"End" if self.insert_end else ""}'
+        return f"Recv[{typ}, '{r.identifier.visit()}', {'End' if self.insert_end else ''}"
 
     def _project_local_branch(self, b: LocalBranch) -> str:
         st = f'"{b.label.visit()}": '
@@ -144,16 +144,18 @@ class Projector:
         return st
 
     def _project_local_choice(self, c: LocalChoice) -> str:
-        left_st = self._project_local_branch(c.b1)
-        right_st = self._project_local_branch(c.b2)
+        b1 = self._project_local_branch(c.b1)
+        b2 = self._project_local_branch(c.b2)
         st = '{'
-        st = st + f'{left_st}, {right_st}'
+        st = st + f'{b1}, {b2}'
+        for b in c.bn:
+            st = st + ', ' + self._project_local_branch(b)
         st = st + '}'
 
         if c.op == 'offer':
-            return f'Offer[\'{c.identifier.visit()}\', {st}]'
+            return f"Offer['{c.identifier.visit()}', {st}]"
         elif c.op == 'choice':
-            return f'Choose[\'{c.identifier.visit()}\', {st}]'
+            return f"Choose['{c.identifier.visit()}', {st}]"
         else:
             raise Exception(f'unknown operation {c.op}')
 
@@ -178,8 +180,7 @@ class Projector:
     def _parens(self, ts: List[T]) -> str:
         parens = ''
         for i in ts:
-            i = i.op
-            if isinstance(i, LocalChoice) or isinstance(i, GlobalChoice) or isinstance(i, End) or isinstance(i, Call):
+            if isinstance(i.op, LocalChoice) or isinstance(i.op, GlobalChoice) or isinstance(i.op, End) or isinstance(i.op, Call):
                 continue
             parens = parens + ']'
         return parens

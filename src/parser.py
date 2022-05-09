@@ -115,11 +115,12 @@ class LocalRecursion:
 
 
 class LocalChoice:
-    def __init__(self, identifier: Identifier, op: str, b1: LocalBranch, b2: LocalBranch):
+    def __init__(self, identifier: Identifier, op: str, b1: LocalBranch, b2: LocalBranch, bn: List[LocalBranch]):
         self.identifier = identifier
         self.op = op
         self.b1 = b1
         self.b2 = b2
+        self.bn = bn
 
 
 class LocalRecv:
@@ -161,11 +162,12 @@ class GlobalBranch:
 
 
 class GlobalChoice:
-    def __init__(self, sender: Identifier, recipient: Identifier, b1: GlobalBranch, b2: GlobalBranch):
+    def __init__(self, sender: Identifier, recipient: Identifier, b1: GlobalBranch, b2: GlobalBranch, bn: List[GlobalBranch]):
         self.sender = sender
         self.recipient = recipient
         self.b1 = b1
         self.b2 = b2
+        self.bn = bn
 
 
 class GlobalInteraction:
@@ -188,8 +190,8 @@ class P:
 
 
 class Protocol:
-    def __init__(self, typedef: List[TypeDef], protocol: P | L):
-        self.typedef = typedef
+    def __init__(self, typedefs: List[TypeDef], protocol: P | L):
+        self.typedef = typedefs
         self.protocol = protocol
 
 
@@ -203,7 +205,7 @@ class Parser:
 
     def _protocol(self) -> Protocol:
         typedefs = _many(self._typedef)
-        protocol: P | L = self._or_else('P | L', self._p, self._l)
+        protocol: P | L = self._or('P | L', self._p, self._l)
 
         return Protocol(typedefs, protocol)
 
@@ -225,9 +227,9 @@ class Parser:
         return P(protocol_name, roles, g)
 
     def _g(self) -> G:
-        statement = self._or_else('global_interaction | global_choice | global_recursion | call | "End"',
-                                  self._global_interaction, self._global_choice, self._global_recursion, self._call,
-                                  self._end)
+        statement = self._or('global_interaction | global_choice | global_recursion | call | "End"',
+                             self._global_interaction, self._global_choice, self._global_recursion, self._call,
+                             self._end)
 
         return G(statement)
 
@@ -258,6 +260,11 @@ class Parser:
         return GlobalBranch(label, gs)
 
     def _global_choice(self) -> GlobalChoice:
+        def _or_branch() -> GlobalBranch:
+            self._match(TokenType.OR)
+
+            return self._global_branch()
+
         self._match(TokenType.CHOICE, TokenType.FROM)
 
         sender = self._identifier()
@@ -268,11 +275,11 @@ class Parser:
 
         b1 = self._global_branch()
 
-        self._match(TokenType.OR)
+        b2 = _or_branch()
 
-        b2 = self._global_branch()
+        bn = _many(_or_branch)
 
-        return GlobalChoice(sender, recipient, b1, b2)
+        return GlobalChoice(sender, recipient, b1, b2, bn)
 
     def _global_recursion(self) -> GlobalRecursion:
         self._match(TokenType.REC)
@@ -309,9 +316,9 @@ class Parser:
         return L(protocol_name, perspective, roles, t)
 
     def _t(self) -> T:
-        statement = self._or_else('local_send | local_recv | local_choice | local_recursion | call | "end"',
-                                  self._local_send, self._local_recv, self._local_choice, self._local_recursion,
-                                  self._call, self._end)
+        statement = self._or('local_send | local_recv | local_choice | local_recursion | call | "end"',
+                             self._local_send, self._local_recv, self._local_choice, self._local_recursion,
+                             self._call, self._end)
 
         return T(statement)
 
@@ -338,17 +345,21 @@ class Parser:
 
             return 'choice'
 
-        op = self._or_else('"offer" "to" | "choice" "from"', _offer_to, _choice_from)
+        def _or_branch() -> LocalBranch:
+            self._match(TokenType.OR)
+            return self._local_branch()
+
+        op = self._or('"offer" "to" | "choice" "from"', _offer_to, _choice_from)
 
         identifier = self._identifier()
 
         b1 = self._local_branch()
 
-        self._match(TokenType.OR)
+        b2 = _or_branch()
 
-        b2 = self._local_branch()
+        bn = _many(_or_branch)
 
-        return LocalChoice(identifier, op, b1, b2)
+        return LocalChoice(identifier, op, b1, b2, bn)
 
     def _local_recursion(self) -> LocalRecursion:
         self._match(TokenType.REC)
@@ -453,7 +464,7 @@ class Parser:
 
         return End()
 
-    def _or_else(self, err: str, *rules: Callable) -> Any:
+    def _or(self, err: str, *rules: Callable) -> Any:
         for rule in rules:
             _token = self.current
             try:
