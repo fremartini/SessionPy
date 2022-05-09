@@ -1,20 +1,17 @@
-from check import typecheck_file
-from sessiontype import *
-from channel import Channel
-from typing import *
+if __name__ == '__main__':
+    from typing import List
 
-from sessiontype import *
-from channel import Channel
-
-routing = {'self': ('localhost', 50_000), 'Alice': ('localhost', 50_505)}
-
-ch = Channel(Send[int, 'Alice', Recv[str, 'Charlie', End]], routing, static_check=False)
+    from lexer import Lexer
+    from parser import Parser
+    from projector import Projector
 
 
-def func(flag, c):
-    if flag:
-        s = c.recv()
-    else:
-        c.send(42)
+    def run(file: str) -> List[str] | str:
+        tokens = Lexer(file).lex()
+        ast = Parser(tokens).parse()
+        return Projector().project(ast)
 
-func(False, ch)
+
+    files = run('../programs/two_buyers.scr')
+    for f in files:
+        run(f)
