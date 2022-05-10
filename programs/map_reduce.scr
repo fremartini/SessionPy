@@ -1,0 +1,11 @@
+type <List> as workload;
+
+global protocol MapReduce(role Distributor, role c1, role c2, role c3) {
+    Work(workload) from Distributor to c1;
+    Work(workload) from Distributor to c2;
+    Work(workload) from Distributor to c3;
+
+    Res(int) from c1 to Distributor;
+    Res(int) from c2 to Distributor;
+    Res(int) from c2 to Distributor;
+}

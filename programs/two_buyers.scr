@@ -1,18 +1,17 @@
-type <str> as Message;
-type <float> as Price;
+type <float> as price;
 
 global protocol BuyerSeller(role B1, role B2, role Seller) {
-    Prompt(Message) from B1 to Seller;
-    Answer(Message) from Seller to B1;
-    Quotation(Price) from Seller to B2;
-    Quotation(Price) from B1 to B2;
+    Title(str) from B1 to Seller;
+    Quote(price) from Seller to B1;
+    Quote(price) from Seller to B2;
+    Amount(price) from B1 to B2;
 
     choice from B2 to Seller {
-        @succeed;
-        Response(Message) from B2 to Seller;
+        @buy;
+        Address(str) from B2 to Seller;
         End;
     } or {
-        @abort;
+        @reject;
         End;
     }
 }
