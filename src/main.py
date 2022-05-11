@@ -12,6 +12,6 @@ if __name__ == '__main__':
         return Projector().project(ast)
 
 
-    files = run('../programs/two_buyers.scr')
+    files = run('../programs/MapReduce.scr')
     for f in files:
         run(f)

@@ -1,0 +1,16 @@
+type <dict> as catalogue;
+type <DiamondColor> as color;
+local protocol DiamondTransaction at Seller(role Buyer,role Seller) { 
+Greeting(str) from Buyer;
+Catalogue(catalogue) to Buyer;
+choice from Buyer {
+@purchase;
+Color(color) from Buyer;
+Receipt(str) to Buyer;
+End;
+} or {
+@reject;
+Message(str) to Buyer;
+End;
+}
+}

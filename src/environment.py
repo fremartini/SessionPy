@@ -102,7 +102,10 @@ class Environment:
     def __str__(self) -> str:
         res = "{"
         for key in self.environment:
-            res += f'\n  {key}={self.environment[key]}  '
+            res += f'\n  {key}=\n'
+            inner_env = self.environment[key]
+            for key1 in inner_env:
+                res += f'    {key1} = {inner_env[key1]}\n'
         return res + "}"
 
     def __repr__(self):
