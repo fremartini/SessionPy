@@ -1,10 +1,8 @@
 from context import *
 
-routing = {'self': ('localhost', 50_505), 'Bob': ('localhost', 50_000)}
+roles = {'Sy': ('localhost', 5000), 'self': ('localhost', 5005),}
 
-Neg = Send[int, 'Bob', Recv[int, 'Bob', End]]
-Add = Send[int, 'Bob', Send[int, 'Bob', Recv[int, 'Bob', End]]]
-ch = Channel(Choose['Bob', {"neg": Neg, "add": Add}], routing)
+ch = Channel(Choose['Sy', {"neg": Send[int, 'Sy', Recv[int, 'Sy', End]], "add": Send[int, 'Sy', Send[int, 'Sy', Recv[int, 'Sy', End]]]}], roles)
 
 negate = lambda x: -x
 add = lambda x: lambda y: x + y

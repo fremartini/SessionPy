@@ -1,11 +1,11 @@
 from enum import Enum
 
 
-class DiamondColour(Enum):
+class DiamondColor(Enum):
     RED = 0
     BLUE = 1
     YELLOW = 2
 
 
 Price = int
-Catalogue = dict[DiamondColour, Price]
+Catalogue = dict[DiamondColor, Price]

@@ -15,7 +15,7 @@ class Projector:
     def _project_p(self, protocol: P, typedefs: List[TypeDef]) -> List[str]:
         roles = protocol.roles.visit()
         for r in roles:
-            with open(f'{r}.scr', "w+") as f:
+            with open(f'{protocol.protocol_name.visit()}_{r}.scr', "w+") as f:
                 self.current_role = r
 
                 for t in typedefs:
@@ -29,7 +29,7 @@ class Projector:
                     if to_write is not None:
                         f.write(f'{to_write}\n')
                 f.write('}')
-        return [f'{x}.scr' for x in roles]
+        return [f'{protocol.protocol_name.visit()}_{x}.scr' for x in roles]
 
     def _project_g(self, g: G) -> str | None:
         match g.g:
@@ -98,12 +98,13 @@ class Projector:
 
     def _project_l(self, protocol: L, typedefs: List[TypeDef]) -> str:
         role = protocol.perspective.visit()
+        file = f'{protocol.protocol_name.visit()}_{role}.py'
 
         self.type_mapping = {}
         for ty in typedefs:
             self.type_mapping[ty.identifier.visit()] = ty.typ.visit()
 
-        with open(f'{role}.py', "w+") as f:
+        with open(file, "w+") as f:
             f.write('from channel import Channel\n')
             f.write('from sessiontype import *\n\n')
 
@@ -112,7 +113,7 @@ class Projector:
             f.write(f'roles = {role_mapping}\n\n')
             f.write(f'ch = Channel({session_type}, roles)\n')
 
-        return f'{role}.py'
+        return file
 
     def _project_roles(self, me : str, roles: List[str]) -> str:
         lines = '{'
@@ -145,11 +146,11 @@ class Projector:
                 return 'End'
 
     def _project_local_send(self, s: LocalSend) -> str:
-        typ = self.type_mapping[s.message.payload.visit()]
+        typ = self._lookup_or_self(s.message.payload.visit())
         return f"Send[{typ}, '{s.identifier.visit()}', {'End' if self.insert_end else ''}"
 
     def _project_local_recv(self, r: LocalRecv) -> str:
-        typ = self.type_mapping[r.message.payload.visit()]
+        typ = self._lookup_or_self(r.message.payload.visit())
         return f"Recv[{typ}, '{r.identifier.visit()}', {'End' if self.insert_end else ''}"
 
     def _project_local_branch(self, b: LocalBranch) -> str:

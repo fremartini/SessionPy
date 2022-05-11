@@ -1,0 +1,6 @@
+type <float> as price;
+local protocol BuyerSeller at B1(role B1,role B2,role Seller) { 
+Title(str) to Seller;
+Quote(price) from Seller;
+Amount(price) to B2;
+}
