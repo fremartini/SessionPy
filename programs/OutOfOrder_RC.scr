@@ -1,0 +1,3 @@
+local protocol OutOfOrder at RC(role RA,role RB,role RC) { 
+Msg(int) to RA;
+}

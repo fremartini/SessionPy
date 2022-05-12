@@ -1,0 +1,4 @@
+global protocol OutOfOrder(role RA, role RB, role RC) {
+    Msg(int) from RB to RA;
+    Msg(int) from RC to RA;
+}
