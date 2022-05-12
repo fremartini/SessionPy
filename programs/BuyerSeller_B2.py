@@ -12,5 +12,3 @@ print(amount)
 
 ch.choose('buy')
 ch.send('Address')
-
-ch.close()

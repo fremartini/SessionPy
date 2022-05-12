@@ -9,5 +9,3 @@ quote = ch.recv()
 print(quote)
 
 ch.send(50.2)
-
-ch.close()

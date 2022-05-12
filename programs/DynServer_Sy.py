@@ -1,8 +1,10 @@
 from context import *
 
-roles = {'self': ('localhost', 5000), 'Rob': ('localhost', 5005),}
+roles = {'self': ('localhost', 5000), 'Rob': ('localhost', 5005), }
 
-ch = Channel(Offer['Rob', {"neg": Recv[int, 'Rob', Send[int, 'Rob', End]], "add": Recv[int, 'Rob', Recv[int, 'Rob', Send[int, 'Rob', End]]]}], roles, static_check=False)
+ch = Channel(Offer['Rob', {"neg": Recv[int, 'Rob', Send[int, 'Rob', End]],
+                           "add": Recv[int, 'Rob', Recv[int, 'Rob', Send[int, 'Rob', End]]]}], roles,
+             static_check=False)
 
 negate = lambda x: -x
 add = lambda x: lambda y: x + y

@@ -16,5 +16,3 @@ match ch.offer():
         print(address)
     case 'reject':
         ...
-
-ch.close()

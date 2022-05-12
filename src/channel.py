@@ -6,9 +6,8 @@ import pickle
 from lib import type_to_str
 from sessiontype import *
 import socket
-import statemachine
 from src.stack import Stack
-from statemachine import Action, BranchEdge
+from statemachine import Action, BranchEdge, from_generic_alias
 from check import typecheck_file
 from debug import debug_print
 
@@ -18,7 +17,7 @@ T = TypeVar('T')
 class Channel(Generic[T]):
     def __init__(self, session_type, roles: Dict[str, tuple[str, int]],
                  static_check=True) -> None:
-        self.session_type = statemachine.from_generic_alias(session_type)
+        self.session_type = from_generic_alias(session_type)
 
         if static_check:
             typecheck_file()
@@ -44,6 +43,7 @@ class Channel(Generic[T]):
             expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
             raise RuntimeError(f'Expected to {expected_action}, tried to send {type_to_str(type(e))}')
         self._send(e, self.rolesToPorts[actor])
+        self._close_if_complete()
 
     def recv(self) -> Any:
         nd = self.session_type
@@ -54,7 +54,9 @@ class Channel(Generic[T]):
         else:
             expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
             raise RuntimeError(f'Expected to {expected_action}, tried to receive something')
-        return self._recv(actor)
+        res = self._recv(actor)
+        self._close_if_complete()
+        return res
 
     def offer(self) -> str:
         nd = self.session_type
@@ -69,6 +71,7 @@ class Channel(Generic[T]):
         else:
             expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
             raise RuntimeError(f'Expected to {expected_action}, offer was called')
+        self._close_if_complete()
         return pick
 
     def choose(self, pick: str) -> None:
@@ -84,10 +87,7 @@ class Channel(Generic[T]):
             expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
             raise RuntimeError(f'Expected to {expected_action}, choose was called')
         self._send(pick, self.rolesToPorts[actor])
-
-    def close(self):
-        self.running = False
-        self._send('', self.rolesToPorts['self'])
+        self._close_if_complete()
 
     def _send(self, e: Any, to: tuple[str, int]) -> None:
         with _spawn_socket() as client_socket:
@@ -131,6 +131,14 @@ class Channel(Generic[T]):
             except Exception as ex:
                 _trace(ex)
 
+    def _close(self):
+        self.running = False
+        self._send('', self.rolesToPorts['self'])
+
+    def _close_if_complete(self):
+        if self.session_type.accepting:
+            self._close()
+
     def _wait_until_connected_to(self, sock: socket.socket, address: tuple[str, int]) -> None:
         _connected = False
 
@@ -144,7 +152,7 @@ class Channel(Generic[T]):
                 pass
 
     def _exit(self) -> None:
-        self.close()
+        self._close()
         sys.exit(0)
 
 
