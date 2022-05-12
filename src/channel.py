@@ -1,12 +1,13 @@
 import sys
 import traceback
 from threading import Thread
-from typing import Any, Dict, List
+from typing import Any, Dict
 import pickle
 from lib import type_to_str
 from sessiontype import *
 import socket
 import statemachine
+from src.stack import Stack
 from statemachine import Action, BranchEdge
 from check import typecheck_file
 from debug import debug_print
@@ -25,15 +26,14 @@ class Channel(Generic[T]):
 
         self.rolesToPorts = roles
         self.portsToRoles = {v: k for k, v in roles.items()}
-        self.stack: List[tuple[str, str]] = []
+        self.stack: Stack[tuple[str, str]] = Stack()
 
         self.server_socket = _spawn_socket()
         self.server_socket.bind(roles['self'])
         self.server_socket.settimeout(1)
 
         self.running = True
-        self.listener_thread = Thread(target=self._listen)
-        self.listener_thread.start()
+        Thread(target=self._listen).start()
 
     def send(self, e: Any) -> None:
         nd = self.session_type
@@ -102,9 +102,10 @@ class Channel(Generic[T]):
     def _recv(self, sender: str) -> Any:
         try:
             while True:
-                if len(self.stack) == 0:
+                if self.stack.isEmpty():
                     continue
-                recipient = self.stack[len(self.stack) - 1][1]
+
+                recipient = self.stack.peek()[1]
                 if recipient == sender:
                     return self.stack.pop()[0]
         except KeyboardInterrupt:
@@ -124,7 +125,7 @@ class Channel(Generic[T]):
                     if payload:
                         msg, addr = _decode(payload)
                         sender = self.portsToRoles[addr]
-                        self.stack.append((msg, sender))
+                        self.stack.push((msg, sender))
             except socket.timeout:
                 pass
             except Exception as ex:
