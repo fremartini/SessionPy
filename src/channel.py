@@ -1,13 +1,14 @@
 import sys
 import traceback
 from threading import Thread
+from types import GenericAlias
 from typing import Any, Dict
 import pickle
 from lib import type_to_str
 from sessiontype import *
 import socket
 from src.stack import Stack
-from statemachine import Action, BranchEdge, from_generic_alias
+from statemachine import Action, BranchEdge, from_generic_alias, Node
 from check import typecheck_file
 from debug import debug_print
 
@@ -15,9 +16,39 @@ T = TypeVar('T')
 
 
 class Channel(Generic[T]):
-    def __init__(self, session_type, roles: Dict[str, tuple[str, int]],
+    """Represents the communication in a MPST protocol
+
+    Attributes
+    ----------
+    session_type: Node
+        state machine of the given session type
+    rolesToPorts: Dict[str, tuple[str, int]
+        dictionary mapping roles to their address
+    portsToRoles: Dict[tuple[str, int],str]
+        reverse of rolesToPorts, maps addresses to their roles
+    stack: Stack
+        a stack of (message, role) tuples
+    server_socket: socket.socket
+        socket listening for messages sent to this channels local address
+    running:
+        flag indicating if the channel is currently listening on its local address
+
+    """
+
+    def __init__(self, session_type: GenericAlias, roles: Dict[str, tuple[str, int]],
                  static_check=True) -> None:
-        self.session_type = from_generic_alias(session_type)
+        """
+        Parameters
+        ----------
+        session_type: GenericAlias
+            session type from which a statemachine should be built
+        roles: Dict[str, tuple[str, int]
+            dictionary mapping roles to their address
+        static_check: bool
+            indicator if this channel should be statically checked
+        """
+
+        self.session_type: Node = from_generic_alias(session_type)
 
         if static_check:
             typecheck_file()
@@ -35,6 +66,17 @@ class Channel(Generic[T]):
         Thread(target=self._listen).start()
 
     def send(self, e: Any) -> None:
+        """Send a message to the recipient specified in the session type
+
+        Parameters
+        ----------
+        e: Any
+            the message to be sent
+
+        Returns
+        -------
+        None
+        """
         nd = self.session_type
         action, actor = nd.outgoing_action(), nd.outgoing_actor()
         if action == Action.SEND and nd.outgoing_type() == type(e):
@@ -46,6 +88,14 @@ class Channel(Generic[T]):
         self._close_if_complete()
 
     def recv(self) -> Any:
+        """Receive a message from the role specified in the session type
+
+        Returns
+        -------
+        Any
+            the message that was received
+
+        """
         nd = self.session_type
         action, actor = nd.outgoing_action(), nd.outgoing_actor()
 
@@ -59,6 +109,13 @@ class Channel(Generic[T]):
         return res
 
     def offer(self) -> str:
+        """Offer several choices to the actor specified in the session type
+
+        Returns
+        -------
+        str
+            the label of the branch that was picked
+        """
         nd = self.session_type
         action, actor = nd.outgoing_action(), nd.outgoing_actor()
         pick: str = self._recv(actor)
@@ -75,6 +132,14 @@ class Channel(Generic[T]):
         return pick
 
     def choose(self, pick: str) -> None:
+        """Choose among several offers received
+
+        Parameters
+        ----------
+        pick: str
+            the label of the branch that is to be chosen
+
+        """
         nd = self.session_type
         action, actor = nd.outgoing_action(), nd.outgoing_actor()
         if action == Action.BRANCH:
@@ -90,6 +155,16 @@ class Channel(Generic[T]):
         self._close_if_complete()
 
     def _send(self, e: Any, to: tuple[str, int]) -> None:
+        """Sends a message to a recipient over a socket.
+        Blocks until it is able to establish a connection
+
+        Parameters
+        e: Any
+            the message to be sent
+
+        to: tuple[str, str]
+            address of the recipient
+        """
         with _spawn_socket() as client_socket:
             try:
                 self._wait_until_connected_to(client_socket, to)
@@ -100,6 +175,18 @@ class Channel(Generic[T]):
                 _trace(ex)
 
     def _recv(self, sender: str) -> Any:
+        """Attempt to retrieve a message addressed to a given actor
+
+        Parameters
+        ----------
+        sender: str
+            the role of the message that is to be retrieved
+
+        Returns
+        -------
+        Any
+            the retrieved message
+        """
         try:
             while True:
                 if self.stack.isEmpty():
@@ -114,6 +201,7 @@ class Channel(Generic[T]):
             _trace(ex)
 
     def _listen(self):
+        """Listens on the assigned local port for messages and put them in a stack"""
         self.server_socket.listen()
         while True:
             try:
@@ -132,14 +220,29 @@ class Channel(Generic[T]):
                 _trace(ex)
 
     def _close(self):
+        """Close the listener on the local port.
+        Sets the 'running' flag to false and sends a message to itself to terminate the listener
+        """
         self.running = False
         self._send('', self.rolesToPorts['self'])
 
     def _close_if_complete(self):
+        """Close the listener if the session type is exhausted of operations"""
         if self.session_type.accepting:
             self._close()
 
     def _wait_until_connected_to(self, sock: socket.socket, address: tuple[str, int]) -> None:
+        """Blocks until a connection can be made
+
+        Parameters
+        ----------
+        sock: socket.socket
+            the socket on which the connection should be attempted
+
+        address: tuple[str, int]
+            the address that the connection should be made to
+
+        """
         _connected = False
 
         while not _connected:
@@ -152,23 +255,57 @@ class Channel(Generic[T]):
                 pass
 
     def _exit(self) -> None:
+        """Uses on KeyboardInterrupts. Closes the listener and exits the program"""
         self._close()
         sys.exit(0)
 
 
 def _spawn_socket() -> socket.socket:
+    """Create a socket with predetermined options"""
     sock = socket.socket()
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     return sock
 
 
 def _encode(e: Any) -> bytes:
+    """Encode a message to bytes
+
+    Parameters
+    ----------
+    e: Any
+        the message to be encoded
+
+    Returns
+    -------
+    bytes
+        the bytes of 'e'
+    """
     return pickle.dumps(e)
 
 
 def _decode(e: bytes) -> Any:
+    """Decode a message in bytes format
+
+    Parameters
+    ----------
+    e: bytes
+        the bytes of what should be decoded
+
+    Returns
+    -------
+    Any
+        the original object that was encoded using _encode
+    """
     return pickle.loads(e)
 
 
 def _trace(ex: Exception) -> None:
+    """Print the stacktrace of an exception to the console
+
+    Parameters
+    ----------
+    ex: Exception
+        the exception that should have its stacktrace printed
+
+    """
     traceback.print_exception(type(ex), ex, ex.__traceback__)
