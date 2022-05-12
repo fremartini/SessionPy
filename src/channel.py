@@ -16,9 +16,8 @@ T = TypeVar('T')
 
 class Channel(Generic[T]):
     def __init__(self, session_type, roles: Dict[str, tuple[str, int]],
-                 static_check=True, dynamic_check=True) -> None:
+                 static_check=True) -> None:
         self.session_type = statemachine.from_generic_alias(session_type)
-        self.dynamic_check = dynamic_check
 
         if static_check:
             typecheck_file()
@@ -37,61 +36,53 @@ class Channel(Generic[T]):
         self.listener_thread.start()
 
     def send(self, e: Any) -> None:
-        actor = None
-        if self.dynamic_check:
-            nd = self.session_type
-            action, actor = nd.outgoing_action(), nd.outgoing_actor()
-            if action == Action.SEND and nd.outgoing_type() == type(e):
-                self.session_type = nd.next_nd()
-            else:
-                expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
-                raise RuntimeError(f'Expected to {expected_action}, tried to send {type_to_str(type(e))}')
+        nd = self.session_type
+        action, actor = nd.outgoing_action(), nd.outgoing_actor()
+        if action == Action.SEND and nd.outgoing_type() == type(e):
+            self.session_type = nd.next_nd()
+        else:
+            expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
+            raise RuntimeError(f'Expected to {expected_action}, tried to send {type_to_str(type(e))}')
         self._send(e, self.rolesToPorts[actor])
 
     def recv(self) -> Any:
-        actor = None
-        if self.dynamic_check:
-            nd = self.session_type
-            action, actor = nd.outgoing_action(), nd.outgoing_actor()
+        nd = self.session_type
+        action, actor = nd.outgoing_action(), nd.outgoing_actor()
 
-            if action == Action.RECV:
-                self.session_type = nd.next_nd()
-            else:
-                expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
-                raise RuntimeError(f'Expected to {expected_action}, tried to receive something')
+        if action == Action.RECV:
+            self.session_type = nd.next_nd()
+        else:
+            expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
+            raise RuntimeError(f'Expected to {expected_action}, tried to receive something')
         return self._recv(actor)
 
     def offer(self) -> str:
-        actor = None
+        nd = self.session_type
+        action, actor = nd.outgoing_action(), nd.outgoing_actor()
         pick: str = self._recv(actor)
-        if self.dynamic_check:
-            nd = self.session_type
-            action = nd.outgoing_action()
-            if action == Action.BRANCH:
-                for edge in nd.outgoing:
-                    assert isinstance(edge, BranchEdge)
-                    if edge.key == pick:
-                        self.session_type = nd.outgoing[edge]
-                        break
-            else:
-                expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
-                raise RuntimeError(f'Expected to {expected_action}, offer was called')
+        if action == Action.BRANCH:
+            for edge in nd.outgoing:
+                assert isinstance(edge, BranchEdge)
+                if edge.key == pick:
+                    self.session_type = nd.outgoing[edge]
+                    break
+        else:
+            expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
+            raise RuntimeError(f'Expected to {expected_action}, offer was called')
         return pick
 
     def choose(self, pick: str) -> None:
-        actor = 'self'
-        if self.dynamic_check:
-            nd = self.session_type
-            action, actor = nd.outgoing_action(), nd.outgoing_actor()
-            if action == Action.BRANCH:
-                for edge in nd.outgoing:
-                    assert isinstance(edge, BranchEdge)
-                    if edge.key == pick:
-                        self.session_type = nd.outgoing[edge]
-                        break
-            else:
-                expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
-                raise RuntimeError(f'Expected to {expected_action}, choose was called')
+        nd = self.session_type
+        action, actor = nd.outgoing_action(), nd.outgoing_actor()
+        if action == Action.BRANCH:
+            for edge in nd.outgoing:
+                assert isinstance(edge, BranchEdge)
+                if edge.key == pick:
+                    self.session_type = nd.outgoing[edge]
+                    break
+        else:
+            expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
+            raise RuntimeError(f'Expected to {expected_action}, choose was called')
         self._send(pick, self.rolesToPorts[actor])
 
     def close(self):

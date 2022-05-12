@@ -1,5 +1,4 @@
-from channel import Channel
-from sessiontype import *
+from context import *
 
 roles = {'RA': ('localhost', 5000), 'self': ('localhost', 5001), 'RC': ('localhost', 5002),}
 
