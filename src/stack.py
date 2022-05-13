@@ -6,24 +6,62 @@ T = TypeVar('T')
 
 
 class Stack(Generic[T]):
+    """Stack data structure
+
+    Attributes
+    ----------
+    _lst: ImmutableList
+        internal list of the datastructure
+    """
+
     def __init__(self):
-        self.stack = ImmutableList()
+        self._lst: ImmutableList = ImmutableList()
 
     def push(self, e: Any) -> None:
-        self.stack = self.stack.add(e)
+        """Push an element onto the stack
+
+        Parameters
+        ----------
+        e: Any
+            element to be pushed onto the stack
+        """
+        self._lst = self._lst.add(e)
 
     def pop(self) -> T:
-        if len(self.stack) == 0:
+        """Pops the top element of the stack.
+        Throws an exception if the stack is empty
+
+        Returns
+        -------
+        T
+            the top element on the stack
+        """
+        if len(self._lst) == 0:
             raise Exception('empty stack')
 
-        last = self.stack.last()
+        top = self._lst.last()
 
-        self.stack = self.stack.discard_last()
+        self._lst = self._lst.discard_last()
 
-        return last
+        return top
 
     def peek(self) -> T:
-        return self.stack.last()
+        """Look at the top element of the stack without popping it
+
+        Returns
+        -------
+        T
+            the top element of the stack
+        """
+
+        return self._lst.last()
 
     def isEmpty(self) -> bool:
-        return len(self.stack) == 0
+        """Check if the stack is empt
+
+        Returns
+        -------
+        bool
+            if the stack is empty
+        """
+        return len(self._lst) == 0

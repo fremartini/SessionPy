@@ -72,10 +72,6 @@ class Channel(Generic[T]):
         ----------
         e: Any
             the message to be sent
-
-        Returns
-        -------
-        None
         """
         nd = self.session_type
         action, actor = nd.outgoing_action(), nd.outgoing_actor()
