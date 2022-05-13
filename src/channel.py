@@ -32,7 +32,6 @@ class Channel(Generic[T]):
         socket listening for messages sent to this channels local address
     running:
         flag indicating if the channel is currently listening on its local address
-
     """
 
     def __init__(self, session_type: GenericAlias, roles: Dict[str, tuple[str, int]],
@@ -90,7 +89,6 @@ class Channel(Generic[T]):
         -------
         Any
             the message that was received
-
         """
         nd = self.session_type
         action, actor = nd.outgoing_action(), nd.outgoing_actor()
@@ -134,7 +132,6 @@ class Channel(Generic[T]):
         ----------
         pick: str
             the label of the branch that is to be chosen
-
         """
         nd = self.session_type
         action, actor = nd.outgoing_action(), nd.outgoing_actor()
@@ -237,7 +234,6 @@ class Channel(Generic[T]):
 
         address: tuple[str, int]
             the address that the connection should be made to
-
         """
         _connected = False
 

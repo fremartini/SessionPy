@@ -1,38 +1,93 @@
+from typing import Dict
+
 from parser import *
 
 
 class Projector:
+    """Exposes functionality to project global protocols to local protocols and
+    local protocols to Python files
+    """
+
     def __init__(self):
-        self.current_role = None
-        self.insert_loop = None
+        self._current_role = None
+        self._insert_loop = None
 
     def project(self, root: Protocol) -> List[str] | str:
+        """Project the AST of a global or local protocol
+
+        Parameters
+        ----------
+        root: Protocol
+            the root node of the AST that should be parsed
+
+        Returns
+        -------
+        List[str]
+            a list of local protocols that were projected from the global protocol
+        str
+            the Python file name of the local protocol that was projected
+        """
         match root.protocol:
-            case g if isinstance(g, P):
-                return self._project_p(g, root.typedef)
+            case p if isinstance(p, P):
+                return self._project_p(p, root.typedef)
             case l if isinstance(l, L):
                 return self._project_l(l, root.typedef)
 
     def _project_p(self, protocol: P, typedefs: List[TypeDef]) -> List[str]:
-        roles = protocol.roles.visit()
-        for r in roles:
-            with open(f'{protocol.protocol_name.visit()}_{r}.scr', "w+") as f:
-                self.current_role = r
+        """Write the projection of a global protocol to their corresponding local protocols
 
-                for t in typedefs:
-                    f.write(_project_typedef(t))
+        Parameters
+        ----------
+        protocol: P
+            the global protocol to project
+        typedefs: List[TypeDef]
+            the typedefs contained within the protocol
 
-                role_str = remove_last_char(''.join([f'role {x},' for x in roles]))
-                f.write(f'local protocol {protocol.protocol_name.identifier} at {r}({role_str}) {{ \n')
+        Returns
+        -------
+        List[str]
+            a list of local protocols that were projected from the global protocol
+        """
+        roles: List[str] = protocol.roles.visit()
+        file_names = [f'{protocol.protocol_name.visit()}_{x}.scr' for x in roles]
 
+        for idx, role in enumerate(roles):
+            with open(file_names[idx], "w+") as f:
+                self._current_role = role
+
+                # write typedefs
+                for typedef in typedefs:
+                    f.write(_project_typedef(typedef))
+
+                # write header
+                role_str = ''.join([f'role {x},' for x in roles])  # role X, role Y, role Z,
+                role_str = role_str[:-1]  # remove trailing comma
+                f.write(f'local protocol {protocol.protocol_name} at {role}({role_str}) {{\n')
+
+                # write body
                 for g in protocol.g:
-                    to_write = self._project_g(g)
+                    to_write: str | None = self._project_g(g)
                     if to_write is not None:
                         f.write(f'{to_write}\n')
                 f.write('}')
-        return [f'{protocol.protocol_name.visit()}_{x}.scr' for x in roles]
+
+        return file_names
 
     def _project_g(self, g: G) -> str | None:
+        """Project a G AST node into a string if possible
+
+        Parameters
+        ----------
+        g: G
+            G AST node
+
+        Returns
+        -------
+        str
+            correctly formatted session type
+        None
+            session type that should not be written
+        """
         match g.g:
             case global_interaction if isinstance(global_interaction, GlobalInteraction):
                 return self._project_global_interaction(global_interaction)
@@ -45,50 +100,102 @@ class Projector:
             case end if isinstance(end, End):
                 return 'End;'
 
-    def _project_global_interaction(self, i: GlobalInteraction):
-        if self.current_role not in [i.sender.identifier, i.recipient.identifier]:
+    def _project_global_interaction(self, gi: GlobalInteraction) -> str | None:
+        """Project a GlobalInteraction AST node
+
+        Parameters
+        ----------
+        gi: GlobalInteraction
+            GlobalInteraction AST node
+
+        Returns
+        -------
+        str
+            session type in format 'M(X) to/from ROLE'
+        None
+            if the role is not part of the interaction
+        """
+
+        # this role is not in the current interaction
+        if self._current_role not in [gi.sender.identifier, gi.recipient.identifier]:
             return None
 
-        if i.sender.identifier == self.current_role:
-            remainder = f'to {i.recipient.identifier}'
+        if gi.sender.identifier == self._current_role:
+            action = f'to {gi.recipient.identifier}'
         else:
-            remainder = f'from {i.sender.identifier}'
+            action = f'from {gi.sender.identifier}'
 
-        return f'{i.message.label.identifier}({i.message.payload.identifier}) {remainder};'
+        return f'{gi.message.label.identifier}({gi.message.payload.identifier}) {action};'
 
-    def _project_global_branch(self, b: GlobalBranch) -> str:
-        st = ''
-        for g in b.g:
-            st = st + self._project_g(g) + '\n'
-        st = f'@{b.label.label.visit()};\n{st}'
+    def _project_global_branch(self, gb: GlobalBranch) -> str:
+        """Project a GlobalBranch AST node
+
+        Parameters
+        ----------
+        gb: GlobalBranch
+            GlobalBranch AST node
+
+        Returns
+        -------
+        str
+            session type in format '@label; {ST}'
+        """
+        st = ''.join([self._project_g(g) + '\n' for g in gb.g])
+        st = f'@{gb.label.label};\n{st}'
         return st
 
-    def _project_global_choice(self, c: GlobalChoice) -> str | None:
-        if self.current_role not in [c.sender.identifier, c.recipient.identifier]:
+    def _project_global_choice(self, gc: GlobalChoice) -> str | None:
+        """Project a GlobalChoice AST node
+
+        Parameters
+        ----------
+        gc: GlobalChoice
+            GlobalChoice AST node
+
+        Returns
+        -------
+        str
+            session type in format 'offer to / choice from ROLE {ST} or {ST} ...'
+        None
+            if the role is not part of the interaction
+        """
+        if self._current_role not in [gc.sender.identifier, gc.recipient.identifier]:
             return None
 
-        if self.current_role == c.sender.identifier:
-            lines = f'offer to {c.recipient.identifier} {{\n'
+        if self._current_role == gc.sender.identifier:
+            lines = f'offer to {gc.recipient.identifier} {{\n'
         else:
-            lines = f'choice from {c.sender.identifier} {{\n'
+            lines = f'choice from {gc.sender.identifier} {{\n'
 
-        lines = lines + self._project_global_branch(c.b1)
+        lines = lines + self._project_global_branch(gc.b1)
         lines = lines + '} or {\n'
-        lines = lines + self._project_global_branch(c.b2)
+        lines = lines + self._project_global_branch(gc.b2)
         lines = lines + '}'
 
-        for c in c.bn:
+        for c in gc.bn:
             lines = lines + ' or {\n'
             lines = lines + self._project_global_branch(c)
             lines = lines + '}\n'
 
         return lines
 
-    def _project_global_recursion(self, r: GlobalRecursion) -> str:
-        lines = f'rec {r.identifier.visit()} '
+    def _project_global_recursion(self, gr: GlobalRecursion) -> str:
+        """Project a GlobalRecursion AST node
+
+        Parameters
+        ----------
+        gr: GlobalRecursion
+            GlobalRecursion AST node
+
+        Returns
+        -------
+        str
+            session type in format 'rec {ST}'
+        """
+        lines = f'rec {gr.identifier.visit()} '
         lines = lines + '{\n'
 
-        for s in r.g:
+        for s in gr.g:
             to_write = self._project_g(s)
             if to_write is not None:
                 lines = lines + to_write + '\n'
@@ -98,25 +205,55 @@ class Projector:
         return lines
 
     def _project_l(self, protocol: L, typedefs: List[TypeDef]) -> str:
-        role = protocol.perspective.visit()
+        """Write the projection of a local protocol to its corresponding Python file
+
+        Parameters
+        ----------
+        protocol: L
+            the local protocol to project
+        typedefs: List[TypeDef]
+            the typedefs contained within the protocol
+
+        Returns
+        -------
+        str
+            the projected Python file
+        """
+        role: str = protocol.perspective.visit()
         file = f'{protocol.protocol_name.visit()}_{role}.py'
 
-        self.type_mapping = {}
-        for ty in typedefs:
-            self.type_mapping[ty.identifier.visit()] = ty.typ.visit()
+        # create type mapping, ex: {'message': 'str"}
+        self.type_mapping: Dict[str, str] = {}
+        for typedef in typedefs:
+            self.type_mapping[typedef.identifier.visit()] = typedef.typ.visit()
 
         with open(file, "w+") as f:
             f.write('from channel import Channel\n')
             f.write('from sessiontype import *\n\n')
 
+            # create a routing table mapping roles to their address
+            routing_table = _project_roles(role, protocol.roles.visit())
+            f.write(f'routing_table = {routing_table}\n\n')
+
+            # project the statements of the local protocol into a single session type
             session_type = self._project_session_type(protocol.t)
-            role_mapping = _project_roles(role, protocol.roles.visit())
-            f.write(f'roles = {role_mapping}\n\n')
-            f.write(f'ch = Channel({session_type}, roles)\n')
+            f.write(f'ch = Channel({session_type}, routing_table)\n')
 
         return file
 
     def _project_t(self, t: T) -> str:
+        """Project a T AST node
+
+        Parameters
+        ----------
+        t: T
+            T AST node
+
+        Returns
+        -------
+        str
+            correctly formatted session type
+        """
         match t.op:
             case local_send if isinstance(local_send, LocalSend):
                 return self._project_local_send(local_send)
@@ -131,28 +268,65 @@ class Projector:
             case end if isinstance(end, End):
                 return 'End'
 
-    def _project_local_send(self, s: LocalSend) -> str:
-        typ = self._lookup_or_self(s.message.payload.visit())
-        return f"Send[{typ}, '{s.identifier.visit()}', {self._end()}"
+    def _project_local_send(self, ls: LocalSend) -> str:
+        """Project a LocalSend AST node
 
-    def _project_local_recv(self, r: LocalRecv) -> str:
-        typ = self._lookup_or_self(r.message.payload.visit())
-        return f"Recv[{typ}, '{r.identifier.visit()}', {self._end()}"
+        Parameters
+        ----------
+        ls: LocalSend
+            LocalSend AST node
+
+        Returns
+        -------
+        str
+            session type in format 'Send[{TYP}, {ROLE}, {ST}'
+        """
+        typ = self._lookup_or_self(ls.message.payload.visit())
+        return f"Send[{typ}, '{ls.identifier.visit()}', {self._end()}"
+
+    def _project_local_recv(self, lr: LocalRecv) -> str:
+        """Project a LocalSend AST node
+
+        Parameters
+        ----------
+        lr: LocalRecv
+            LocalRecv AST node
+
+        Returns
+        -------
+        str
+            session type in format 'Recv[{TYP}, {ROLE}, {ST}'
+        """
+        typ = self._lookup_or_self(lr.message.payload.visit())
+        return f"Recv[{typ}, '{lr.identifier.visit()}', {self._end()}"
 
     def _end(self) -> str:
-        if self.insert_loop:
-            return f'"{self.insert_loop.visit()}"'
+        """Add the correct terminator to a session type depending on the context"""
+        if self._insert_loop:
+            return f'"{self._insert_loop.visit()}"'
         elif self.insert_end:
             return 'End'
         else:
             return ''
 
-    def _project_local_branch(self, b: LocalBranch) -> str:
-        st = f'"{b.label.visit()}": '
-        for t in b.t:
+    def _project_local_branch(self, lb: LocalBranch) -> str:
+        """Project a LocalBranch AST node
+
+        Parameters
+        ---------
+        lb: LocalBranch
+            LocalBranch AST node
+
+        Returns
+        -------
+        str
+            session type in format '"label": {ST}'
+        """
+        st = f'"{lb.label.visit()}": '
+        for t in lb.t:
             st = st + self._project_t(t)
 
-        st = st + _parens(b.t)
+        st = st + _closing_brackets(lb.t)
         return st
 
     def _project_local_choice(self, c: LocalChoice) -> str:
@@ -171,27 +345,63 @@ class Projector:
         else:
             raise Exception(f'unknown operation {c.op}')
 
-    def _project_local_recursion(self, r: LocalRecursion) -> str:
+    def _project_local_recursion(self, lr: LocalRecursion) -> str:
+        """Project a LocalRecursion AST node
+
+        Parameters
+        ----------
+        lr: LocalRecursion
+            LocalRecursion AST node
+
+        Returns
+        -------
+        str
+            session type in format 'Label["Label", {ST}]'
+        """
         st = ''
         self.insert_end = False
-        for (idx, t) in enumerate(r.t):
-            if idx == len(r.t) - 1 and not isinstance(t.op, LocalChoice):
-                self.insert_loop = r.identifier
+        for (idx, t) in enumerate(lr.t):
+            if idx == len(lr.t) - 1 and not isinstance(t.op, LocalChoice):
+                self._insert_loop = lr.identifier
             st = st + self._project_t(t)
-        st = st + _parens(r.t)
+        st = st + _closing_brackets(lr.t)
 
-        self.insert_loop = None
-        return f'Label["{r.identifier.visit()}", {st}'
+        self._insert_loop = None
+        return f'Label["{lr.identifier.visit()}", {st}'
 
     def _project_session_type(self, ts: List[T]) -> str:
+        """Build a string from a list of T AST nodes
+
+        Parameters
+        ----------
+        ts: List[T]
+            AST nodes that should be converted to a string
+
+        Returns
+        -------
+        str
+            ts converted to a string
+        """
         st = ''
         for (idx, t) in enumerate(ts):
             self.insert_end = idx == len(ts) - 1 and not isinstance(t.op, LocalChoice)
             st = st + self._project_t(t)
-        st = st + _parens(ts)
+        st = st + _closing_brackets(ts)
         return st
 
     def _lookup_or_self(self, t: str) -> str:
+        """Attempts a lookup for t in type_mappings
+
+        Parameters
+        ----------
+        t: str
+            key
+
+        Returns
+        -------
+        str
+            value of key t if it exists, otherwise returns t
+        """
         try:
             return self.type_mapping[t]
         except:
@@ -199,27 +409,77 @@ class Projector:
 
 
 def _project_typedef(t: TypeDef) -> str:
+    """Project a TypeDef AST node into a string
+
+    Parameters
+    ----------
+    t: TypeDef
+        TypeDef AST node that should be projected
+
+    Returns
+    -------
+    str
+        string representation of TypeDef AST node
+    """
     return f'type <{t.typ.identifier}> as {t.identifier.identifier};\n'
 
 
 def _project_call(c: Call) -> str:
+    """Project a Call AST node into a string
+
+    Parameters
+    ----------
+    c: Call
+        call AST node that should be projected
+
+    Returns
+    -------
+    str
+        string representation of Call AST node
+    """
     return f'continue {c.identifier.visit()};'
 
 
-def _parens(ts: List[T]) -> str:
-    parens = ''
+def _closing_brackets(ts: List[T]) -> str:
+    """Returns a sequence of closing square brackets determined by the length of ts
+
+    Parameters
+    ----------
+    ts: List[T]
+        list of statements that should be matched with a corresponding amount of closing brackets
+
+    Returns
+    -------
+    str
+        the appropriate number of closing brackets based on ts
+    """
+    braces = ''
     for i in ts:
         if isinstance(i.op, LocalChoice) or isinstance(i.op, GlobalChoice) or isinstance(i.op, End) or isinstance(i.op,
                                                                                                                   Call):
             continue
-        parens = parens + ']'
-    return parens
+        braces = braces + ']'
+    return braces
 
 
 def _project_roles(me: str, roles: List[str]) -> str:
-    lines = '{'
+    """Create a routing table for all the roles in the protocol
+
+    Parameters
+    ----------
+    me: str
+        the current role being generated
+    roles: List[str]
+        all roles in the local protocol
+
+    Returns
+    -------
+    str
+        string version of a dictionary mapping roles to addresses
+    """
     address = ('localhost', 0)
 
+    lines = '{'
     for role in roles:
         if role == me:
             to_append = f"'self': {address}, "
@@ -227,10 +487,6 @@ def _project_roles(me: str, roles: List[str]) -> str:
             to_append = f"'{role}': {address}, "
         lines = lines + to_append
 
-    lines = remove_last_char(lines)
+    lines = lines[:-1]  # remove trailing comma
     lines = lines + '}'
     return lines
-
-
-def remove_last_char(s: str) -> str:
-    return s[:-1]
