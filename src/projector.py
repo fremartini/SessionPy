@@ -4,6 +4,7 @@ from parser import *
 class Projector:
     def __init__(self):
         self.current_role = None
+        self.insert_loop = None
 
     def project(self, root: Protocol) -> List[str] | str:
         match root.protocol:
@@ -19,7 +20,7 @@ class Projector:
                 self.current_role = r
 
                 for t in typedefs:
-                    f.write(self._project_typedef(t))
+                    f.write(_project_typedef(t))
 
                 role_str = remove_last_char(''.join([f'role {x},' for x in roles]))
                 f.write(f'local protocol {protocol.protocol_name.identifier} at {r}({role_str}) {{ \n')
@@ -40,7 +41,7 @@ class Projector:
             case global_recursion if isinstance(global_recursion, GlobalRecursion):
                 return self._project_global_recursion(global_recursion)
             case call if isinstance(call, Call):
-                return self._project_call(call)
+                return _project_call(call)
             case end if isinstance(end, End):
                 return 'End;'
 
@@ -109,26 +110,11 @@ class Projector:
             f.write('from sessiontype import *\n\n')
 
             session_type = self._project_session_type(protocol.t)
-            role_mapping = self._project_roles(role, protocol.roles.visit())
+            role_mapping = _project_roles(role, protocol.roles.visit())
             f.write(f'roles = {role_mapping}\n\n')
             f.write(f'ch = Channel({session_type}, roles)\n')
 
         return file
-
-    def _project_roles(self, me : str, roles: List[str]) -> str:
-        lines = '{'
-        address = ('localhost', 0)
-
-        for role in roles:
-            if role == me:
-                to_append = f"'self': {address}, "
-            else:
-                to_append = f"'{role}': {address}, "
-            lines = lines + to_append
-
-        lines = remove_last_char(lines)
-        lines = lines + '}'
-        return lines
 
     def _project_t(self, t: T) -> str:
         match t.op:
@@ -147,18 +133,26 @@ class Projector:
 
     def _project_local_send(self, s: LocalSend) -> str:
         typ = self._lookup_or_self(s.message.payload.visit())
-        return f"Send[{typ}, '{s.identifier.visit()}', {'End' if self.insert_end else ''}"
+        return f"Send[{typ}, '{s.identifier.visit()}', {self._end()}"
 
     def _project_local_recv(self, r: LocalRecv) -> str:
         typ = self._lookup_or_self(r.message.payload.visit())
-        return f"Recv[{typ}, '{r.identifier.visit()}', {'End' if self.insert_end else ''}"
+        return f"Recv[{typ}, '{r.identifier.visit()}', {self._end()}"
+
+    def _end(self) -> str:
+        if self.insert_loop:
+            return f'"{self.insert_loop.visit()}"'
+        elif self.insert_end:
+            return 'End'
+        else:
+            return ''
 
     def _project_local_branch(self, b: LocalBranch) -> str:
         st = f'"{b.label.visit()}": '
         for t in b.t:
             st = st + self._project_t(t)
 
-        st = st + self._parens(b.t)
+        st = st + _parens(b.t)
         return st
 
     def _project_local_choice(self, c: LocalChoice) -> str:
@@ -178,7 +172,15 @@ class Projector:
             raise Exception(f'unknown operation {c.op}')
 
     def _project_local_recursion(self, r: LocalRecursion) -> str:
-        st = self._project_session_type(r.t)
+        st = ''
+        self.insert_end = False
+        for (idx, t) in enumerate(r.t):
+            if idx == len(r.t) - 1 and not isinstance(t.op, LocalChoice):
+                self.insert_loop = r.identifier
+            st = st + self._project_t(t)
+        st = st + _parens(r.t)
+
+        self.insert_loop = None
         return f'Label["{r.identifier.visit()}", {st}'
 
     def _project_session_type(self, ts: List[T]) -> str:
@@ -186,28 +188,48 @@ class Projector:
         for (idx, t) in enumerate(ts):
             self.insert_end = idx == len(ts) - 1 and not isinstance(t.op, LocalChoice)
             st = st + self._project_t(t)
-        st = st + self._parens(ts)
+        st = st + _parens(ts)
         return st
-
-    def _project_typedef(self, t: TypeDef) -> str:
-        return f'type <{t.typ.identifier}> as {t.identifier.identifier};\n'
-
-    def _project_call(self, c: Call) -> str:
-        return f'continue {c.identifier.visit()};'
-
-    def _parens(self, ts: List[T]) -> str:
-        parens = ''
-        for i in ts:
-            if isinstance(i.op, LocalChoice) or isinstance(i.op, GlobalChoice) or isinstance(i.op, End) or isinstance(i.op, Call):
-                continue
-            parens = parens + ']'
-        return parens
 
     def _lookup_or_self(self, t: str) -> str:
         try:
             return self.type_mapping[t]
         except:
             return t
+
+
+def _project_typedef(t: TypeDef) -> str:
+    return f'type <{t.typ.identifier}> as {t.identifier.identifier};\n'
+
+
+def _project_call(c: Call) -> str:
+    return f'continue {c.identifier.visit()};'
+
+
+def _parens(ts: List[T]) -> str:
+    parens = ''
+    for i in ts:
+        if isinstance(i.op, LocalChoice) or isinstance(i.op, GlobalChoice) or isinstance(i.op, End) or isinstance(i.op,
+                                                                                                                  Call):
+            continue
+        parens = parens + ']'
+    return parens
+
+
+def _project_roles(me: str, roles: List[str]) -> str:
+    lines = '{'
+    address = ('localhost', 0)
+
+    for role in roles:
+        if role == me:
+            to_append = f"'self': {address}, "
+        else:
+            to_append = f"'{role}': {address}, "
+        lines = lines + to_append
+
+    lines = remove_last_char(lines)
+    lines = lines + '}'
+    return lines
 
 
 def remove_last_char(s: str) -> str:

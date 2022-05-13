@@ -7,7 +7,7 @@ import pickle
 from lib import type_to_str
 from sessiontype import *
 import socket
-from src.stack import Stack
+from stack import Stack
 from statemachine import Action, BranchEdge, from_generic_alias, Node
 from check import typecheck_file
 from debug import debug_print

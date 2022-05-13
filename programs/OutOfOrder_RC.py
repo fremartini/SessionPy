@@ -2,6 +2,7 @@ from context import *
 
 roles = {'RA': ('localhost', 5000), 'RB': ('localhost', 5001), 'self': ('localhost', 5002),}
 
-ch = Channel(Send[int, 'RA', End], roles)
+ch = Channel(Label["LOOP", Send[int, 'RA', "LOOP"]], roles)
 
-ch.send(1)
+while True:
+    ch.send(1)
