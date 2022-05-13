@@ -1,0 +1,5 @@
+local protocol OutOfOrder at RB(role RA,role RB,role RC) { 
+rec LOOP {
+Msg(int) to RA;
+}
+}

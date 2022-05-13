@@ -1,0 +1,17 @@
+global protocol RepeatingConversation(role Alice, role Bob) {
+    Greeting(str) from Alice to Bob;
+    Response(str) from Bob to Alice;
+
+    rec TALK {
+        choice from Alice to Bob {
+            @talk;
+            Msg(str) from Bob to Alice;
+            Msg(str) from Alice to Bob;
+            continue TALK;
+        } or {
+            @stop;
+            Msg(str) from Alice to Bob;
+            End;
+        }
+    }
+}

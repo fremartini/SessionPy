@@ -1,11 +1,9 @@
 from context import *
 
-roles = {'Sy': ('localhost', 5000), 'self': ('localhost', 5005),}
+roles = {'Sy': ('localhost', 5000), 'self': ('localhost', 5005), }
 
-ch = Channel(Choose['Sy', {"neg": Send[int, 'Sy', Recv[int, 'Sy', End]], "add": Send[int, 'Sy', Send[int, 'Sy', Recv[int, 'Sy', End]]]}], roles)
-
-negate = lambda x: -x
-add = lambda x: lambda y: x + y
+ch = Channel(Choose['Sy', {"neg": Send[int, 'Sy', Recv[int, 'Sy', End]],
+                           "add": Send[int, 'Sy', Send[int, 'Sy', Recv[int, 'Sy', End]]]}], roles)
 
 
 def do_negate(c):
