@@ -255,7 +255,7 @@ class Channel(Generic[T]):
                 pass
 
     def _exit(self) -> None:
-        """Uses on KeyboardInterrupts. Closes the listener and exits the program"""
+        """Used on KeyboardInterrupts. Closes the listener and exits the program"""
         self._close()
         sys.exit(0)
 
