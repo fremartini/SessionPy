@@ -40,7 +40,6 @@ class TypeChecker(NodeVisitor):
         failing_chans = []
         for (k,v) in latest.get_vars():
             if isinstance(v, Node):
-                print('v', v)
                 if not v.accepting and v.identifier not in self.loop_entrypoints:
                     err_msg = f'\nchannel <{k}> not exhausted - next up is:'
                     for edge in v.outgoing.keys():
@@ -51,7 +50,6 @@ class TypeChecker(NodeVisitor):
             raise SessionException(msgs)
 
     def visit_function(self, node: FunctionDef) -> Typ:
-        print(f'\n # Visiting function "{node.name}"')
         self.in_functions = self.in_functions.add(node)
         expected_return_type: type = self.get_return_type(node)
         params = self.visit(node.args)
@@ -59,35 +57,28 @@ class TypeChecker(NodeVisitor):
             fail_if(params[0][0] != 'self', "a class function must have self as first parameter")
             params = params[1:]
         params = [(name,(typ if not isinstance(typ, SessionStub) else STParser(src=typ.stub).build())) for (name,typ) in params]
-        print('params', params)
         function_type: ImmutableList[Tuple[str, type]] = \
             ImmutableList.of_list(params).map(lambda tp: tp[1]).add(expected_return_type)
 
-        print('function_type', function_type)
         self.get_latest_scope().bind_func(node.name, function_type.items())
         self.dup()
         for (v, t) in params:
             if v not in self.subst_var:
-                print("\nbinding in function def:")
-                print(f'binding {v} to {t}')
                 self.bind_var(v, t)
 
         for stm in node.body:
-            print('visiting', ast.unparse(stm))
             self.visit(stm)
         env = self.pop() 
         chans = env.get_kind(Node)
         for var, nd in chans:
             self.bind_var(var, nd)
         self.in_functions = self.in_functions.tail()
-        print('DONE VERIFYING', node.name)
         return function_type.items()
 
     def visit_FunctionDef(self, node: FunctionDef) -> Typ:
         if self.inside_class:
             return
         if node.name not in self.functions_queue:
-            print(f'adding {node.name} to queue')
             self.functions_queue[node.name] = node
             return
         else:
@@ -178,7 +169,6 @@ class TypeChecker(NodeVisitor):
 
     def visit_Name(self, node: Name) -> Tuple[str, Typ] | Typ:
         debug_print('visit_Name', dump(node))
-        print('\n# visit_Name', dump(node))
         name = node.id
         if name == 'DEBUG':
             return self
@@ -311,13 +301,7 @@ class TypeChecker(NodeVisitor):
 
     def visit_Call(self, node: Call) -> Typ:
         debug_print('visit_Call', dump(node))
-
         call_func = self.visit(node.func)
-        print('\n# visit_Call:', ast.unparse(node))
-        print('Dump:', dump(node))
-        print('You called', call_func, type(call_func))
-
-
 
         if isinstance(call_func, str):
             match call_func:
@@ -338,14 +322,12 @@ class TypeChecker(NodeVisitor):
             return self.visit(call_func.body)
 
         if isinstance(call_func, ChannelOperation):
-            print('ChanOp:', call_func)
             args = self.get_function_args(node.args)
             op = call_func[1]
             ch_name = node.func.value.id
             if ch_name in self.subst_var:
                 ch_name = self.subst_var[ch_name]
             nd = self.get_latest_scope().try_find(ch_name)
-            print('ND IS', nd)
             if nd == Any:
                 return Any
             if not nd or nd and not isinstance(nd, Node):
@@ -365,17 +347,12 @@ class TypeChecker(NodeVisitor):
                         items[0] = parameterise(Tuple, items[0])
                         args = ImmutableList.of_list(items)
                     argument = args.head()
-                    print('nd', nd, type(nd))
-                    print('OP', op)
-                    print('arg', argument)
-                    print('outgoing', nd.outgoing)
                     valid_action, valid_typ = nd.valid_action_type(op, argument)
                     if not valid_action:
                         raise SessionException(f'expected a {nd.outgoing_action()}, but send was called')
                     elif not valid_typ:
                         raise SessionException(f'expected to send a {type_to_str(nd.outgoing_type())}, got {type_to_str(args.head())}')
                     next_nd = nd.next_nd()
-                    print('current nd is', next_nd, next_nd.accepting)
                     self.bind_var(ch_name, next_nd)
                 case 'offer':
                     return nd
@@ -409,15 +386,7 @@ class TypeChecker(NodeVisitor):
             signature = ImmutableList.of_list(call_func)
             return_type = signature.last()
             call_func = signature.discard_last()
-
-
             func_name = node.func.attr if isinstance(node.func, Attribute) else node.func.id
-            print('funcname', func_name) # f, str
-            print('provided args', provided_args), # [Node(state=2), <class 'int'>]
-            print('callfunc', call_func) # [Node(state=0), <class 'int'>]
-            print('node.args', node.args) # [<ast.Name object at 0x100f6f400>, <ast.Constant object at 0x100f6f3d0>]
-
-
             self.compare_function_arguments_and_parameters(func_name, provided_args, call_func)
             return return_type
         return call_func
@@ -463,7 +432,6 @@ class TypeChecker(NodeVisitor):
         name = node.value.id.lower()
         if name in STR_ST_MAPPING:
             str_repr = self.process_and_substitute(node)
-            print('str_repr', str_repr)
             if name == 'channel':
                 return STParser(str_repr).build()
             return SessionStub(str_repr)
@@ -471,11 +439,7 @@ class TypeChecker(NodeVisitor):
             container = str_to_typ(name)
             typs = self.visit(node.slice)
 
-            print('container', container)
-            print('typs', typs)
-            print('name', name)
             if isinstance(typs, type | list):
-
                 return parameterise(to_typing(container), typs)
             else:
                 return to_typing(container)[typs]
@@ -556,7 +520,6 @@ class TypeChecker(NodeVisitor):
             if isinstance(expected_type, str):  # alias
                 _, expected_type = self.get_latest_scope().lookup(expected_type)
 
-            print('comparing', expected_type, 'with', actual_type)
             types_differ: bool = expected_type != actual_type
             can_upcast: bool = actual_type == expected_type or can_upcast_to(actual_type, expected_type)
             fail_if(types_differ and not can_upcast,
@@ -583,7 +546,6 @@ class TypeChecker(NodeVisitor):
     def process_and_substitute(self, node):
         alias_opts = self.get_latest_scope().get_kind(str)
         channel_str = ast.unparse(node) # 'Channel[Send[..., <Alias>]]'
-        print('alias_opts', alias_opts)
         for key, val in alias_opts:
             channel_str = channel_str.replace(key, val)
         return channel_str

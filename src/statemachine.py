@@ -222,7 +222,6 @@ class STParser(NodeVisitor):
             return STEnd()
         if isinstance(typ, ForwardRef):
             return typ.__forward_arg__
-        print(typ, type(typ))
         if isinstance(typ, EllipsisType):
             return typ
         base = self.get_transition(typ.__origin__)
@@ -270,7 +269,6 @@ class STParser(NodeVisitor):
             case EllipsisType():
                 return EllipsisType()
             case x:
-                print('x is', x)
                 res = str_to_typ(x) or x
                 return res
 
