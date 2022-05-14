@@ -72,13 +72,8 @@ class Channel(Generic[T]):
         e: Any
             the message to be sent
         """
-        nd = self.session_type
-        action, actor = nd.outgoing_action(), nd.outgoing_actor()
-        if action == Action.SEND and nd.outgoing_type() == type(e):
-            self.session_type = nd.next_nd()
-        else:
-            expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
-            raise RuntimeError(f'Expected to {expected_action}, tried to send {type_to_str(type(e))}')
+        actor = self.session_type.outgoing_actor()
+        self._try_advance(Action.SEND, e)
         self._send(e, self.rolesToPorts[actor])
         self._close_if_complete()
 
@@ -92,16 +87,11 @@ class Channel(Generic[T]):
         Any
             the message that was received
         """
-        nd = self.session_type
-        action, actor = nd.outgoing_action(), nd.outgoing_actor()
-        if action == Action.RECV:
-            self.session_type = nd.next_nd()
-        else:
-            expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
-            raise RuntimeError(f'Expected to {expected_action}, tried to receive something')
-        res = self._recv(actor)
+        actor = self.session_type.outgoing_actor()
+        self._try_advance(Action.RECV, None)
+        message = self._recv(actor)
         self._close_if_complete()
-        return res
+        return message
 
     def offer(self) -> str:
         """Offer several choices to the actor specified in the session type
@@ -111,41 +101,23 @@ class Channel(Generic[T]):
         str
             the label of the branch that was picked
         """
-        nd = self.session_type
-        action, actor = nd.outgoing_action(), nd.outgoing_actor()
-        pick: str = self._recv(actor)
-        if action == Action.BRANCH:
-            for edge in nd.outgoing:
-                assert isinstance(edge, BranchEdge)
-                if edge.key == pick:
-                    self.session_type = nd.outgoing[edge]
-                    break
-        else:
-            expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
-            raise RuntimeError(f'Expected to {expected_action}, offer was called')
+        actor = self.session_type.outgoing_actor()
+        label: str = self._recv(actor)
+        self._try_advance(Action.BRANCH, label)
         self._close_if_complete()
-        return pick
+        return label
 
-    def choose(self, pick: str) -> None:
+    def choose(self, label: str) -> None:
         """Choose among several offers received
 
         Parameters
         ----------
-        pick: str
+        label: str
             the label of the branch that is to be chosen
         """
-        nd = self.session_type
-        action, actor = nd.outgoing_action(), nd.outgoing_actor()
-        if action == Action.BRANCH:
-            for edge in nd.outgoing:
-                assert isinstance(edge, BranchEdge)
-                if edge.key == pick:
-                    self.session_type = nd.outgoing[edge]
-                    break
-        else:
-            expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
-            raise RuntimeError(f'Expected to {expected_action}, choose was called')
-        self._send(pick, self.rolesToPorts[actor])
+        actor = self.session_type.outgoing_actor()
+        self._try_advance(Action.BRANCH, label)
+        self._send(label, self.rolesToPorts[actor])
         self._close_if_complete()
 
     def _send(self, e: Any, to: tuple[str, int]) -> None:
@@ -212,6 +184,38 @@ class Channel(Generic[T]):
                 pass
             except Exception as ex:
                 _trace(ex)
+
+    def _try_advance(self, action: Action, message: str | None) -> None:
+        """Try to advance the current session type, throws an exception if the operation or type was unexpected
+
+        Parameters
+        ----------
+        action: Action
+            the operation that should be performed
+        message: str | None
+            message or label
+        """
+        next_action = self.session_type.outgoing_action()
+        expected_action = 'branch' if isinstance(self.session_type.get_edge(), Branch) else self.session_type.get_edge()
+
+        match action:
+            case action.SEND:
+                if not action == next_action or not self.session_type.outgoing_type() == type(message):
+                    raise RuntimeError(f'Expected to {expected_action}, end {type_to_str(type(message))} was called')
+                self.session_type = self.session_type.next_nd()
+            case action.RECV:
+                if not action == next_action:
+                    raise RuntimeError(f'Expected to {expected_action}, receive was called')
+                self.session_type = self.session_type.next_nd()
+            case action.BRANCH:
+                if not action == next_action:
+                    raise RuntimeError(f'Expected to {expected_action}, choose/offer was called')
+
+                for edge in self.session_type.outgoing:
+                    assert isinstance(edge, BranchEdge)
+                    if edge.key == message:
+                        self.session_type = self.session_type.outgoing[edge]
+                        break
 
     def _close(self):
         """Close the listener on the local port.
