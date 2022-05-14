@@ -20,7 +20,7 @@ class Channel(Generic[T]):
         self.dynamic_check = dynamic_check
         if static_check:
             typecheck_file()
-            debug_print('> Static check succeeded ✅')
+            print('> Static check succeeded ✅')
         self.local = roles['self']
         self.roles = roles
         self.server_socket = _spawn_socket()

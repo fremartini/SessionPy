@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from ast import *
 import copy
-from types import GenericAlias
+from types import EllipsisType, GenericAlias
 from typing import ForwardRef, Any, Tuple
 import typing
 import sessiontype
@@ -109,14 +109,27 @@ class Node:
     def __init__(self, identifier: int, accepting_state: bool = False) -> None:
         self.identifier = identifier
         self.accepting = accepting_state
+        self.any_state = False
         self.outgoing = {}
 
     def __str__(self) -> str:
         state = f'(s{self.identifier})' if self.accepting else f's{self.identifier}'
+        state += '...' if self.any_state else ''
         return state
 
     def __repr__(self) -> str:
         return f'Node(state={self.identifier})'
+
+    def __eq__(self, nd: Node) -> bool:
+        if not isinstance(nd, Node):
+            return False
+        if self.any_state or nd.any_state:
+            return True
+        if len(self.outgoing) == 0 or len(nd.outgoing) == 0:
+            return self.accepting == nd.accepting
+        e1 = self.get_edge()
+        e2 = nd.get_edge()
+        return e1 == e2 and self.next_nd() == nd.next_nd()
 
     def next_nd(self) -> Node:
         assert len(self.outgoing) == 1, "Function should not be called if it's not a single outgoing edge"
@@ -147,8 +160,9 @@ class Node:
             return edge.action
 
     def outgoing_type(self) -> type:
-        assert len(self.outgoing) == 1, "Function should not be called if it's not a single outgoing edge"
         key = self.get_edge()
+        if isinstance(key, BranchEdge):
+            return None
         typ = key.typ
         assert isinstance(typ, Typ), typ
         return typ
@@ -208,6 +222,9 @@ class STParser(NodeVisitor):
             return STEnd()
         if isinstance(typ, ForwardRef):
             return typ.__forward_arg__
+        print(typ, type(typ))
+        if isinstance(typ, EllipsisType):
+            return typ
         base = self.get_transition(typ.__origin__)
         assert isinstance(base, Transition), base
         if base.action in [Action.SEND, Action.RECV]:
@@ -250,7 +267,10 @@ class STParser(NodeVisitor):
                 return Transition(Action.LABEL)
             case 'Channel':
                 return None
+            case EllipsisType():
+                return EllipsisType()
             case x:
+                print('x is', x)
                 res = str_to_typ(x) or x
                 return res
 
@@ -293,7 +313,7 @@ class STParser(NodeVisitor):
         return value, slice
 
     def visit_Constant(self, node: Constant) -> Any:
-        assert isinstance(node.value, str)
+        assert isinstance(node.value, str | EllipsisType)
         return self.visit(Name(node.value))
 
     def build(self) -> Node:
@@ -319,6 +339,9 @@ class STParser(NodeVisitor):
             if isinstance(tup, STEnd):
                 node.accepting = True
                 return node, None
+            elif isinstance(tup, EllipsisType):
+                node.any_state = True
+                return tup
             elif isinstance(tup, str):
                 lab = tup
                 if lab in labels:
@@ -402,7 +425,15 @@ def print_node(n: Node, title='') -> None:
 
 
 if __name__ == "__main__":
-    parsed = STParser("Send[List[int], 'Bobby', Offer['Bobby', {'option1': Send[Tuple[str, int], 'Charlie', End], 'option2': Recv[str, 'Alice', Send[Dict[float, str], 'Bobby', End]], 'option3': End}]]")
-    nd = parsed.build()
-    print_node(nd)
+
+    # RecvIntLoop = Recv[int, 'Alice', 'loop']
+    # SendIntEnd = Send[int, 'Alice', End]
+    # Neg = Label['loop', Choose['Alice', {'receiver': RecvIntLoop, 'sender': SendIntEnd}]]
+    # Add = Label['loop', Choose['Alice', {'receiver': RecvIntLoop, 'sender': SendIntEnd}]]
+    # Final = Offer ['Alice', {"neg": Neg, "add": Add}]
+    st1 = STParser(src="Send[int, 'Alice', Recv[str, 'Bob', ...]]")
+    st2 = STParser(src="Send[int, 'Alice', Recv[str, 'Bob', ...]]")
+    nd1 = st1.build()
+    nd2 = st2.build()
+    print(nd1 == nd2)
 
