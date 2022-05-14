@@ -237,30 +237,9 @@ class Projector:
 
             # project the statements of the local protocol into a single session type
             session_type = self._project_session_type(protocol.t)
-<<<<<<< HEAD
             f.write(f'ch = Channel({session_type}, routing_table)\n')
-=======
-            role_mapping = self._project_roles(role, protocol.roles.visit())
-            f.write(f'roles = {role_mapping}\n\n')
-            f.write(f'ch = Channel({session_type}, roles)\n')
->>>>>>> dff0334 (update lexer to handle underscore in names)
 
         return file
-
-    def _project_roles(self, me : str, roles: List[str]) -> str:
-        lines = '{'
-        address = ('localhost', 0)
-
-        for role in roles:
-            if role == me:
-                to_append = f"'self': {address},"
-            else:
-                to_append = f"'{role}': {address},"
-            lines = lines + to_append
-
-        lines = remove_last_char(lines)
-        lines = lines + '}'
-        return lines
 
     def _project_t(self, t: T) -> str:
         """Project a T AST node
@@ -289,7 +268,6 @@ class Projector:
             case end if isinstance(end, End):
                 return 'End'
 
-<<<<<<< HEAD
     def _project_local_send(self, ls: LocalSend) -> str:
         """Project a LocalSend AST node
 
@@ -350,15 +328,6 @@ class Projector:
 
         st = st + _closing_brackets(lb.t)
         return st
-=======
-    def _project_local_send(self, s: LocalSend) -> str:
-        typ = self._lookup_or_self(s.message.payload.visit())
-        return f'Send[{typ}, \'{s.identifier.visit()}\', {"End" if self.insert_end else ""}'
-
-    def _project_local_recv(self, r: LocalRecv) -> str:
-        typ = self._lookup_or_self(r.message.payload.visit())
-        return f'Recv[{typ}, \'{r.identifier.visit()}\', {"End" if self.insert_end else ""}'
->>>>>>> dff0334 (update lexer to handle underscore in names)
 
     def _project_local_choice(self, c: LocalChoice) -> str:
         b1 = self._project_local_branch(c.b1)
@@ -518,27 +487,6 @@ def _project_roles(me: str, roles: List[str]) -> str:
             to_append = f"'{role}': {address}, "
         lines = lines + to_append
 
-<<<<<<< HEAD
     lines = lines[:-1]  # remove trailing comma
     lines = lines + '}'
     return lines
-=======
-    def _parens(self, ts: List[T]) -> str:
-        parens = ''
-        for i in ts:
-            i = i.op
-            if isinstance(i, LocalChoice) or isinstance(i, GlobalChoice) or isinstance(i, End) or isinstance(i, Call):
-                continue
-            parens = parens + ']'
-        return parens
-
-    def _lookup_or_self(self, t: str) -> str:
-        try:
-            return self.type_mapping[t]
-        except:
-            return t
-
-
-def remove_last_char(s: str) -> str:
-    return s[:-1]
->>>>>>> dff0334 (update lexer to handle underscore in names)
