@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 from ast import *
-import copy
-from types import GenericAlias
+from types import EllipsisType, GenericAlias
 from typing import ForwardRef, Any, Tuple
 import typing
 import sessiontype
@@ -19,6 +18,7 @@ class Action(str, Enum):
     LABEL = 'label'
     BRANCH = 'branch'
 
+
 class BranchEdge:
     def __init__(self, key: str, actor: str) -> None:
         self.key = key
@@ -26,7 +26,7 @@ class BranchEdge:
 
     def __eq__(self, __o: object) -> bool:
         return self.key == __o.key
-    
+
     def __hash__(self) -> int:
         return hash(self.key + self.actor)
 
@@ -36,10 +36,11 @@ class BranchEdge:
     def __repr__(self) -> str:
         return self.__str__()
 
+
 class Transition:
     def __init__(self, action: Action) -> None:
-        self.action : Action = action
-        self.actor : str | None = None
+        self.action: Action = action
+        self.actor: str | None = None
         if action in [Action.SEND, Action.RECV]:
             self.typ = Any
         elif action == Action.BRANCH:
@@ -109,14 +110,27 @@ class Node:
     def __init__(self, identifier: int, accepting_state: bool = False) -> None:
         self.identifier = identifier
         self.accepting = accepting_state
+        self.any_state = False
         self.outgoing = {}
 
     def __str__(self) -> str:
         state = f'(s{self.identifier})' if self.accepting else f's{self.identifier}'
+        state += '...' if self.any_state else ''
         return state
 
     def __repr__(self) -> str:
         return f'Node(state={self.identifier})'
+
+    def __eq__(self, nd: Node) -> bool:
+        if not isinstance(nd, Node):
+            return False
+        if self.any_state or nd.any_state:
+            return True
+        if len(self.outgoing) == 0 or len(nd.outgoing) == 0:
+            return self.accepting == nd.accepting
+        e1 = self.get_edge()
+        e2 = nd.get_edge()
+        return e1 == e2 and self.next_nd() == nd.next_nd()
 
     def next_nd(self) -> Node:
         assert len(self.outgoing) == 1, "Function should not be called if it's not a single outgoing edge"
@@ -146,14 +160,15 @@ class Node:
             assert isinstance(edge, Transition)
             return edge.action
 
-    def outgoing_type(self) -> type:
-        assert len(self.outgoing) == 1, "Function should not be called if it's not a single outgoing edge"
+    def outgoing_type(self) -> type | None:
         key = self.get_edge()
+        if isinstance(key, BranchEdge):
+            return None
         typ = key.typ
         assert isinstance(typ, Typ), typ
         return typ
 
-    def valid_action_type(self, action: str, typ: type = Any) -> tuple[bool, bool]:
+    def valid_action_type(self, action: str, typ:  None | type = Any) -> tuple[bool, bool]:
         str_transition_map = {
             "recv": Transition(Action.RECV),
             "send": Transition(Action.SEND),
@@ -208,6 +223,8 @@ class STParser(NodeVisitor):
             return STEnd()
         if isinstance(typ, ForwardRef):
             return typ.__forward_arg__
+        if isinstance(typ, EllipsisType):
+            return typ
         base = self.get_transition(typ.__origin__)
         assert isinstance(base, Transition), base
         if base.action in [Action.SEND, Action.RECV]:
@@ -250,6 +267,8 @@ class STParser(NodeVisitor):
                 return Transition(Action.LABEL)
             case 'Channel':
                 return None
+            case EllipsisType():
+                return EllipsisType()
             case x:
                 res = str_to_typ(x) or x
                 return res
@@ -261,7 +280,6 @@ class STParser(NodeVisitor):
     def visit_Dict(self, node: Dict) -> Any:
         keys_vals = zip([self.visit(k) for k in node.keys], [self.visit(v) for v in node.values])
         return keys_vals
-        
 
     def visit_Subscript(self, node: Subscript) -> tuple[Any, Any] | None:
         value = self.visit(node.value)
@@ -293,7 +311,7 @@ class STParser(NodeVisitor):
         return value, slice
 
     def visit_Constant(self, node: Constant) -> Any:
-        assert isinstance(node.value, str)
+        assert isinstance(node.value, str | EllipsisType)
         return self.visit(Name(node.value))
 
     def build(self) -> Node:
@@ -319,6 +337,9 @@ class STParser(NodeVisitor):
             if isinstance(tup, STEnd):
                 node.accepting = True
                 return node, None
+            elif isinstance(tup, EllipsisType):
+                node.any_state = True
+                return tup
             elif isinstance(tup, str):
                 lab = tup
                 if lab in labels:
@@ -368,7 +389,6 @@ class STParser(NodeVisitor):
 
 
 def print_node(n: Node, title='') -> None:
-    if title: print(title)
     if not n.outgoing:
         return
     print(n)
@@ -399,10 +419,3 @@ def print_node(n: Node, title='') -> None:
         n1 = n.outgoing[key]
         if n1.identifier != n.identifier:
             print_node(n1)
-
-
-if __name__ == "__main__":
-    parsed = STParser("Send[List[int], 'Bobby', Offer['Bobby', {'option1': Send[Tuple[str, int], 'Charlie', End], 'option2': Recv[str, 'Alice', Send[Dict[float, str], 'Bobby', End]], 'option3': End}]]")
-    nd = parsed.build()
-    print_node(nd)
-

@@ -51,5 +51,6 @@ STR_ST_MAPPING = {
     'end': End,
     'choose': Choose,
     'channel': None,
-    'Branch': None
+    'Branch': None,
+    'label': Label,
 }

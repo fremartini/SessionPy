@@ -1,11 +1,10 @@
-from pprint import pprint
 from sys import builtin_module_names
 from typing import *
 import typing
 from types import GenericAlias
 import os
 from pydoc import locate
-from enum import Enum
+from typing import Any, List, Tuple
 
 from debug import debug_print
 
@@ -13,6 +12,10 @@ FunctionTyp = list  # of types
 ContainerType = Union[typing._GenericAlias, GenericAlias, tuple]
 ClassTypes = str
 Typ = Union[type, FunctionTyp, ContainerType, ClassTypes]
+
+
+class IllegalArgumentException(TypeError):
+    ...
 
 
 def is_type(opt_typ):
@@ -39,7 +42,7 @@ def can_downcast_to(t1: type, t2: type):
     return False
 
 
-def fail_if(e: bool, msg: str, exc: Exception=Exception) -> None:
+def fail_if(e: bool, msg: str, exc: Exception = Exception) -> None:
     if e:
         raise exc(msg)
 
@@ -84,7 +87,7 @@ def union(t1: Typ, t2: Typ) -> Typ:
 
         if t1._name in ['Tuple', 'Dict']:
             res = parameterise(Tuple if t1._name == 'Tuple' else Dict,
-                            [union(t1, t2) for t1, t2 in zip(t1.__args__, t2.__args__)])
+                               [union(t1, t2) for t1, t2 in zip(t1.__args__, t2.__args__)])
             return res
         elif t1._name == 'List':
             t1, t2 = t1.__args__[0], t2.__args__[0]
@@ -123,7 +126,7 @@ def to_typing(typ: type):
         raise Exception(f'to_typing: unsupported built-in type: {typ}')
 
 
-def parameterise(container: Typ, typ: List[Typ]):
+def parameterise(container: Typ, typ: List[Typ] | type) -> str | list[Any] | tuple[Any, ...] | Any:
     debug_print('parameterise', container, typ)
     if isinstance(typ, type):
         return container[typ]
@@ -167,22 +170,6 @@ def channels_str(channels):
     return res
 
 
-def str_to_typ(s):
-    match s:
-        case 'int':
-            return int
-        case 'str':
-            return str
-        case 'bool':
-            return bool
-        case _:
-            raise Exception(f"unknown type {s}")
-
-
-def assert_eq(expected, actual):
-    if not expected == actual:
-        raise Exception("expected " + str(expected) + ", found " + str(actual))
-
 def str_to_typ(s: str) -> type:
     py_files_in_dir = [fname.split('.')[0].lower() for fname in os.listdir() if os.path.splitext(fname)[1] == '.py']
     if s in ['main', 'Channel'] or s in builtin_module_names or s.lower() in py_files_in_dir:
@@ -194,8 +181,14 @@ def str_to_typ(s: str) -> type:
     if opt == 'builtins':
         return str
     return opt
-    
-def type_to_str(typ: Typ) -> str:
+
+
+def assert_eq(expected, actual):
+    if not expected == actual:
+        raise Exception("expected " + str(expected) + ", found " + str(actual))
+
+
+def type_to_str(typ: Typ) -> str | tuple:
     if isinstance(typ, type):
         return typ.__name__
     elif isinstance(typ, typing._GenericAlias):

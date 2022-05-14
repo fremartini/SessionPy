@@ -18,7 +18,7 @@ def empty() -> dict:
 
 
 class Environment:
-    def __init__(self, env: dict=None):
+    def __init__(self, env: dict = None):
         if env is None:
             env = empty()
         self.environment = env
@@ -83,8 +83,8 @@ class Environment:
         raise EnvironmentError(f"'{key}' was not found in {self.environment}")
 
     def get_vars(self):
-        vars: dict = self.environment[Category.VARIABLE]
-        return vars.items()
+        variables: dict = self.environment[Category.VARIABLE]
+        return variables.items()
 
     def try_find(self, key):
         try:
@@ -92,12 +92,12 @@ class Environment:
         except EnvironmentError:
             return None
 
-    def get_kind(self, kind: type) -> list[tuple[str, type]] :
+    def get_kind(self, kind: type) -> list[tuple[str, type]]:
         items = []
         for (key, val) in self.get_vars():
             if isinstance(val, kind):
                 items.append((key, val))
-        return items 
+        return items
 
     def __str__(self) -> str:
         res = "{"
