@@ -18,6 +18,7 @@ class Action(str, Enum):
     LABEL = 'label'
     BRANCH = 'branch'
 
+
 class BranchEdge:
     def __init__(self, key: str, actor: str) -> None:
         self.key = key
@@ -25,7 +26,7 @@ class BranchEdge:
 
     def __eq__(self, __o: object) -> bool:
         return self.key == __o.key
-    
+
     def __hash__(self) -> int:
         return hash(self.key + self.actor)
 
@@ -35,10 +36,11 @@ class BranchEdge:
     def __repr__(self) -> str:
         return self.__str__()
 
+
 class Transition:
     def __init__(self, action: Action) -> None:
-        self.action : Action = action
-        self.actor : str | None = None
+        self.action: Action = action
+        self.actor: str | None = None
         if action in [Action.SEND, Action.RECV]:
             self.typ = Any
         elif action == Action.BRANCH:
@@ -158,7 +160,7 @@ class Node:
             assert isinstance(edge, Transition)
             return edge.action
 
-    def outgoing_type(self) -> type:
+    def outgoing_type(self) -> type | None:
         key = self.get_edge()
         if isinstance(key, BranchEdge):
             return None
@@ -166,7 +168,7 @@ class Node:
         assert isinstance(typ, Typ), typ
         return typ
 
-    def valid_action_type(self, action: str, typ: type = Any) -> tuple[bool, bool]:
+    def valid_action_type(self, action: str, typ:  None | type = Any) -> tuple[bool, bool]:
         str_transition_map = {
             "recv": Transition(Action.RECV),
             "send": Transition(Action.SEND),
@@ -278,7 +280,6 @@ class STParser(NodeVisitor):
     def visit_Dict(self, node: Dict) -> Any:
         keys_vals = zip([self.visit(k) for k in node.keys], [self.visit(v) for v in node.values])
         return keys_vals
-        
 
     def visit_Subscript(self, node: Subscript) -> tuple[Any, Any] | None:
         value = self.visit(node.value)
@@ -388,7 +389,6 @@ class STParser(NodeVisitor):
 
 
 def print_node(n: Node, title='') -> None:
-    if title: print(title)
     if not n.outgoing:
         return
     print(n)
@@ -419,18 +419,3 @@ def print_node(n: Node, title='') -> None:
         n1 = n.outgoing[key]
         if n1.identifier != n.identifier:
             print_node(n1)
-
-
-if __name__ == "__main__":
-
-    # RecvIntLoop = Recv[int, 'Alice', 'loop']
-    # SendIntEnd = Send[int, 'Alice', End]
-    # Neg = Label['loop', Choose['Alice', {'receiver': RecvIntLoop, 'sender': SendIntEnd}]]
-    # Add = Label['loop', Choose['Alice', {'receiver': RecvIntLoop, 'sender': SendIntEnd}]]
-    # Final = Offer ['Alice', {"neg": Neg, "add": Add}]
-    st1 = STParser(src="Send[int, 'Alice', Recv[str, 'Bob', ...]]")
-    st2 = STParser(src="Send[int, 'Alice', Recv[str, 'Bob', ...]]")
-    nd1 = st1.build()
-    nd2 = st2.build()
-    print(nd1 == nd2)
-
