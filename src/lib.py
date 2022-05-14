@@ -14,6 +14,8 @@ ContainerType = Union[typing._GenericAlias, GenericAlias, tuple]
 ClassTypes = str
 Typ = Union[type, FunctionTyp, ContainerType, ClassTypes]
 
+class IllegalArgumentException(TypeError):
+    ...
 
 def is_type(opt_typ):
     return isinstance(opt_typ, Typ)
