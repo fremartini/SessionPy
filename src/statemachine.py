@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from ast import *
-import copy
 from types import EllipsisType, GenericAlias
 from typing import ForwardRef, Any, Tuple
 import typing

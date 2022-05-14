@@ -1,9 +1,6 @@
 import ast
 from collections import namedtuple
 import copy
-from distutils.util import subst_vars
-from pyclbr import Function
-from subprocess import call
 import sys
 from ast import *
 from functools import reduce
@@ -12,8 +9,8 @@ from debug import *
 from environment import Environment
 from immutable_list import ImmutableList
 from lib import *
-from statemachine import BranchEdge, STParser, Node, TGoto, print_node
-from sessiontype import STR_ST_MAPPING, SessionException, SessionType
+from statemachine import BranchEdge, STParser, Node, TGoto
+from sessiontype import STR_ST_MAPPING, SessionException
 
 visited_files: dict[str, object] = {}
 
