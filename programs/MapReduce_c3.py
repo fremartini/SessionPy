@@ -3,9 +3,10 @@ import time
 
 from context import *
 
-roles = {'Distributor': ('localhost', 5000), 'c1': ('localhost', 5001), 'c2': ('localhost', 5002), 'self': ('localhost', 5003),}
+roles = {'Distributor': ('localhost', 5000), 'c1': ('localhost', 5001), 'c2': ('localhost', 5002),
+         'self': ('localhost', 5003), }
 
-ch = Channel(Recv[List, 'Distributor', End], roles, static_check=False)
+ch = Channel(Recv[List, 'Distributor', End], roles)
 
 workload = ch.recv()
 

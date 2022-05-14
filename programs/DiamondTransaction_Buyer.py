@@ -1,9 +1,11 @@
 from context import *
 from DiamondTransaction_util import *
 
-roles = {'self': ('localhost', 5000), 'Seller': ('localhost', 5005),}
+roles = {'self': ('localhost', 5000), 'Seller': ('localhost', 5005), }
 
-ch = Channel(Send[str, 'Seller', Recv[dict, 'Seller', Offer['Seller', {"purchase": Send[DiamondColor, 'Seller', Recv[str, 'Seller', End]], "reject": Recv[str, 'Seller', End]}]]], roles, static_check=False)
+ch = Channel(Send[str, 'Seller', Recv[dict, 'Seller', Offer[
+    'Seller', {"purchase": Send[DiamondColor, 'Seller', Recv[str, 'Seller', End]],
+               "reject": Recv[str, 'Seller', End]}]]], roles)
 
 my_balance = 500_000  # USD
 

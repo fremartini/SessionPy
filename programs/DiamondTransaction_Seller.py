@@ -1,9 +1,11 @@
 from context import *
 from DiamondTransaction_util import *
 
-roles = {'Buyer': ('localhost', 5000), 'self': ('localhost', 5005),}
+roles = {'Buyer': ('localhost', 5000), 'self': ('localhost', 5005), }
 
-ch = Channel(Recv[str, 'Buyer', Send[dict, 'Buyer', Choose['Buyer', {"purchase": Recv[DiamondColor, 'Buyer', Send[str, 'Buyer', End]], "reject": Send[str, 'Buyer', End]}]]], roles, static_check=False)
+ch = Channel(Recv[str, 'Buyer', Send[dict, 'Buyer', Choose[
+    'Buyer', {"purchase": Recv[DiamondColor, 'Buyer', Send[str, 'Buyer', End]], "reject": Send[str, 'Buyer', End]}]]],
+             roles)
 
 req = ch.recv()
 print('Received request from seller:', req)
