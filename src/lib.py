@@ -14,6 +14,9 @@ ContainerType = Union[typing._GenericAlias, GenericAlias, tuple]
 ClassTypes = str
 Typ = Union[type, FunctionTyp, ContainerType, ClassTypes]
 
+class StaticTypeError(TypeError): # Show-off: not just a standard Pythonic runtime typeerror
+    ...
+
 class IllegalArgumentException(TypeError):
     ...
 
@@ -205,7 +208,5 @@ def type_to_str(typ: Typ) -> str:
         return f'{typ.__origin__.__name__}[{",".join(elems)}]'
     elif typ == Any:
         return 'Any'
-    elif isinstance(typ, tuple):
-        return typ
     else:
         return typ

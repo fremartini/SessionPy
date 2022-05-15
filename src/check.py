@@ -4,12 +4,13 @@ import copy
 import sys
 from ast import *
 from functools import reduce
+from types import NoneType
 
 from debug import *
 from environment import Environment
 from immutable_list import ImmutableList
 from lib import *
-from statemachine import BranchEdge, STParser, Node, TGoto
+from statemachine import BranchEdge, STParser, Node, TGoto, Transition
 from sessiontype import STR_ST_MAPPING, SessionException
 
 visited_files: dict[str, object] = {}
@@ -30,7 +31,6 @@ class TypeChecker(NodeVisitor):
         self.loop_entrypoints: Set[int] = set()  # TODO: consider putting into environment
         self.visit(tree)
         self.validate_postcondition()
-
 
     def validate_postcondition(self):
         latest = self.get_latest_scope()
@@ -211,6 +211,7 @@ class TypeChecker(NodeVisitor):
         if value in STR_ST_MAPPING or attr in STR_ST_MAPPING:
             return ChannelOperation(value, attr)
         else:
+            assert False, ('value is', value, 'from ast', ast.unparse(node))
             env = self.get_latest_scope().lookup_nested(value)
             return env.lookup_func(attr)
 
@@ -236,7 +237,10 @@ class TypeChecker(NodeVisitor):
         else:
             name_or_type = self.visit(node.annotation)
             rhs_type = self.visit(node.value)
-            if isinstance(name_or_type, typing._GenericAlias) and name_or_type.__origin__ == tuple:
+
+            if isinstance(rhs_type, str):
+                rhs_type = self.lookup_or_self(rhs_type)
+            elif isinstance(name_or_type, typing._GenericAlias) and name_or_type.__origin__ == tuple:
                 rhs_type = parameterise(Tuple, rhs_type)
             
             if is_type(name_or_type):
@@ -264,7 +268,6 @@ class TypeChecker(NodeVisitor):
         return Closure(node.args, node.body)
 
     def call_to_function_affecting_sessiontype(self, node: Call, func_name: str):
-        self.print_envs()
         visited_args = [self.visit(arg) for arg in node.args]
         function: FunctionDef = self.functions_queue[func_name]
 
@@ -329,6 +332,11 @@ class TypeChecker(NodeVisitor):
                 return Any
             if not nd or nd and not isinstance(nd, Node):
                 nd = call_func[0]
+            out_edge = nd.get_edge()
+            if isinstance(out_edge, Transition) and isinstance(out_edge.typ, str):
+                aliased_typ = self.lookup_or_self(out_edge.typ)
+                assert isinstance(aliased_typ, Typ)
+                out_edge.typ = aliased_typ
             match op:
                 case 'recv':
                     valid_action, _ = nd.valid_action_type(op, None)
@@ -338,17 +346,13 @@ class TypeChecker(NodeVisitor):
                     self.bind_var(ch_name, next_nd)
                     return nd.outgoing_type()
                 case 'send':
-                    if isinstance(args.head(), list): # TODO(Johan): Feels hacky; Tuple always returns lists now, but this only *sometimes* have to get parameterised. How to solve?
-                        assert False, 'Hitting this now'    
-                        items = args.items()
-                        items[0] = parameterise(Tuple, items[0])
-                        args = ImmutableList.of_list(items)
                     argument = args.head()
+
                     valid_action, valid_typ = nd.valid_action_type(op, argument)
                     if not valid_action:
                         raise SessionException(f'expected a {nd.outgoing_action()}, but send was called')
-                    elif not valid_typ:
-                        raise SessionException(f'expected to send a {type_to_str(nd.outgoing_type())}, got {type_to_str(args.head())}')
+                    elif not valid_typ and argument != NoneType:
+                        raise SessionException(f'expected to send a {type_to_str(nd.outgoing_type())}, got {type_to_str(argument)}')
                     next_nd = nd.next_nd()
                     self.bind_var(ch_name, next_nd)
                 case 'offer':
@@ -387,6 +391,9 @@ class TypeChecker(NodeVisitor):
             self.compare_function_arguments_and_parameters(func_name, provided_args, call_func)
             return return_type
         return call_func
+
+    def visit_JoinedStr(self, _: JoinedStr) -> Any:
+        return str
 
     def visit_ClassDef(self, node: ClassDef) -> None:
         debug_print('visit_ClassDef', dump(node))
@@ -433,13 +440,29 @@ class TypeChecker(NodeVisitor):
                 return STParser(str_repr).build()
             return SessionStub(str_repr)
         else:
-            container = str_to_typ(name)
-            typs = self.visit(node.slice)
-
-            if isinstance(typs, type | list):
-                return parameterise(to_typing(container), typs)
+            name = self.lookup_or_self(name)
+            if isinstance(name, str):
+                container = str_to_typ(name)
+                typs = self.visit(node.slice)
+                if isinstance(typs, type | list):
+                    return parameterise(to_typing(container), typs)
+                else:
+                    return to_typing(container)[typs]
             else:
-                return to_typing(container)[typs]
+                lookup_able = name
+                assert isinstance(lookup_able, ContainerType)
+                if lookup_able._name == 'Dict':
+                    key_typ = self.visit(node.slice)
+                    if key_typ == NoneType:
+                        return Any
+                    elif isinstance(key_typ, str):
+                        key_typ = self.lookup_or_self(key_typ)
+                    kv = lookup_able.__args__
+                    if kv[0] == key_typ:
+                        return kv[1]
+                    else:
+                        raise StaticTypeError(f'dictionary got key of type {type_to_str(key_typ)} where {type_to_str(kv[0])} was expected')
+
 
     def visit_Return(self, node: Return) -> Any:
         debug_print('visit_Return', dump(node))
@@ -473,7 +496,7 @@ class TypeChecker(NodeVisitor):
             latest = self.get_latest_scope()
             for (ch,nd) in chans:
                 ch1 = latest.lookup_var(ch)
-                if nd.id != ch1.id:
+                if nd.identifier != ch1.identifier:
                     raise SessionException('then-block without else should not affect any session types')
 
         for (ch,nd) in chans:

@@ -8,7 +8,7 @@ from lib import type_to_str
 from sessiontype import *
 import socket
 from stack import Stack
-from statemachine import Action, BranchEdge, from_generic_alias, Node
+from statemachine import Action, BranchEdge, from_generic_alias, Node, print_node
 from check import typecheck_file
 from debug import debug_print
 
@@ -51,7 +51,7 @@ class Channel(Generic[T]):
 
         if static_check:
             typecheck_file()
-            debug_print('> Static check succeeded ✅')
+            print('> Static check succeeded ✅')
 
         self.rolesToPorts = roles
         self.portsToRoles = {v: k for k, v in roles.items()}
