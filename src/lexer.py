@@ -10,6 +10,8 @@ class TokenType(Enum):
     RIGHT_PARENS = auto(),
     LEFT_BRACE = auto(),
     RIGHT_BRACE = auto(),
+    LEFT_BRACKET = auto(),
+    RIGHT_BRACKET = auto(),
     SEMICOLON = auto(),
     EOF = auto(),
     COMMA = auto(),
@@ -98,6 +100,10 @@ class Lexer:
                 self._add_token(TokenType.LEFT_BRACE)
             case '}':
                 self._add_token(TokenType.RIGHT_BRACE)
+            case '[':
+                self._add_token(TokenType.LEFT_BRACKET)
+            case ']':
+                self._add_token(TokenType.RIGHT_BRACKET)
             case ';':
                 self._add_token(TokenType.SEMICOLON)
             case ',':

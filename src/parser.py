@@ -23,11 +23,12 @@ local_branch        -> "{" branch_label T* "}"
 local_recursion     -> "rec" identifier "{" T* "}"
 
 branch_label        -> "@" identifier ";"
-message             -> identifier "(" identifier ")";
-typedef             -> "type" "<" identifier ">" "as" identifier ";"
+message             -> identifier "(" typ ")";
+typedef             -> "type" "<" typ ">" "as" identifier ";"
 roles               -> role ("," role)*
 role                -> "role" identifier
 call                -> "continue" identifier ";"
+typ                 -> identifier ("[" identifier "]")?
 identifier          -> [A-Z] ([A-Z] | [a-z] | 0 - 9)*
 end                 -> "End" ";"
 """
@@ -50,6 +51,18 @@ class Identifier:
 
     def __repr__(self):
         return self.visit()
+
+
+class Typ:
+    def __init__(self, identifier: Identifier, parameter: Identifier | None):
+        self.identifier = identifier
+        self.parameter = parameter
+
+    def visit(self) -> str:
+        if self.parameter is None:
+            return self.identifier.visit()
+        else:
+            return f'{self.identifier.visit()}[{self.parameter.visit()}]'
 
 
 class Call:
@@ -83,13 +96,13 @@ class Roles:
 
 
 class TypeDef:
-    def __init__(self, typ: Identifier, identifier: Identifier):
+    def __init__(self, typ: Typ, identifier: Identifier):
         self.typ = typ
         self.identifier = identifier
 
 
 class Message:
-    def __init__(self, label: Identifier, payload: Identifier):
+    def __init__(self, label: Identifier, payload: Typ):
         self.label = label
         self.payload = payload
 
@@ -162,7 +175,8 @@ class GlobalBranch:
 
 
 class GlobalChoice:
-    def __init__(self, sender: Identifier, recipient: Identifier, b1: GlobalBranch, b2: GlobalBranch, bn: List[GlobalBranch]):
+    def __init__(self, sender: Identifier, recipient: Identifier, b1: GlobalBranch, b2: GlobalBranch,
+                 bn: List[GlobalBranch]):
         self.sender = sender
         self.recipient = recipient
         self.b1 = b1
@@ -411,17 +425,16 @@ class Parser:
 
         self._match(TokenType.LEFT_PARENS)
 
-        payload = self._identifier()
+        payload = self._typ()
 
         self._match(TokenType.RIGHT_PARENS)
 
         return Message(label, payload)
 
     def _typedef(self) -> TypeDef:
-
         self._match(TokenType.TYPE, TokenType.LT)
 
-        typ = self._identifier()
+        typ = self._typ()
 
         self._match(TokenType.GT, TokenType.AS)
 
@@ -449,6 +462,16 @@ class Parser:
         self._match(TokenType.IDENTIFIER)
 
         return Identifier(self._previous().literal)
+
+    def _typ(self) -> Typ:
+        identifier = self._identifier()
+        parameter = None
+
+        if self._matches(TokenType.LEFT_BRACKET):
+            parameter = self._identifier()
+            self._match(TokenType.RIGHT_BRACKET)
+
+        return Typ(identifier, parameter)
 
     def _call(self) -> Call:
         self._match(TokenType.CONTINUE)

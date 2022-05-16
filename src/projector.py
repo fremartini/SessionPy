@@ -125,7 +125,7 @@ class Projector:
         else:
             action = f'from {gi.sender.identifier}'
 
-        return f'{gi.message.label.identifier}({gi.message.payload.identifier}) {action};'
+        return f'{gi.message.label.identifier}({gi.message.payload.visit()}) {action};'
 
     def _project_global_branch(self, gb: GlobalBranch) -> str:
         """Project a GlobalBranch AST node
@@ -421,7 +421,7 @@ def _project_typedef(t: TypeDef) -> str:
     str
         string representation of TypeDef AST node
     """
-    return f'type <{t.typ.identifier}> as {t.identifier.identifier};\n'
+    return f'type <{t.typ.visit()}> as {t.identifier.visit()};\n'
 
 
 def _project_call(c: Call) -> str:
