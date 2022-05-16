@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from ast import *
 from types import EllipsisType, GenericAlias
-from typing import ForwardRef, Any, Tuple
+from typing import ForwardRef, Any, Iterable, Tuple
 import typing
 import sessiontype
 
-from lib import Typ, parameterise, str_to_typ, type_to_str
+from lib import Typ, parameterize, str_to_typ, type_to_str
 from sessiontype import *
 
 A = TypeVar('A')
@@ -25,7 +25,8 @@ class BranchEdge:
         self.actor = actor
 
     def __eq__(self, __o: object) -> bool:
-        return self.key == __o.key
+        return isinstance(__o, type(self)) and \
+               self.key == __o.key
 
     def __hash__(self) -> int:
         return hash(self.key + self.actor)
@@ -50,6 +51,8 @@ class Transition:
             self.st = None
 
     def __eq__(self, __o: object) -> bool:
+        if not isinstance(__o, type(self)):
+            return False
         if self.action in [Action.SEND, Action.RECV]:
             return self.typ == __o.typ and self.actor == __o.actor
         elif self.action == Action.BRANCH:
@@ -128,9 +131,18 @@ class Node:
             return True
         if len(self.outgoing) == 0 or len(nd.outgoing) == 0:
             return self.accepting == nd.accepting
-        e1 = self.get_edge()
-        e2 = nd.get_edge()
-        return e1 == e2 and self.next_nd() == nd.next_nd()
+
+        if len(self.outgoing) == 1 and len(nd.outgoing) == 1:
+            e1 = self.get_edge()
+            e2 = nd.get_edge()
+            return e1 == e2 and self.next_nd() == nd.next_nd()
+        else:
+            res = False
+            for k1, k2 in zip(self.outgoing, nd.outgoing):
+                res = k1 == k2 and self.outgoing[k1] == nd.outgoing[k2]
+                if not res:
+                    return res
+            return res
 
     def next_nd(self) -> Node:
         assert len(self.outgoing) == 1, "Function should not be called if it's not a single outgoing edge"
@@ -157,7 +169,7 @@ class Node:
         if isinstance(edge, BranchEdge):
             return Action.BRANCH
         else:
-            assert isinstance(edge, Transition)
+            assert isinstance(edge, Transition), edge
             return edge.action
 
     def outgoing_type(self) -> type | None:
@@ -168,7 +180,7 @@ class Node:
         assert isinstance(typ, Typ), typ
         return typ
 
-    def valid_action_type(self, action: str, typ:  None | type = Any) -> tuple[bool, bool]:
+    def valid_action_type(self, action: str, typ: None | type = Any) -> tuple[bool, bool]:
         str_transition_map = {
             "recv": Transition(Action.RECV),
             "send": Transition(Action.SEND),
@@ -201,7 +213,8 @@ class STParser(NodeVisitor):
             self.visit(tree)
         else:
             self.session_tuple = self.from_generic_alias(typ)
-        assert self.session_tuple
+
+        assert self.session_tuple, (src, typ)
 
     def get_transition(self, key) -> Transition | STEnd:
         match key:
@@ -284,6 +297,8 @@ class STParser(NodeVisitor):
     def visit_Subscript(self, node: Subscript) -> tuple[Any, Any] | None:
         value = self.visit(node.value)
         slice = self.visit(node.slice)
+        if isinstance(slice, EllipsisType):
+            return value, slice
         if isinstance(value, Transition):
             if value.action in [Action.SEND, Action.RECV]:
                 value.typ = slice[0]
@@ -294,10 +309,11 @@ class STParser(NodeVisitor):
                     slice = slice[1:][0]
             elif value.action == Action.BRANCH:
                 actor, keyvals = slice
-                for key, val in keyvals:
-                    edge = BranchEdge(key, actor)
-                    value.branch_options[edge] = val
                 value.actor = slice[0]
+                if isinstance(keyvals, Iterable):
+                    for key, val in keyvals:
+                        edge = BranchEdge(key, actor)
+                        value.branch_options[edge] = val
                 slice = slice[1:]
             elif value.action == Action.LABEL:
                 value.name = slice[0]
@@ -368,7 +384,7 @@ class STParser(NodeVisitor):
                     nd = new_node()
                     typ = head.typ
                     if isinstance(typ, tuple):
-                        head.typ = parameterise(head.typ[0], [head.typ[1]])
+                        head.typ = parameterize(head.typ[0], [head.typ[1]])
                     go(tail, nd)
                     node.outgoing[head] = nd
                     return nd, head
