@@ -7,7 +7,7 @@ red = 0
 blue = 1
 yellow = 2
 
-roles = {'Buyer': ('localhost', 5000), 'self': ('localhost', 5005),}
+roles = {'Buyer': ('localhost', 5000), 'self': ('localhost', 5005), }
 
 ch = Channel(Recv[str, 'Buyer', Send[Catalogue, 'Buyer', Choose['Buyer', {"purchase": Recv[DiamondColor, 'Buyer', Send[str, 'Buyer', End]], "reject": Send[str, 'Buyer', End]}]]], roles)
 

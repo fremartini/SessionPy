@@ -1,6 +1,3 @@
-from check import typecheck_file
-from sessiontype import *
-from channel import Channel
 from typing import *
 
 from lexer import Lexer
