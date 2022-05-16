@@ -10,7 +10,7 @@ from enum import Enum
 from debug import debug_print
 
 FunctionTyp = list  # of types
-ContainerType = Union[typing._GenericAlias, GenericAlias, tuple]
+ContainerType = Union[typing._GenericAlias, GenericAlias, typing._SpecialGenericAlias, tuple]
 ClassTypes = str
 Typ = Union[type, FunctionTyp, ContainerType, ClassTypes]
 

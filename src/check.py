@@ -1,10 +1,12 @@
 import ast
 from collections import namedtuple
 import copy
+from imp import is_builtin
+from subprocess import call
 import sys
 from ast import *
 from functools import reduce
-from types import NoneType
+from types import BuiltinFunctionType, BuiltinMethodType, MethodType, ModuleType, NoneType
 
 from debug import *
 from environment import Environment
@@ -45,6 +47,12 @@ class TypeChecker(NodeVisitor):
         if failing_chans:
             msgs = '\n'.join(failing_chans)
             raise SessionException(msgs)
+
+    def is_builtin(self, typ):
+        return typ in sys.builtin_module_names or \
+            isinstance(typ, BuiltinFunctionType) or \
+            isinstance(typ, BuiltinMethodType) or \
+            isinstance(typ, ModuleType)
 
     def visit_function(self, node: FunctionDef) -> Typ:
         self.in_functions = self.in_functions.add(node)
@@ -98,11 +106,10 @@ class TypeChecker(NodeVisitor):
     def visit_Match(self, node: ast.Match) -> None:
         debug_print('visit_Match', dump(node))
         subj = self.visit(node.subject)
-
+        
         if isinstance(subj, Node):
             ch_name = node.subject.func.value.id
             nd = subj
-
             # More branches; no limits on 2
             #fail_if(not len(nd.outgoing) == 2, "Node should have 2 outgoing edges", SessionException)
             #fail_if(not len(node.cases) == 2, "Matching on session type operations should always have 2 cases", SessionException)
@@ -211,7 +218,8 @@ class TypeChecker(NodeVisitor):
         if value in STR_ST_MAPPING or attr in STR_ST_MAPPING:
             return ChannelOperation(value, attr)
         else:
-            assert False, ('value is', value, 'from ast', ast.unparse(node))
+            if self.is_builtin(value):
+                return BuiltinFunctionType
             env = self.get_latest_scope().lookup_nested(value)
             return env.lookup_func(attr)
 
@@ -349,9 +357,10 @@ class TypeChecker(NodeVisitor):
                     argument = args.head()
 
                     valid_action, valid_typ = nd.valid_action_type(op, argument)
+
                     if not valid_action:
                         raise SessionException(f'expected a {nd.outgoing_action()}, but send was called')
-                    elif not valid_typ and argument != NoneType:
+                    elif not valid_typ and argument != NoneType and argument != BuiltinMethodType:
                         raise SessionException(f'expected to send a {type_to_str(nd.outgoing_type())}, got {type_to_str(argument)}')
                     next_nd = nd.next_nd()
                     self.bind_var(ch_name, next_nd)
@@ -390,6 +399,8 @@ class TypeChecker(NodeVisitor):
             func_name = node.func.attr if isinstance(node.func, Attribute) else node.func.id
             self.compare_function_arguments_and_parameters(func_name, provided_args, call_func)
             return return_type
+        elif isinstance(call_func, BuiltinFunctionType):
+            args = [self.visit(arg) for arg in node.args]
         return call_func
 
     def visit_JoinedStr(self, _: JoinedStr) -> Any:

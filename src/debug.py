@@ -18,3 +18,5 @@ def is_a(obj):
 def dump_object(obj):
   for attr in dir(obj):
     print("obj.%s = %r" % (attr, getattr(obj, attr)))
+
+    

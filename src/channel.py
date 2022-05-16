@@ -48,7 +48,7 @@ class Channel(Generic[T]):
         """
 
         self.session_type: Node = from_generic_alias(session_type)
-
+        print_node(self.session_type)
         if static_check:
             typecheck_file()
             print('> Static check succeeded ✅')
@@ -74,7 +74,8 @@ class Channel(Generic[T]):
         """
         nd = self.session_type
         action, actor = nd.outgoing_action(), nd.outgoing_actor()
-        if action == Action.SEND and nd.outgoing_type() == type(e):
+        valid_action, valid_typ = nd.valid_action_type(action, nd.outgoing_type())
+        if valid_action and valid_typ:
             self.session_type = nd.next_nd()
         else:
             expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
