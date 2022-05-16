@@ -8,7 +8,7 @@ from lib import type_to_str
 from sessiontype import *
 import socket
 from stack import Stack
-from statemachine import Action, BranchEdge, from_generic_alias, Node, print_node
+from statemachine import Action, BranchEdge, from_generic_alias, Node
 from check import typecheck_file
 from debug import debug_print
 
@@ -22,10 +22,10 @@ class Channel(Generic[T]):
     ----------
     session_type: Node
         state machine of the given session type
-    rolesToPorts: Dict[str, tuple[str, int]
+    roles_to_ports: Dict[str, tuple[str, int]
         dictionary mapping roles to their address
-    portsToRoles: Dict[tuple[str, int],str]
-        reverse of rolesToPorts, maps addresses to their roles
+    ports_to_roles: Dict[tuple[str, int],str]
+        reverse of roles_to_ports, maps addresses to their roles
     stack: Stack
         a stack of (message, role) tuples
     server_socket: socket.socket
@@ -52,8 +52,8 @@ class Channel(Generic[T]):
             typecheck_file()
             debug_print('> Static check succeeded ✅')
 
-        self.rolesToPorts = roles
-        self.portsToRoles = {v: k for k, v in roles.items()}
+        self.roles_to_ports = roles
+        self.ports_to_roles = {v: k for k, v in roles.items()}
         self.stack: Stack[tuple[str, str]] = Stack()
 
         self.server_socket = _spawn_socket()
@@ -79,7 +79,7 @@ class Channel(Generic[T]):
         else:
             expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
             raise RuntimeError(f'Expected to {expected_action}, tried to send {type_to_str(type(e))}')
-        self._send(e, self.rolesToPorts[actor])
+        self._send(e, self.roles_to_ports[actor])
         self._close_if_complete()
 
 
@@ -145,7 +145,7 @@ class Channel(Generic[T]):
         else:
             expected_action = 'branch' if isinstance(nd.get_edge(), Branch) else nd.get_edge()
             raise RuntimeError(f'Expected to {expected_action}, choose was called')
-        self._send(pick, self.rolesToPorts[actor])
+        self._send(pick, self.roles_to_ports[actor])
         self._close_if_complete()
 
     def _send(self, e: Any, to: tuple[str, int]) -> None:
@@ -163,7 +163,7 @@ class Channel(Generic[T]):
             try:
                 self._wait_until_connected_to(client_socket, to)
 
-                payload = (e, self.rolesToPorts['self'])
+                payload = (e, self.roles_to_ports['self'])
                 client_socket.send(_encode(payload))
             except Exception as ex:
                 _trace(ex)
@@ -206,7 +206,7 @@ class Channel(Generic[T]):
                     payload = conn.recv(1024)
                     if payload:
                         msg, addr = _decode(payload)
-                        sender = self.portsToRoles[addr]
+                        sender = self.ports_to_roles[addr]
                         self.stack.push((msg, sender))
             except socket.timeout:
                 pass
@@ -218,7 +218,7 @@ class Channel(Generic[T]):
         Sets the 'running' flag to false and sends a message to itself to terminate the listener
         """
         self.running = False
-        self._send('', self.rolesToPorts['self'])
+        self._send('', self.roles_to_ports['self'])
 
     def _close_if_complete(self):
         """Close the listener if the session type is exhausted of operations"""
