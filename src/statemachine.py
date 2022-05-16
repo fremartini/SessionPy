@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 from ast import *
-from types import EllipsisType, GenericAlias, NoneType
+from types import EllipsisType, GenericAlias
 from typing import ForwardRef, Any, Iterable, Tuple
 import typing
-from lib import SessionStub
-from environment import Environment
 import sessiontype
 
-from lib import Typ, parameterise, str_to_typ, type_to_str
+from lib import Typ, parameterize, str_to_typ, type_to_str
 from sessiontype import *
 
 A = TypeVar('A')
@@ -28,8 +26,8 @@ class BranchEdge:
 
     def __eq__(self, __o: object) -> bool:
         return isinstance(__o, type(self)) and \
-                self.key == __o.key
-    
+               self.key == __o.key
+
     def __hash__(self) -> int:
         return hash(self.key + self.actor)
 
@@ -134,7 +132,6 @@ class Node:
         if len(self.outgoing) == 0 or len(nd.outgoing) == 0:
             return self.accepting == nd.accepting
 
-
         if len(self.outgoing) == 1 and len(nd.outgoing) == 1:
             e1 = self.get_edge()
             e2 = nd.get_edge()
@@ -146,7 +143,6 @@ class Node:
                 if not res:
                     return res
             return res
-
 
     def next_nd(self) -> Node:
         assert len(self.outgoing) == 1, "Function should not be called if it's not a single outgoing edge"
@@ -184,7 +180,7 @@ class Node:
         assert isinstance(typ, Typ), typ
         return typ
 
-    def valid_action_type(self, action: str, typ:  None | type = Any) -> tuple[bool, bool]:
+    def valid_action_type(self, action: str, typ: None | type = Any) -> tuple[bool, bool]:
         str_transition_map = {
             "recv": Transition(Action.RECV),
             "send": Transition(Action.SEND),
@@ -217,7 +213,7 @@ class STParser(NodeVisitor):
             self.visit(tree)
         else:
             self.session_tuple = self.from_generic_alias(typ)
-        
+
         assert self.session_tuple, (src, typ)
 
     def get_transition(self, key) -> Transition | STEnd:
@@ -388,7 +384,7 @@ class STParser(NodeVisitor):
                     nd = new_node()
                     typ = head.typ
                     if isinstance(typ, tuple):
-                        head.typ = parameterise(head.typ[0], [head.typ[1]])
+                        head.typ = parameterize(head.typ[0], [head.typ[1]])
                     go(tail, nd)
                     node.outgoing[head] = nd
                     return nd, head

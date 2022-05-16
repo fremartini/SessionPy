@@ -73,10 +73,8 @@ class Channel(Generic[T]):
         """
         actor = self.session_type.outgoing_actor()
         self._try_advance(Action.SEND, e)
-        self._send(e, self.rolesToPorts[actor])
+        self._send(e, self.roles_to_ports[actor])
         self._close_if_complete()
-
-
 
     def recv(self) -> Any:
         """Receive a message from the role specified in the session type
@@ -116,7 +114,7 @@ class Channel(Generic[T]):
         """
         actor = self.session_type.outgoing_actor()
         self._try_advance(Action.BRANCH, label)
-        self._send(label, self.rolesToPorts[actor])
+        self._send(label, self.roles_to_ports[actor])
         self._close_if_complete()
 
     def _send(self, e: Any, to: tuple[str, int]) -> None:

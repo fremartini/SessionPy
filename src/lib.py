@@ -18,11 +18,13 @@ Typ = Union[type, FunctionTyp, ContainerType, ClassTypes]
 SessionStub = namedtuple('SessionStub', 'stub')
 
 
-class StaticTypeError(TypeError): # Show-off: not just a standard Pythonic runtime typeerror
+class StaticTypeError(TypeError):  # Show-off: not just a standard Pythonic runtime typeerror
     ...
+
 
 class IllegalArgumentException(TypeError):
     ...
+
 
 class IllegalArgumentException(TypeError):
     ...
@@ -96,7 +98,7 @@ def union(t1: Typ, t2: Typ) -> Typ:
             raise TypeError("cannot union different typing constructs")
 
         if t1._name in ['Tuple', 'Dict']:
-            res = parameterise(Tuple if t1._name == 'Tuple' else Dict,
+            res = parameterize(Tuple if t1._name == 'Tuple' else Dict,
                                [union(t1, t2) for t1, t2 in zip(t1.__args__, t2.__args__)])
             return res
         elif t1._name == 'List':
@@ -138,8 +140,8 @@ def to_typing(typ: type):
         raise Exception(f'to_typing: unsupported built-in type: {typ}')
 
 
-def parameterise(container: Typ, typ: List[Typ] | type) -> str | list[Any] | tuple[Any, ...] | Any:
-    debug_print('parameterise', container, typ)
+def parameterize(container: Typ, typ: List[Typ] | type) -> str | list[Any] | tuple[Any, ...] | Any:
+    debug_print('parameterize', container, typ)
     if isinstance(typ, type):
         return container[typ]
     else:
@@ -153,7 +155,7 @@ def parameterise(container: Typ, typ: List[Typ] | type) -> str | list[Any] | tup
             case 4:
                 return container[typ[0], typ[1], typ[2], typ[3]]
             case _:
-                raise Exception(f"parameterise: supporting up to four types now; {container}[{typ}] needs support")
+                raise Exception(f"parameterize: supporting up to four types now; {container}[{typ}] needs support")
 
 
 def get_dir(path: str):
@@ -204,8 +206,8 @@ def type_to_str(typ: Typ) -> str | tuple:
     if isinstance(typ, type):
         return typ.__name__
     elif isinstance(typ, typing._GenericAlias):
-        elems = [type_to_str(_) for _ in typ.__args__]
-        return f'{typ.__origin__.__name__}[{",".join(elems)}]'
+        elements = [type_to_str(_) for _ in typ.__args__]
+        return f'{typ.__origin__.__name__}[{",".join(elements)}]'
     elif typ == Any:
         return 'Any'
     else:
