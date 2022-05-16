@@ -11,6 +11,6 @@ def run(file: str) -> List[str] | str:
     return Projector().project(ast)
 
 
-files = run('../programs/MapReduce.scr')
+files = run('../programs/BuyerSeller.scr')
 for f in files:
     run(f)

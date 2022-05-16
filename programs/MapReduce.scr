@@ -1,4 +1,4 @@
-type <List> as workload;
+type <List[int]> as workload;
 
 global protocol MapReduce(role Distributor, role c1, role c2, role c3) {
     Work(workload) from Distributor to c1;

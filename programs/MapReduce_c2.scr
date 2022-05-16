@@ -1,4 +1,4 @@
-type <List> as workload;
+type <List[int]> as workload;
 local protocol MapReduce at c2(role Distributor,role c1,role c2,role c3) {
 Work(workload) from Distributor;
 Res(int) to Distributor;
