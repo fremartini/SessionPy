@@ -1,18 +1,23 @@
+from collections import namedtuple
 from pprint import pprint
 from sys import builtin_module_names
 from typing import *
 import typing
-from types import GenericAlias
+from types import GenericAlias, ModuleType
 import os
 from pydoc import locate
 from enum import Enum
 
 from debug import debug_print
+from sessiontype import SessionType
 
 FunctionTyp = list  # of types
 ContainerType = Union[typing._GenericAlias, GenericAlias, typing._SpecialGenericAlias, tuple]
 ClassTypes = str
 Typ = Union[type, FunctionTyp, ContainerType, ClassTypes]
+
+SessionStub = namedtuple('SessionStub', 'stub')
+
 
 class StaticTypeError(TypeError): # Show-off: not just a standard Pythonic runtime typeerror
     ...
@@ -124,6 +129,8 @@ def to_typing(typ: type):
         return Tuple
     elif typ == any:
         return Any
+    elif isinstance(typ, ModuleType):
+        return typ.__name__
     else:
         raise Exception(f'to_typing: unsupported built-in type: {typ}')
 

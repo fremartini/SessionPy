@@ -12,14 +12,13 @@ from debug import *
 from environment import Environment
 from immutable_list import ImmutableList
 from lib import *
-from statemachine import BranchEdge, STParser, Node, TGoto, Transition
+from statemachine import BranchEdge, STParser, Node, TGoto, Transition, print_node
 from sessiontype import STR_ST_MAPPING, SessionException
 
 visited_files: dict[str, object] = {}
 
 Closure = namedtuple('Closure', ['args', 'body'])
 ChannelOperation = namedtuple('ChannelOperation', ['ch', 'operation'])
-SessionStub = namedtuple('SessionStub', 'stub')
 
 
 class TypeChecker(NodeVisitor):
@@ -61,7 +60,7 @@ class TypeChecker(NodeVisitor):
         if self.inside_class:
             fail_if(params[0][0] != 'self', "a class function must have self as first parameter")
             params = params[1:]
-        params = [(name,(typ if not isinstance(typ, SessionStub) else STParser(src=typ.stub).build())) for (name,typ) in params]
+        params = [(name,(typ if not isinstance(typ, SessionStub) else self.build_session_type(typ.stub))) for (name,typ) in params]
         function_type: ImmutableList[Tuple[str, type]] = \
             ImmutableList.of_list(params).map(lambda tp: tp[1]).add(expected_return_type)
 
@@ -278,7 +277,6 @@ class TypeChecker(NodeVisitor):
     def call_to_function_affecting_sessiontype(self, node: Call, func_name: str):
         visited_args = [self.visit(arg) for arg in node.args]
         function: FunctionDef = self.functions_queue[func_name]
-
         if any(isinstance(arg, Node) for arg in visited_args):
             # We passed a channel to a function
             params = self.visit(function.args)
@@ -288,13 +286,13 @@ class TypeChecker(NodeVisitor):
                     try:
                         union(typ, arg)
                     except TypeError:
-                        raise IllegalArgumentException(f'function {func_name} got {param}={type_to_str(arg)} where it expected {param}={type_to_str(typ)}')
+                        raise IllegalArgumentException(f'function <{func_name}> got {param}={type_to_str(arg)} where it expected {param}={type_to_str(typ)}')
                 if isinstance(arg, Node):
                     assert isinstance(param, str), "Expecting parameter to be a string"
                     assert isinstance(typ, SessionStub), "Expecting annotated type being a stub"
-                    node_stub = STParser(src=typ.stub).build()
+                    node_stub = self.build_session_type(typ.stub)
                     if arg != node_stub:
-                        raise SessionException(f'function {func_name} received ill-typed session')
+                        raise SessionException(f'function <{func_name}> received ill-typed session')
    
                     if isinstance(arg_ast, Name):
                         self.subst_var[param] = arg_ast.id
@@ -340,6 +338,8 @@ class TypeChecker(NodeVisitor):
                 return Any
             if not nd or nd and not isinstance(nd, Node):
                 nd = call_func[0]
+            if not nd.outgoing:
+                assert False, (ast.unparse(node), nd)
             out_edge = nd.get_edge()
             if isinstance(out_edge, Transition) and isinstance(out_edge.typ, str):
                 aliased_typ = self.lookup_or_self(out_edge.typ)
@@ -372,7 +372,8 @@ class TypeChecker(NodeVisitor):
                         pick = node.args[0].value
                     new_nd = None
                     for edge in nd.outgoing:
-                        assert isinstance(edge, BranchEdge)
+                        if not isinstance(edge, BranchEdge):
+                            raise SessionException(f"choose was called where {edge.action} was expected")
                         if pick == edge.key:
                             new_nd = nd.outgoing[edge]
                             break
@@ -448,7 +449,7 @@ class TypeChecker(NodeVisitor):
         if name in STR_ST_MAPPING:
             str_repr = self.process_and_substitute(node)
             if name == 'channel':
-                return STParser(str_repr).build()
+                return self.build_session_type(str_repr)
             return SessionStub(str_repr)
         else:
             name = self.lookup_or_self(name)
@@ -567,6 +568,8 @@ class TypeChecker(NodeVisitor):
             self.visit(node.test)
         for stm in node.body:
             self.visit(stm)
+            if isinstance(stm, Break):
+                assert False, "got tha break"
         post_chans = self.get_latest_scope().get_kind(Node)
         if pre_chans and post_chans:
             post_chans = [chs[1] for chs in post_chans]
@@ -576,9 +579,14 @@ class TypeChecker(NodeVisitor):
 
     def process_and_substitute(self, node):
         alias_opts = self.get_latest_scope().get_kind(str)
-        channel_str = ast.unparse(node) # 'Channel[Send[..., <Alias>]]'
+        stubs = self.get_latest_scope().get_kind(SessionStub)
+        channel_str = ast.unparse(node) if isinstance(node, Subscript) else node # 'Channel[Send[..., <Alias>]]'
+        assert isinstance(channel_str, str)
         for key, val in alias_opts:
+            assert False, "Do we ever run this?"
             channel_str = channel_str.replace(key, val)
+        for key, val in stubs:
+            channel_str = channel_str.replace(key, val.stub)
         return channel_str
 
     def build_session_type(self, node):

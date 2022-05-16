@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from ast import *
-from types import EllipsisType, GenericAlias
-from typing import ForwardRef, Any, Tuple
+from types import EllipsisType, GenericAlias, NoneType
+from typing import ForwardRef, Any, Iterable, Tuple
 import typing
+from lib import SessionStub
+from environment import Environment
 import sessiontype
 
 from lib import Typ, parameterise, str_to_typ, type_to_str
@@ -24,7 +26,8 @@ class BranchEdge:
         self.actor = actor
 
     def __eq__(self, __o: object) -> bool:
-        return self.key == __o.key
+        return isinstance(__o, type(self)) and \
+                self.key == __o.key
     
     def __hash__(self) -> int:
         return hash(self.key + self.actor)
@@ -48,6 +51,8 @@ class Transition:
             self.st = None
 
     def __eq__(self, __o: object) -> bool:
+        if not isinstance(__o, type(self)):
+            return False
         if self.action in [Action.SEND, Action.RECV]:
             return self.typ == __o.typ and self.actor == __o.actor
         elif self.action == Action.BRANCH:
@@ -126,9 +131,20 @@ class Node:
             return True
         if len(self.outgoing) == 0 or len(nd.outgoing) == 0:
             return self.accepting == nd.accepting
-        e1 = self.get_edge()
-        e2 = nd.get_edge()
-        return e1 == e2 and self.next_nd() == nd.next_nd()
+
+
+        if len(self.outgoing) == 1 and len(nd.outgoing) == 1:
+            e1 = self.get_edge()
+            e2 = nd.get_edge()
+            return e1 == e2 and self.next_nd() == nd.next_nd()
+        else:
+            res = False
+            for k1, k2 in zip(self.outgoing, nd.outgoing):
+                res = k1 == k2 and self.outgoing[k1] == nd.outgoing[k2]
+                if not res:
+                    return res
+            return res
+
 
     def next_nd(self) -> Node:
         assert len(self.outgoing) == 1, "Function should not be called if it's not a single outgoing edge"
@@ -155,7 +171,7 @@ class Node:
         if isinstance(edge, BranchEdge):
             return Action.BRANCH
         else:
-            assert isinstance(edge, Transition)
+            assert isinstance(edge, Transition), edge
             return edge.action
 
     def outgoing_type(self) -> type:
@@ -199,7 +215,8 @@ class STParser(NodeVisitor):
             self.visit(tree)
         else:
             self.session_tuple = self.from_generic_alias(typ)
-        assert self.session_tuple
+        
+        assert self.session_tuple, (src, typ)
 
     def get_transition(self, key) -> Transition | STEnd:
         match key:
@@ -283,6 +300,8 @@ class STParser(NodeVisitor):
     def visit_Subscript(self, node: Subscript) -> tuple[Any, Any] | None:
         value = self.visit(node.value)
         slice = self.visit(node.slice)
+        if isinstance(slice, EllipsisType):
+            return value, slice
         if isinstance(value, Transition):
             if value.action in [Action.SEND, Action.RECV]:
                 value.typ = slice[0]
@@ -293,10 +312,11 @@ class STParser(NodeVisitor):
                     slice = slice[1:][0]
             elif value.action == Action.BRANCH:
                 actor, keyvals = slice
-                for key, val in keyvals:
-                    edge = BranchEdge(key, actor)
-                    value.branch_options[edge] = val
                 value.actor = slice[0]
+                if isinstance(keyvals, Iterable):
+                    for key, val in keyvals:
+                        edge = BranchEdge(key, actor)
+                        value.branch_options[edge] = val
                 slice = slice[1:]
             elif value.action == Action.LABEL:
                 value.name = slice[0]
@@ -423,11 +443,11 @@ def print_node(n: Node, title='') -> None:
 
 if __name__ == "__main__":
 
-    # RecvIntLoop = Recv[int, 'Alice', 'loop']
-    # SendIntEnd = Send[int, 'Alice', End]
-    # Neg = Label['loop', Choose['Alice', {'receiver': RecvIntLoop, 'sender': SendIntEnd}]]
-    # Add = Label['loop', Choose['Alice', {'receiver': RecvIntLoop, 'sender': SendIntEnd}]]
-    # Final = Offer ['Alice', {"neg": Neg, "add": Add}]
+    RecvIntLoop = Recv[int, 'Alice', 'loop']
+    SendIntEnd = Send[int, 'Alice', End]
+    Neg = Label['loop', Choose['Alice', {'receiver': RecvIntLoop, 'sender': SendIntEnd}]]
+    Add = Label['loop', Choose['Alice', {'receiver': RecvIntLoop, 'sender': SendIntEnd}]]
+    Final = Offer ['Alice', {"neg": Neg, "add": Add}]
     st1 = STParser(src="Send[int, 'Alice', Recv[str, 'Bob', ...]]")
     st2 = STParser(src="Send[int, 'Alice', Recv[str, 'Bob', ...]]")
     nd1 = st1.build()

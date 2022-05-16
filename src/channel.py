@@ -48,10 +48,9 @@ class Channel(Generic[T]):
         """
 
         self.session_type: Node = from_generic_alias(session_type)
-        print_node(self.session_type)
         if static_check:
             typecheck_file()
-            print('> Static check succeeded ✅')
+            debug_print('> Static check succeeded ✅')
 
         self.rolesToPorts = roles
         self.portsToRoles = {v: k for k, v in roles.items()}
