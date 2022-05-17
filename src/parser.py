@@ -25,10 +25,10 @@ local_recursion     -> "rec" identifier "{" T* "}"
 branch_label        -> "@" identifier ";"
 message             -> identifier "(" typ ")";
 typedef             -> "type" "<" typ ">" "as" identifier ";"
-roles               -> role ("," role)*
+roles               -> role "," role ("," role)*
 role                -> "role" identifier
 call                -> "continue" identifier ";"
-typ                 -> identifier ("[" identifier "]")?
+typ                 -> identifier ( "[" identifier ("," identifier)* "]" )?
 identifier          -> [A-Z] ([A-Z] | [a-z] | 0 - 9)*
 end                 -> "End" ";"
 """
@@ -447,6 +447,10 @@ class Parser:
     def _roles(self) -> Roles:
         roles: List[Role] = [self._role()]
 
+        self._match(TokenType.COMMA)
+
+        roles.append(self._role())
+
         while self._matches(TokenType.COMMA):
             roles.append(self._role())
 
@@ -465,10 +469,14 @@ class Parser:
 
     def _typ(self) -> Typ:
         identifier = self._identifier()
-        parameter = None
+        parameter: None | Identifier = None
 
         if self._matches(TokenType.LEFT_BRACKET):
             parameter = self._identifier()
+
+            while self._matches(TokenType.COMMA):
+                parameter = Identifier(parameter.identifier + ', ' + self._identifier().identifier)
+
             self._match(TokenType.RIGHT_BRACKET)
 
         return Typ(identifier, parameter)
