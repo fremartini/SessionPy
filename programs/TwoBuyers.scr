@@ -1,6 +1,6 @@
 type <float> as price;
 
-global protocol BuyerSeller(role B1, role B2, role Seller) {
+global protocol TwoBuyers(role B1, role B2, role Seller) {
     Title(str) from B1 to Seller;
     Quote(price) from Seller to B1;
     Quote(price) from Seller to B2;

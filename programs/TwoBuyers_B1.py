@@ -4,8 +4,6 @@ roles = {'self': ('localhost', 5000), 'B2': ('localhost', 5001), 'Seller': ('loc
 
 ch = Channel(Send[str, 'Seller', Recv[float, 'Seller', Send[float, 'B2', End]]], roles)
 
-ch.send('book')
+ch.send('War and Peace')
 quote = ch.recv()
-print(quote)
-
-ch.send(50.2)
+ch.send(quote/2)
