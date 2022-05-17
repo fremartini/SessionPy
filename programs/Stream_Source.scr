@@ -1,0 +1,13 @@
+type <int> as payload;
+local protocol Stream at Source(role Source,role Sink) {
+rec LOOP {
+offer to Sink {
+@work;
+Send(payload) to Sink;
+continue LOOP;
+} or {
+@stop;
+End;
+}
+}
+}

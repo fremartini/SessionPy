@@ -339,9 +339,9 @@ class Projector:
         st = st + '}'
 
         if c.op == 'offer':
-            return f"Offer['{c.identifier.visit()}', {st}]"
-        elif c.op == 'choice':
             return f"Choose['{c.identifier.visit()}', {st}]"
+        elif c.op == 'choice':
+            return f"Offer['{c.identifier.visit()}', {st}]"
         else:
             raise Exception(f'unknown operation {c.op}')
 

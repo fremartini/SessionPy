@@ -6,7 +6,7 @@ ch = Channel(Send[str, 'Bob', Recv[str, 'Bob', Label['loopy', Choose['Bob', {'lo
 
 ch.send('Hello Bob!')
 print(ch.recv())
-# CHOOSE STATE = s4
+
 while True:
     ch.choose('loop')
     match ch.offer():
@@ -16,5 +16,5 @@ while True:
         case 'stop':
             ch.send('allright, talk to you later')
             break
-# CHOOSE STATE = s4
+
 ch.choose('terminate')
