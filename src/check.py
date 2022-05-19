@@ -11,8 +11,8 @@ from debug import *
 from environment import Environment
 from immutable_list import ImmutableList
 from lib import *
-from statemachine import BranchEdge, STParser, Node, TGoto, Transition, print_node
-from sessiontype import STR_ST_MAPPING, SessionException
+from statemachine import BranchEdge, STParser, Node, TGoto, Transition
+from sessiontype import STR_ST_MAPPING
 
 visited_files: dict[str, object] = {}
 
@@ -57,6 +57,9 @@ class TypeChecker(NodeVisitor):
                isinstance(typ, BuiltinFunctionType) or \
                isinstance(typ, BuiltinMethodType) or \
                isinstance(typ, ModuleType)
+    
+    def is_dictionary(self, typ):
+        return isinstance(typ, ContainerType) and typ._name == 'Dict'
 
     def visit_function(self, node: FunctionDef) -> Typ:
         self.in_functions = self.in_functions.add(node)
@@ -237,17 +240,25 @@ class TypeChecker(NodeVisitor):
 
         target = self.visit(node.targets[0])
 
+        print('target is', target)
         if is_session_type(node.value):
             self.bind_session_type(node.value, target)
         else:
+
             value = self.visit(node.value)
+            print(ast.unparse(node.value), '->', value)
             if isinstance(node.value, ast.Tuple):
                 value = parameterize(Tuple, value)
+            if self.is_dictionary(target):
+                expected_value = target.__args__[1]
+                if value != expected_value:
+                    raise StaticTypeError(f'value type of dictionary should be {type_to_str(expected_value)}, got {type_to_str(value)}', node)
             self.bind_var(target, value)
 
     def visit_AnnAssign(self, node: AnnAssign) -> None:
         debug_print('visit_AnnAssign', dump(node))
         target: str = self.visit(node.target)
+        print('ann: target is', target)
         if is_session_type(node.value):
             self.bind_session_type(node.value, target)
         else:
@@ -272,11 +283,15 @@ class TypeChecker(NodeVisitor):
         debug_print('visit_BinOp', dump(node))
         l_typ = self.visit(node.left)
         r_typ = self.visit(node.right)
-        return union(l_typ, r_typ)
+        try:
+            return union(l_typ, r_typ)
+        except TypeError as err:
+            raise StaticTypeError(err, node)
+
 
     def visit_Break(self, node: Break) -> Any:
         if self.loop_depth == 0:
-            raise StaticTypeError('call to break outside of loop')
+            raise StaticTypeError('call to break outside of loop', node)
         self.loop_depth -= 1
         chans = self.get_latest_scope().get_kind(Node)
         for (_, nd) in chans:
@@ -333,6 +348,8 @@ class TypeChecker(NodeVisitor):
                     for arg in node.args:
                         if isinstance(arg, Subscript):
                             return self.build_session_type(arg)
+                case 'typecheck_file':
+                    return Any
                 case _:
                     return self.call_to_function_affecting_sessiontype(node, call_func)
 
@@ -484,7 +501,7 @@ class TypeChecker(NodeVisitor):
             else:
                 lookup_able = name
                 assert isinstance(lookup_able, ContainerType)
-                if lookup_able._name == 'Dict':
+                if self.is_dictionary(lookup_able):
                     key_typ = self.visit(node.slice)
                     if key_typ == NoneType:
                         return Any
@@ -492,10 +509,10 @@ class TypeChecker(NodeVisitor):
                         key_typ = self.lookup_or_self(key_typ)
                     kv = lookup_able.__args__
                     if kv[0] == key_typ:
-                        return kv[1]
+                        return Dict[kv[0], kv[1]]
                     else:
                         raise StaticTypeError(
-                            f'dictionary got key of type {type_to_str(key_typ)} where {type_to_str(kv[0])} was expected')
+                            f'dictionary got key of type {type_to_str(key_typ)} where {type_to_str(kv[0])} was expected', node)
 
     def visit_Return(self, node: Return) -> Any:
         debug_print('visit_Return', dump(node))
@@ -637,7 +654,7 @@ class TypeChecker(NodeVisitor):
         print('Subst:', self.subst_var)
 
 
-def is_session_type(node: Node) -> bool:
+def is_session_type(node: expr) -> bool:
     def check_subscript(node) -> bool:
         return isinstance(node, Subscript) and isinstance(node.value, Name) and node.value.id == 'Channel'
 
