@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from enum import Enum
+from enum import Enum, auto
 
 from lib import *
 from debug import debug_print
@@ -8,20 +8,23 @@ from typing import Union
 
 
 class Category(Enum):
-    VARIABLE = 0
-    FUNCTION = 1
-    NESTED = 2
+    VARIABLE = auto()
+    FUNCTION = auto()
+    NESTED = auto()
 
 
 def empty() -> dict:
-    return {env_typ: {} for env_typ in list(Category)}
-
+    return {cat: {} for cat in list(Category)}
 
 class Environment:
     def __init__(self, env: dict = None):
         if env is None:
             env = empty()
         self.environment = env
+        self.loop_depth = 0
+        self.loop_entrypoints = set()
+        self.loop_breakpoints = set()
+
 
     def lookup_var(self, v: str) -> Typ:
         if v in self.environment[Category.VARIABLE]:
@@ -38,11 +41,11 @@ class Environment:
     def lookup_nested(self, f: str) -> Environment:
         return self.environment[Category.NESTED][f]
 
-    def lookup_or_default(self, k: str, default: Any) -> Union[Typ, dict[str, Typ], str]:
+    def lookup_or_self(self, k: str) -> Typ | str:
         try:
             return self.lookup(k)
         except EnvironmentError:
-            return default
+            return k
 
     def lookup_var_or_default(self, k: str, default: Any) -> Union[Typ, dict[str, Typ], str]:
         try:
@@ -56,14 +59,6 @@ class Environment:
         except EnvironmentError:
             return default
 
-    def contains_nested(self, k: str) -> bool:
-        return k in self.environment[Category.NESTED]
-
-    def contains_function(self, f: str) -> bool:
-        return f in self.environment[Category.FUNCTION]
-
-    def contains_variable(self, v: str) -> bool:
-        return v in self.environment[Category.VARIABLE]
 
     def bind_var(self, var: str, typ: Typ) -> None:
         self.environment[Category.VARIABLE][var] = typ
