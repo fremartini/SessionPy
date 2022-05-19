@@ -79,7 +79,7 @@ class Projector:
         Parameters
         ----------
         g: G
-            G AST node
+            AST node
 
         Returns
         -------
@@ -97,8 +97,6 @@ class Projector:
                 return self._project_global_recursion(global_recursion)
             case call if isinstance(call, Call):
                 return _project_call(call)
-            case end if isinstance(end, End):
-                return 'End;'
 
     def _project_global_interaction(self, gi: GlobalInteraction) -> str | None:
         """Project a GlobalInteraction AST node
@@ -106,7 +104,7 @@ class Projector:
         Parameters
         ----------
         gi: GlobalInteraction
-            GlobalInteraction AST node
+            AST node
 
         Returns
         -------
@@ -133,7 +131,7 @@ class Projector:
         Parameters
         ----------
         gb: GlobalBranch
-            GlobalBranch AST node
+            AST node
 
         Returns
         -------
@@ -141,7 +139,13 @@ class Projector:
             session type in format '@label; {ST}'
         """
         st = ''.join([self._project_g(g) + '\n' for g in gb.g])
-        st = f'@{gb.label.label};\n{st}'
+
+        if isinstance(gb.terminator, End):
+            terminator = 'End;'
+        else:
+            terminator = _project_call(gb.terminator)
+
+        st = f'@{gb.label.label};\n{st}{terminator}\n'
         return st
 
     def _project_global_choice(self, gc: GlobalChoice) -> str | None:
@@ -150,7 +154,7 @@ class Projector:
         Parameters
         ----------
         gc: GlobalChoice
-            GlobalChoice AST node
+            AST node
 
         Returns
         -------
@@ -167,15 +171,13 @@ class Projector:
         else:
             lines = f'choice from {gc.sender.identifier} {{\n'
 
-        lines = lines + self._project_global_branch(gc.b1)
-        lines = lines + '} or {\n'
-        lines = lines + self._project_global_branch(gc.b2)
+        lines = lines + self._project_global_branch(gc.b)
         lines = lines + '}'
 
         for c in gc.bn:
             lines = lines + ' or {\n'
             lines = lines + self._project_global_branch(c)
-            lines = lines + '}\n'
+            lines = lines + '}'
 
         return lines
 
@@ -185,7 +187,7 @@ class Projector:
         Parameters
         ----------
         gr: GlobalRecursion
-            GlobalRecursion AST node
+            AST node
 
         Returns
         -------
@@ -247,7 +249,7 @@ class Projector:
         Parameters
         ----------
         t: T
-            T AST node
+            AST node
 
         Returns
         -------
@@ -265,8 +267,6 @@ class Projector:
                 return self._project_local_recursion(local_recursion)
             case call if isinstance(call, Call):
                 return f'"{call}"'
-            case end if isinstance(end, End):
-                return 'End'
 
     def _project_local_send(self, ls: LocalSend) -> str:
         """Project a LocalSend AST node
@@ -274,7 +274,7 @@ class Projector:
         Parameters
         ----------
         ls: LocalSend
-            LocalSend AST node
+            AST node
 
         Returns
         -------
@@ -290,7 +290,7 @@ class Projector:
         Parameters
         ----------
         lr: LocalRecv
-            LocalRecv AST node
+            AST node
 
         Returns
         -------
@@ -315,7 +315,7 @@ class Projector:
         Parameters
         ---------
         lb: LocalBranch
-            LocalBranch AST node
+            AST node
 
         Returns
         -------
@@ -326,14 +326,18 @@ class Projector:
         for t in lb.t:
             st = st + self._project_t(t)
 
-        st = st + _closing_brackets(lb.t)
+        if isinstance(lb.terminator, End):
+            terminator = 'End'
+        else:
+            terminator = _project_call(lb.terminator)
+
+        st = st + terminator + _closing_brackets(lb.t)
         return st
 
     def _project_local_choice(self, c: LocalChoice) -> str:
-        b1 = self._project_local_branch(c.b1)
-        b2 = self._project_local_branch(c.b2)
+        b1 = self._project_local_branch(c.b)
         st = '{'
-        st = st + f'{b1}, {b2}'
+        st = st + f'{b1}'
         for b in c.bn:
             st = st + ', ' + self._project_local_branch(b)
         st = st + '}'
@@ -351,7 +355,7 @@ class Projector:
         Parameters
         ----------
         lr: LocalRecursion
-            LocalRecursion AST node
+            AST node
 
         Returns
         -------
@@ -414,7 +418,7 @@ def _project_typedef(t: TypeDef) -> str:
     Parameters
     ----------
     t: TypeDef
-        TypeDef AST node that should be projected
+        AST node
 
     Returns
     -------
@@ -430,7 +434,7 @@ def _project_call(c: Call) -> str:
     Parameters
     ----------
     c: Call
-        call AST node that should be projected
+        AST node
 
     Returns
     -------

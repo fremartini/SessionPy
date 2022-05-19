@@ -11,6 +11,6 @@ def run(file: str) -> List[str] | str:
     return Projector().project(ast)
 
 
-files = run('../programs/Stream.scr')
+files = run('../programs/OpServer.scr')
 for f in files:
     run(f)

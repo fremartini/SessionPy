@@ -6,20 +6,20 @@ from typing import List, Callable, Any
 protocol            -> typedef* (P | L)
 
 P                   -> "global" "protocol" identifier "(" roles ")" "{" G* "}"
-G                   -> global_interaction | global_choice | global_recursion | call | end
+G                   -> global_interaction | global_choice | global_recursion | call
 
 global_interaction  -> message "from" identifier "to" identifier ";"
-global_choice       -> "choice" "from" identifier "to" identifier global_branch "or" global_branch ("or" global_branch)*
-global_branch       -> "{" branch_label G* "}"
+global_choice       -> "choice" "from" identifier "to" identifier global_branch ("or" global_branch)+
+global_branch       -> "{" branch_label G* (end | call) "}"
 global_recursion    -> "rec" identifier "{" G* "}"
 
 L                   -> "local" "protocol" identifier "at" identifier "(" roles ")" "{" T* "}"
-T                   -> local_send | local_recv | local_choice | local_recursion | call | end
+T                   -> local_send | local_recv | local_choice | local_recursion | call
 
 local_send          -> message "to" identifier ";"
 local_recv          -> message "from" identifier ";"
-local_choice        -> ("offer" "to" | "choice" "from") identifier local_branch "or" local_branch ("or" local_branch)*
-local_branch        -> "{" branch_label T* "}"
+local_choice        -> ("offer" "to" | "choice" "from") identifier local_branch ("or" local_branch)+
+local_branch        -> "{" branch_label T* (end | call) "}"
 local_recursion     -> "rec" identifier "{" T* "}"
 
 branch_label        -> "@" identifier ";"
@@ -116,9 +116,10 @@ class BranchLabel:
 
 
 class LocalBranch:
-    def __init__(self, label: BranchLabel, t: List):
+    def __init__(self, label: BranchLabel, t: List, terminator: Call | End):
         self.label = label
         self.t = t
+        self.terminator = terminator
 
 
 class LocalRecursion:
@@ -128,11 +129,10 @@ class LocalRecursion:
 
 
 class LocalChoice:
-    def __init__(self, identifier: Identifier, op: str, b1: LocalBranch, b2: LocalBranch, bn: List[LocalBranch]):
+    def __init__(self, identifier: Identifier, op: str, b: LocalBranch, bn: List[LocalBranch]):
         self.identifier = identifier
         self.op = op
-        self.b1 = b1
-        self.b2 = b2
+        self.b = b
         self.bn = bn
 
 
@@ -169,18 +169,18 @@ class GlobalRecursion:
 
 
 class GlobalBranch:
-    def __init__(self, label: BranchLabel, g: List):
+    def __init__(self, label: BranchLabel, g: List, terminator: Call | End):
         self.label = label
         self.g = g
+        self.terminator = terminator
 
 
 class GlobalChoice:
-    def __init__(self, sender: Identifier, recipient: Identifier, b1: GlobalBranch, b2: GlobalBranch,
+    def __init__(self, sender: Identifier, recipient: Identifier, b: GlobalBranch,
                  bn: List[GlobalBranch]):
         self.sender = sender
         self.recipient = recipient
-        self.b1 = b1
-        self.b2 = b2
+        self.b = b
         self.bn = bn
 
 
@@ -241,9 +241,8 @@ class Parser:
         return P(protocol_name, roles, g)
 
     def _g(self) -> G:
-        statement = self._or('global_interaction | global_choice | global_recursion | call | "End"',
-                             self._global_interaction, self._global_choice, self._global_recursion, self._call,
-                             self._end)
+        statement = self._or('global_interaction | global_choice | global_recursion | call',
+                             self._global_interaction, self._global_choice, self._global_recursion, self._call)
 
         return G(statement)
 
@@ -269,9 +268,11 @@ class Parser:
 
         gs = _many(self._g)
 
+        terminator = self._or('end | call', self._end, self._call)
+
         self._match(TokenType.RIGHT_BRACE)
 
-        return GlobalBranch(label, gs)
+        return GlobalBranch(label, gs, terminator)
 
     def _global_choice(self) -> GlobalChoice:
         def _or_branch() -> GlobalBranch:
@@ -287,13 +288,11 @@ class Parser:
 
         recipient = self._identifier()
 
-        b1 = self._global_branch()
+        b = self._global_branch()
 
-        b2 = _or_branch()
+        bn = _one_or_many(_or_branch)
 
-        bn = _many(_or_branch)
-
-        return GlobalChoice(sender, recipient, b1, b2, bn)
+        return GlobalChoice(sender, recipient, b, bn)
 
     def _global_recursion(self) -> GlobalRecursion:
         self._match(TokenType.REC)
@@ -330,9 +329,9 @@ class Parser:
         return L(protocol_name, perspective, roles, t)
 
     def _t(self) -> T:
-        statement = self._or('local_send | local_recv | local_choice | local_recursion | call | "end"',
+        statement = self._or('local_send | local_recv | local_choice | local_recursion | call',
                              self._local_send, self._local_recv, self._local_choice, self._local_recursion,
-                             self._call, self._end)
+                             self._call)
 
         return T(statement)
 
@@ -344,9 +343,11 @@ class Parser:
 
         ts = _many(self._t)
 
+        terminator = self._or('end | call', self._end, self._call)
+
         self._match(TokenType.RIGHT_BRACE)
 
-        return LocalBranch(label, ts)
+        return LocalBranch(label, ts, terminator)
 
     def _local_choice(self) -> LocalChoice:
         def _offer_to() -> str:
@@ -367,13 +368,11 @@ class Parser:
 
         identifier = self._identifier()
 
-        b1 = self._local_branch()
+        b = self._local_branch()
 
-        b2 = _or_branch()
+        bn = _one_or_many(_or_branch)
 
-        bn = _many(_or_branch)
-
-        return LocalChoice(identifier, op, b1, b2, bn)
+        return LocalChoice(identifier, op, b, bn)
 
     def _local_recursion(self) -> LocalRecursion:
         self._match(TokenType.REC)
@@ -537,6 +536,15 @@ class Parser:
 
     def _throw(self, typ: str):
         raise ParseError(f"Expected '{typ}' => {self.tokens[self.current]} <= ")
+
+
+def _one_or_many(rule: Callable) -> List:
+    matches = [rule()]
+
+    for m in _many(rule):
+        matches.append(m)
+
+    return matches
 
 
 def _many(rule: Callable) -> List:
