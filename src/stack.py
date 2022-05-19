@@ -57,7 +57,7 @@ class Stack(Generic[T]):
         return self._lst.last()
 
     def isEmpty(self) -> bool:
-        """Check if the stack is empt
+        """Check if the stack is empty
 
         Returns
         -------

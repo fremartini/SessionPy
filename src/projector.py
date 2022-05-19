@@ -1,6 +1,7 @@
 from typing import Dict
 
 from parser import *
+from immutable_list import ImmutableList
 
 
 class Projector:
@@ -352,15 +353,7 @@ class Projector:
         str
             session type in format 'Label["Label", {ST}]'
         """
-        st = ''
-        self.insert_end = False
-        for (idx, t) in enumerate(lr.t):
-            if idx == len(lr.t) - 1 and not isinstance(t.op, LocalChoice):
-                self._insert_loop = lr.identifier
-            st = st + self._project_t(t)
-        st = st + _closing_brackets(lr.t)
-
-        self._insert_loop = None
+        st = self._project_session_type(lr.t)
         return f'Label["{lr.identifier.visit()}", {st}'
 
     def _project_session_type(self, ts: List[T]) -> str:
@@ -376,10 +369,7 @@ class Projector:
         str
             ts converted to a string
         """
-        st = ''
-        for (idx, t) in enumerate(ts):
-            self.insert_end = idx == len(ts) - 1 and not isinstance(t.op, LocalChoice)
-            st = st + self._project_t(t)
+        st = ImmutableList.of_list(ts).fold(lambda acc, t: acc + self._project_t(t), '')
         st = st + _closing_brackets(ts)
         return st
 
@@ -447,13 +437,13 @@ def _closing_brackets(ts: List[T]) -> str:
     str
         the appropriate number of closing brackets based on ts
     """
-    braces = ''
-    for i in ts:
-        if isinstance(i.op, LocalChoice) or isinstance(i.op, GlobalChoice) or isinstance(i.op, End) or isinstance(i.op,
-                                                                                                                  Call):
-            continue
-        braces = braces + ']'
-    return braces
+    braces_to_insert = ImmutableList.of_list(ts).map(
+        lambda i:
+        isinstance(i.op, LocalChoice) or
+        isinstance(i.op, GlobalChoice) or
+        isinstance(i.op, End) or
+        isinstance(i.op, Call)).filter(lambda x: x is False).len()
+    return ']' * braces_to_insert
 
 
 def _project_roles(me: str, roles: List[str]) -> str:

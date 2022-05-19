@@ -223,7 +223,7 @@ class Parser:
         """
         protocol            -> typedef* (P | L)
         """
-        typedefs = _many(self._typedef)
+        typedefs = many(self._typedef)
         protocol: P | L = self._or('P | L', self._p, self._l)
 
         return Protocol(typedefs, protocol)
@@ -242,7 +242,7 @@ class Parser:
 
         self._match(TokenType.RIGHT_PARENS, TokenType.LEFT_BRACE)
 
-        g = _many(self._g)
+        g = many(self._g)
 
         self._match(TokenType.RIGHT_BRACE)
 
@@ -283,7 +283,7 @@ class Parser:
 
         label = self._branch_label()
 
-        gs = _many(self._g)
+        gs = many(self._g)
 
         terminator = self._or('end | call', self._end, self._call)
 
@@ -311,7 +311,7 @@ class Parser:
 
         b = self._global_branch()
 
-        bn = _one_or_many(_or_branch)
+        bn = one_or_many(_or_branch)
 
         return GlobalChoice(sender, recipient, b, bn)
 
@@ -328,9 +328,9 @@ class Parser:
 
         self._match(TokenType.LEFT_BRACE)
 
-        g = _many(self._g)
+        g = many(self._g)
 
-        terminator: End | Call | None = _zero_or_one(_end_or_call)
+        terminator: End | Call | None = zero_or_one(_end_or_call)
 
         self._match(TokenType.RIGHT_BRACE)
 
@@ -354,7 +354,7 @@ class Parser:
 
         self._match(TokenType.RIGHT_PARENS, TokenType.LEFT_BRACE)
 
-        t = _many(self._t)
+        t = many(self._t)
 
         self._match(TokenType.RIGHT_BRACE)
 
@@ -373,14 +373,13 @@ class Parser:
         """
         local_branch        -> "{" branch_label T* (end | call) "}"
         """
-
         self._match(TokenType.LEFT_BRACE)
 
         label = self._branch_label()
 
-        ts = _many(self._t)
+        ts = many(self._t)
 
-        terminator = self._or('end | call', self._end, self._call)
+        terminator: End | Call = self._or('end | call', self._end, self._call)
 
         self._match(TokenType.RIGHT_BRACE)
 
@@ -410,7 +409,7 @@ class Parser:
 
         b = self._local_branch()
 
-        bn = _one_or_many(_or_branch)
+        bn = one_or_many(_or_branch)
 
         return LocalChoice(identifier, op, b, bn)
 
@@ -427,9 +426,9 @@ class Parser:
 
         self._match(TokenType.LEFT_BRACE)
 
-        t = _many(self._t)
+        t = many(self._t)
 
-        terminator: End | Call | None = _zero_or_one(_end_or_call)
+        terminator: End | Call | None = zero_or_one(_end_or_call)
 
         self._match(TokenType.RIGHT_BRACE)
 
@@ -618,23 +617,23 @@ class Parser:
         raise ParseError(f"Expected '{typ}' => {self.tokens[self.current]} <= ")
 
 
-def _zero_or_one(rule: Callable) -> Any | None:
+def zero_or_one(rule: Callable) -> Any | None:
     try:
         return rule()
     except:
         return None
 
 
-def _one_or_many(rule: Callable) -> List:
+def one_or_many(rule: Callable) -> List:
     matches = [rule()]
 
-    for m in _many(rule):
+    for m in many(rule):
         matches.append(m)
 
     return matches
 
 
-def _many(rule: Callable) -> List:
+def many(rule: Callable) -> List:
     matches = []
 
     while True:
