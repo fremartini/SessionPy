@@ -10,7 +10,6 @@ class Projector:
 
     def __init__(self):
         self._current_role = None
-        self._insert_loop = None
 
     def project(self, root: Protocol) -> List[str] | str:
         """Project the AST of a global or local protocol
@@ -282,7 +281,7 @@ class Projector:
             session type in format 'Send[{TYP}, {ROLE}, {ST}'
         """
         typ = self._lookup_or_self(ls.message.payload.visit())
-        return f"Send[{typ}, '{ls.identifier.visit()}', {self._end()}"
+        return f"Send[{typ}, '{ls.identifier.visit()}', "
 
     def _project_local_recv(self, lr: LocalRecv) -> str:
         """Project a LocalSend AST node
@@ -298,16 +297,7 @@ class Projector:
             session type in format 'Recv[{TYP}, {ROLE}, {ST}'
         """
         typ = self._lookup_or_self(lr.message.payload.visit())
-        return f"Recv[{typ}, '{lr.identifier.visit()}', {self._end()}"
-
-    def _end(self) -> str:
-        """Add the correct terminator to a session type depending on the context"""
-        if self._insert_loop:
-            return f'"{self._insert_loop.visit()}"'
-        elif self.insert_end:
-            return 'End'
-        else:
-            return ''
+        return f"Recv[{typ}, '{lr.identifier.visit()}', "
 
     def _project_local_branch(self, lb: LocalBranch) -> str:
         """Project a LocalBranch AST node
@@ -329,7 +319,7 @@ class Projector:
         if isinstance(lb.terminator, End):
             terminator = 'End'
         else:
-            terminator = _project_call(lb.terminator)
+            terminator = f'"{lb.terminator}"'
 
         st = st + terminator + _closing_brackets(lb.t)
         return st
