@@ -109,8 +109,10 @@ class TypeChecker(NodeVisitor):
                         raise IllegalArgumentException(
                             f'function <{func_name}> got {param}={type_to_str(arg)} where it expected {param}={type_to_str(typ)}')
                 if isinstance(arg, Node):
-                    assert isinstance(param, str), "Expecting parameter to be a string"
-                    assert isinstance(typ, SessionStub), "Expecting annotated type being a stub"
+                    expect(isinstance(param, str), f"Expecting parameter to be a string, got {param}",
+                        node, StaticTypeError)
+                    expect(isinstance(typ, SessionStub), f"Expecting annotated type being a stub, got {typ}",
+                        node)
                     node_stub = self.build_session_type(typ.stub)
                     expect(arg == node_stub, f'function <{func_name}> received ill-typed session', node)
 
@@ -324,7 +326,6 @@ class TypeChecker(NodeVisitor):
         if isinstance(value, Node):
             return ChannelOperation(value, attr)
         if value in STR_ST_MAPPING or attr in STR_ST_MAPPING:
-            assert value not in STR_ST_MAPPING, "Do we ever expect this?"
             return ChannelOperation(value, attr)
         else:
             if is_builtin_or_module_type(value):
@@ -386,7 +387,7 @@ class TypeChecker(NodeVisitor):
                 any(isinstance(x, Node) for x in provided_args)
             if contains_bound_channel:
                 name = node.func.id
-                assert isinstance(name, str), "Expecting call to a function"
+                expect(isinstance(name, str), f"Expecting call to a function, got {name}", node, UnexpectedInternalBehaviour)
                 return self.call_to_function_affecting_sessiontype(node, name)
             signature = ImmutableList.of_list(call_func)
             return_type = signature.last()
@@ -515,11 +516,13 @@ class TypeChecker(NodeVisitor):
                 self.env().bind_var(ch_name, nd)
                 new_nd = None
                 for edge in nd.outgoing:
-                    assert isinstance(edge, BranchEdge)
+                    expect(isinstance(edge, BranchEdge), 
+                        f"Outgoing edges should be BranchEdges, got {edge}",
+                        node, UnexpectedInternalBehaviour)
                     if branch_pick == edge.key:
-                        expect(branch_pick in offers, \
-                            f"Case '{branch_pick}' already visited", \
-                                node)
+                        expect(branch_pick in offers, 
+                            f"Case '{branch_pick}' already visited", 
+                            node)
                         offers.remove(branch_pick)
                         new_nd = nd.outgoing[edge]
                         break
@@ -584,7 +587,9 @@ class TypeChecker(NodeVisitor):
                     return to_typing(container)[types]
             else:
                 lookup_able = name
-                assert isinstance(lookup_able, ContainerType)
+                expect(is_container(lookup_able),
+                    f"Subscript annotation only allowed on container/subcript types",
+                    node, UnexpectedInternalBehaviour)
                 if is_dictionary(lookup_able):
                     key_typ = self.visit(node.slice)
                     if key_typ == NoneType:
@@ -661,9 +666,13 @@ def typecheck_file():
 def typecheck_function(function_def):
     function_src: str = dedent(inspect.getsource(function_def))
     module: Module = ast.parse(function_src)
-    assert len(module.body) == 1, "Only expecting one element: a FunctionDef"
+    expect(len(module.body) == 1, 
+        "Only expecting one element: a FunctionDef",
+        function_def, UnexpectedInternalBehaviour)
     function_ast = module.body[0]
-    assert isinstance(function_ast, FunctionDef), "Decorator called on non-FunctionDef"
+    expect(isinstance(function_ast, FunctionDef), 
+        "Decorator called on non-FunctionDef",
+        function_def, UnexpectedInternalBehaviour)
     typechecker: TypeChecker = TypeChecker(function_ast)
     typechecker.run()
     return function_def
