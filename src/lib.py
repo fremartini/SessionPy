@@ -31,6 +31,12 @@ class StaticTypeError(TypeError):  # Show-off: not just a standard Pythonic runt
             message = f"at line {nd.lineno}: {message}"
         super().__init__(message)
 
+class UnexpectedInternalBehaviour(Exception):
+    def __init__(self, message: str, nd:AST=None) -> None:
+        if nd:
+            message = f"at line {nd.lineno}: {message}"
+        super().__init__(message)  
+
 
 class IllegalArgumentException(TypeError):
     ...
@@ -64,9 +70,9 @@ def can_downcast_to(t1: type, t2: type):
     return False
 
 
-def fail_if(e: bool, msg: str, exc: Type[Exception] = Exception) -> None:
-    if e:
-        raise exc(msg)
+def expect(e: bool, msg: str, ast_node: AST=None, exc: Type[Exception] = SessionException) -> None:
+    if not e:
+        raise exc(msg, ast_node)
 
 
 def fail_if_cannot_cast(a: type, b: type, err: str) -> None:
