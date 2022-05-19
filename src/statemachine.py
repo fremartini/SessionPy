@@ -119,7 +119,7 @@ class Node:
     def __str__(self) -> str:
         state = f'(s{self.identifier})' if self.accepting else f's{self.identifier}'
         state += '...' if self.any_state else ''
-        return state
+        return f'SessionType(state={state})'
 
     def __repr__(self) -> str:
         return f'Node(state={self.identifier})'
