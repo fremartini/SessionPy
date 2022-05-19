@@ -202,7 +202,14 @@ class Projector:
             if to_write is not None:
                 lines = lines + to_write + '\n'
 
-        lines = lines + '}'
+        if isinstance(gr.terminator, End):
+            terminator = 'End;'
+        elif isinstance(gr.terminator, Call):
+            terminator = f'continue {gr.terminator};'
+        else:
+            terminator = ''
+
+        lines = lines + terminator + '\n}'
 
         return lines
 
@@ -238,7 +245,7 @@ class Projector:
             f.write(f'routing_table = {routing_table}\n\n')
 
             # project the statements of the local protocol into a single session type
-            session_type = self._project_session_type(protocol.t)
+            session_type = self._project_session_type(protocol.t) + _closing_brackets(protocol.t)
             f.write(f'ch = Channel({session_type}, routing_table)\n')
 
         return file
@@ -354,6 +361,16 @@ class Projector:
             session type in format 'Label["Label", {ST}]'
         """
         st = self._project_session_type(lr.t)
+
+        if isinstance(lr.terminator, End):
+            terminator = 'End'
+        elif isinstance(lr.terminator, Call):
+            terminator = f'"{lr.terminator}"'
+        else:
+            terminator = ''
+
+        st = st + terminator + _closing_brackets(lr.t)
+
         return f'Label["{lr.identifier.visit()}", {st}'
 
     def _project_session_type(self, ts: List[T]) -> str:
@@ -367,11 +384,9 @@ class Projector:
         Returns
         -------
         str
-            ts converted to a string
+            ts converted to a string without closing brackets
         """
-        st = ImmutableList.of_list(ts).fold(lambda acc, t: acc + self._project_t(t), '')
-        st = st + _closing_brackets(ts)
-        return st
+        return ImmutableList.of_list(ts).fold(lambda acc, t: acc + self._project_t(t), '')
 
     def _lookup_or_self(self, t: str) -> str:
         """Attempts a lookup for t in type_mappings
@@ -442,7 +457,8 @@ def _closing_brackets(ts: List[T]) -> str:
         isinstance(i.op, LocalChoice) or
         isinstance(i.op, GlobalChoice) or
         isinstance(i.op, End) or
-        isinstance(i.op, Call)).filter(lambda x: x is False).len()
+        isinstance(i.op, Call)).filter(lambda x: not x).len()
+
     return ']' * braces_to_insert
 
 

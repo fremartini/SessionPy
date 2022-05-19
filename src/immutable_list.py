@@ -50,20 +50,13 @@ class ImmutableList(Generic[T]):
         return ImmutableList.of_list(c)
 
     def map(self, f: Callable[[T], K]) -> ImmutableList[K]:
-        lst = ImmutableList()
-        for elem in self._internal_list:
-            lst = lst.add(f(elem))
-        return lst
+        return self.fold(lambda acc, x: acc.add(f(x)), ImmutableList())
 
     def fold(self, f: Callable[[List[K], T], List[K]], initial: K) -> K:
         return reduce(lambda acc, x: f(acc, x), self._internal_list, initial)
 
     def filter(self, f: Callable[[T], bool]) -> ImmutableList[T]:
-        lst = ImmutableList()
-        for elem in self._internal_list:
-            if f(elem):
-                result = lst.add(elem)
-        return lst
+        return self.fold(lambda acc, x: acc.add(x) if f(x) else acc, ImmutableList())
 
     def __len__(self):
         return self.len()
@@ -82,10 +75,10 @@ class ImmutableList(Generic[T]):
         return True
 
     def __str__(self) -> str:
-        return str(self._internal_list)
+        return f'ImmutableList{self._internal_list}'
 
     def __repr__(self) -> str:
-        return f"ImmutableList{self.__str__()}"
+        return self.__str__()
 
     def __iter__(self) -> Iterator[T]:
         return iter(self._internal_list)
