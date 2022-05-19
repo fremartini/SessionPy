@@ -10,7 +10,9 @@ def run(file: str) -> List[str] | str:
     ast = Parser(tokens).parse()
     return Projector().project(ast)
 
+def run_many(*files: str):
+    for file in files:
+        run(file)
 
-files = run('../programs/Stream.scr')
-for f in files:
-    run(f)
+
+run_many('../programs/RepeatingConversation_Alice.scr', '../programs/RepeatingConversation_Bob.scr')

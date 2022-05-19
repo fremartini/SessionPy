@@ -1,28 +1,17 @@
 from context import *
 
-roles = {'Alice': ('localhost', 5000), 'self': ('localhost', 5001), }
+routing_table = {'Alice': ('localhost', 50_000), 'self': ('localhost', 50_005),}
 
-TheChoice = Choose['Alice', {"talk": Send[str, 'Alice', Recv[str, 'Alice', "loopy"]], "stop": Recv[str, 'Alice', 'loopy']}]
-ch = Channel(Recv[str, 'Alice', Send[str, 'Alice', Label['loopy', Offer['Alice', {'loop': TheChoice, 'terminate': End}]]]], roles)
+ch = Channel(Recv[str, 'Alice', Send[str, 'Alice', Label["TALK", Offer['Alice', {"talk": Send[str, 'Alice', Recv[str, 'Alice', "TALK"]], "stop": Recv[str, 'Alice', End]}]]]], routing_table)
 
-print(ch.recv())
-ch.send('Hello Alice!')
+s = ch.recv()
+ch.send(s)
 
-i = 0
 while True:
-    i = i + 1
-
     match ch.offer():
-        case 'loop':
-            if i < 10:
-                ch.choose('talk')
-                ch.send('lets talk a bit more')
-                print(ch.recv())
-            else:
-                ch.choose('stop')
-                print(ch.recv())
-                break
-        case 'terminate':
+        case "talk":
+            ch.send(s)
+            ch.recv()
+        case "stop":
+            ch.recv()
             break
-
-

@@ -1,3 +1,4 @@
+from ast import AST
 from typing import TypeVar, Generic
 from enum import Enum
 
@@ -41,7 +42,10 @@ class End(SessionType):
 
 
 class SessionException(TypeError):
-    ...
+    def __init__(self, message: str, nd:AST=None) -> None:
+        if nd:
+            message = f"at line {nd.lineno}: {message}"
+        super().__init__(message)
 
 
 STR_ST_MAPPING = {
