@@ -1,20 +1,20 @@
 from context import *
 
-roles = {'self': ('localhost', 5000), 'Bob': ('localhost', 5001),}
-TheOffer = Offer['Bob', {"talk": Recv[str, 'Bob', Send[str, 'Bob', "loopy"]], "stop": Send[str, 'Bob', 'loopy']}]
-ch = Channel(Send[str, 'Bob', Recv[str, 'Bob', Label['loopy', Choose['Bob', {'loop': TheOffer, 'terminate': End}]]]], roles)
+routing_table = {'self': ('localhost', 50_000), 'Bob': ('localhost', 50_005),}
 
-ch.send('Hello Bob!')
-print(ch.recv())
+ch = Channel(Send[str, 'Bob', Recv[str, 'Bob', Label["TALK", Choose['Bob', {"talk": Recv[str, 'Bob', Send[str, 'Bob', "TALK"]], "stop": Send[str, 'Bob', End]}]]]], routing_table)
 
-while True:
-    ch.choose('loop')
-    match ch.offer():
-        case 'talk':
-            print(ch.recv())
-            ch.send('lets just pretend we are talking')
-        case 'stop':
-            ch.send('allright, talk to you later')
-            break
+ch.send("hello")
+s = ch.recv()
 
-ch.choose('terminate')
+print('entering loop...')
+for i in range(2):
+    print(f'loop #{i}')
+    ch.choose("talk")
+    s = ch.recv()
+    ch.send(s)
+print('...exited loop')
+
+ch.choose("stop")
+ch.send("bye")
+print('done!')
