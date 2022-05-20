@@ -15,18 +15,19 @@ global_branch       -> "{" branch_label G* "}"
 global_recursion    -> "rec" identifier "{" G* "}"
 
 L                   -> "local" "protocol" identifier "at" identifier "(" roles ")" "{" T* "}"
-T                   -> local_send | local_recv | local_choice | local_recursion | end | call
+T                   -> local_send | local_recv | local_offer | local_choice | local_recursion | end | call
 
 local_send          -> message "to" identifier ";"
 local_recv          -> message "from" identifier ";"
-local_choice        -> ("offer" "to" | "choice" "from") identifier local_branch ("or" local_branch)+
+local_choice        -> "choice" "from" identifier local_branch ("or" local_branch)+
+local_offer         -> "offer" "to" identifier local_branch ("or" local_branch)+
 local_branch        -> "{" branch_label T* "}"
 local_recursion     -> "rec" identifier "{" T* "}"
 
 branch_label        -> "@" identifier ";"
 message             -> identifier "(" typ ")";
 typedef             -> "type" "<" typ ">" "as" identifier ";"
-roles               -> role "," role ("," role)*
+roles               -> role ("," role)+
 role                -> "role" identifier
 call                -> "continue" identifier ";"
 typ                 -> identifier ( "[" identifier ("," identifier)* "]" )?
@@ -129,9 +130,15 @@ class LocalRecursion:
 
 
 class LocalChoice:
-    def __init__(self, identifier: Identifier, op: str, b: LocalBranch, bn: List[LocalBranch]):
+    def __init__(self, identifier: Identifier, b: LocalBranch, bn: List[LocalBranch]):
         self.identifier = identifier
-        self.op = op
+        self.b = b
+        self.bn = bn
+
+
+class LocalOffer:
+    def __init__(self, identifier: Identifier, b: LocalBranch, bn: List[LocalBranch]):
+        self.identifier = identifier
         self.b = b
         self.bn = bn
 
@@ -149,7 +156,7 @@ class LocalSend:
 
 
 class T:
-    def __init__(self, op: LocalSend | LocalRecv | LocalChoice | LocalRecursion | End | Call):
+    def __init__(self, op: LocalSend | LocalRecv | LocalOffer | LocalChoice | LocalRecursion | End | Call):
         self.op = op
 
 
@@ -354,10 +361,11 @@ class Parser:
 
     def _t(self) -> T:
         """
-        T                   -> local_send | local_recv | local_choice | local_recursion | end | call
+        T                   -> local_send | local_recv | local_offer | local_choice | local_recursion | end | call
         """
         statement = self._or('local_send | local_recv | local_choice | local_recursion | end | call',
-                             self._local_send, self._local_recv, self._local_choice, self._local_recursion, self._end,
+                             self._local_send, self._local_recv, self._local_offer, self._local_choice,
+                             self._local_recursion, self._end,
                              self._call)
 
         return T(statement)
@@ -378,24 +386,14 @@ class Parser:
 
     def _local_choice(self) -> LocalChoice:
         """
-        local_choice        -> ("offer" "to" | "choice" "from") identifier local_branch ("or" local_branch)+
+        local_choice        -> "choice" "from" identifier local_branch ("or" local_branch)+
         """
-
-        def _offer_to() -> str:
-            self._match(TokenType.OFFER, TokenType.TO)
-
-            return 'offer'
-
-        def _choice_from() -> str:
-            self._match(TokenType.CHOICE, TokenType.FROM)
-
-            return 'choice'
 
         def _or_branch() -> LocalBranch:
             self._match(TokenType.OR)
             return self._local_branch()
 
-        op = self._or('"offer" "to" | "choice" "from"', _offer_to, _choice_from)
+        self._match(TokenType.CHOICE, TokenType.FROM)
 
         identifier = self._identifier()
 
@@ -403,7 +401,26 @@ class Parser:
 
         bn = one_or_many(_or_branch)
 
-        return LocalChoice(identifier, op, b, bn)
+        return LocalChoice(identifier, b, bn)
+
+    def _local_offer(self) -> LocalOffer:
+        """
+        local_offer         -> "offer" "to" identifier local_branch ("or" local_branch)+
+        """
+
+        def _or_branch() -> LocalBranch:
+            self._match(TokenType.OR)
+            return self._local_branch()
+
+        self._match(TokenType.OFFER, TokenType.TO)
+
+        identifier = self._identifier()
+
+        b = self._local_branch()
+
+        bn = one_or_many(_or_branch)
+
+        return LocalOffer(identifier, b, bn)
 
     def _local_recursion(self) -> LocalRecursion:
         """
@@ -494,16 +511,18 @@ class Parser:
 
     def _roles(self) -> Roles:
         """
-        roles               -> role "," role ("," role)*
+        roles               -> role ("," role)+
         """
+
+        def _comma_role():
+            self._match(TokenType.COMMA)
+
+            return self._role()
+
         roles: List[Role] = [self._role()]
 
-        self._match(TokenType.COMMA)
-
-        roles.append(self._role())
-
-        while self._matches(TokenType.COMMA):
-            roles.append(self._role())
+        for r in one_or_many(_comma_role):
+            roles.append(r)
 
         return Roles(roles)
 
@@ -601,7 +620,7 @@ class Parser:
     def _previous(self) -> Token:
         return self.tokens[self.current - 1]
 
-    def _throw(self, typ: str):
+    def _throw(self, typ: str) -> None:
         raise ParseError(f"Expected '{typ}' => {self.tokens[self.current]} <= ")
 
 

@@ -13,6 +13,12 @@ def project_file(file: str) -> List[str] | str:
     return Projector().project(ast)
 
 
+def project_global_protocol(file: str):
+    local_protocols = project_file(file)
+    for p in local_protocols:
+        project_file(p)
+
+
 def project_all_global_protocols():
     all_files = ImmutableList(os.listdir('../programs'))
     global_protocols = all_files.filter(
@@ -23,8 +29,5 @@ def project_all_global_protocols():
         for lp in local_protocols:
             project_file(lp)
 
-
-# files = run('../programs/OpServer.scr')
-# for f in files:
-#    run(f)
-project_all_global_protocols()
+#project_all_global_protocols()
+project_global_protocol('../programs/TwoBuyers.scr')
