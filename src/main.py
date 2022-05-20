@@ -13,10 +13,10 @@ def project_file(file: str) -> List[str] | str:
     return Projector().project(ast)
 
 
-def project_single_file(file: str):
-    files = project_file(file)
-    for f in files:
-        project_file(f)
+def project_global_protocol(file: str):
+    local_protocols = project_file(file)
+    for p in local_protocols:
+        project_file(p)
 
 
 def project_all_global_protocols():
@@ -29,6 +29,5 @@ def project_all_global_protocols():
         for lp in local_protocols:
             project_file(lp)
 
-
-project_all_global_protocols()
-#project_single_file('../programs/OpServer.scr')
+#project_all_global_protocols()
+project_global_protocol('../programs/TwoBuyers.scr')

@@ -620,7 +620,7 @@ class Parser:
     def _previous(self) -> Token:
         return self.tokens[self.current - 1]
 
-    def _throw(self, typ: str):
+    def _throw(self, typ: str) -> None:
         raise ParseError(f"Expected '{typ}' => {self.tokens[self.current]} <= ")
 
 

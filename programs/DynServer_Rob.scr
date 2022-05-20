@@ -1,15 +1,15 @@
 type <int> as n;
-local protocol DynServer at Rob(role Sy,role Rob) { 
-choice from Sy {
-@neg;
-Num(n) to Sy;
-Num(n) from Sy;
-End;
-} or {
-@add;
-Num(n) to Sy;
-Num(n) to Sy;
-Num(n) from Sy;
-End;
-}
+local protocol DynServer at Rob(role Sy,role Rob) {
+    choice from Sy {
+        @neg;
+        Num(n) to Sy;
+        Num(n) from Sy;
+        End;
+    } or {
+        @add;
+        Num(n) to Sy;
+        Num(n) to Sy;
+        Num(n) from Sy;
+        End;
+    }
 }

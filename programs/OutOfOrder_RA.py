@@ -1,8 +1,8 @@
 from context import *
 
-roles = {'self': ('localhost', 5000), 'RB': ('localhost', 5001), 'RC': ('localhost', 5002),}
+routing_table = {'self': ('localhost', 5000), 'RB': ('localhost', 5001), 'RC': ('localhost', 5002),}
 
-ch = Channel(Label["LOOP", Recv[int, 'RB', Recv[int, 'RC', "LOOP"]]], roles)
+ch = Channel(Label["LOOP", Recv[int, 'RB', Recv[int, 'RC', "LOOP"]]], routing_table)
 
 while True:
     a = ch.recv()

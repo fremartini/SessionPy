@@ -99,6 +99,8 @@ class Projector:
             case end if isinstance(end, End):
                 return 'End;'
 
+        raise Exception(f'unexpected {g.g}')
+
     def _project_global_interaction(self, gi: GlobalInteraction) -> str | None:
         """Project a GlobalInteraction AST node
 
@@ -148,7 +150,7 @@ class Projector:
         st = f'@{gb.label.label};\n{st}'
         return st
 
-    def _project_global_choice(self, gc: GlobalChoice) -> str | None:
+    def _project_global_choice(self, gc: GlobalChoice) -> str:
         """Project a GlobalChoice AST node
 
         Parameters
@@ -159,12 +161,11 @@ class Projector:
         Returns
         -------
         str
-            session type in format 'offer to / choice from ROLE {ST} or {ST} ...'
-        None
-            if the role is not part of the interaction
+            session type in format 'offer to / choice from ROLE {ST} or {ST} ...
+            or "End" if the role is not part of this interaction'
         """
         if self._current_role not in [gc.sender.identifier, gc.recipient.identifier]:
-            return None
+            return 'End;'
 
         if self._current_role == gc.sender.identifier:
             lines = f'offer to {gc.recipient.identifier} {{\n'
@@ -189,10 +190,8 @@ class Projector:
             session type in format 'rec {ST}'
         """
         lines = f'rec {gr.identifier.visit()} {{\n'
-        lines = ImmutableList(gr.g).map(lambda x: self._project_g(x)).filter(lambda x: x is not None).fold(
+        return ImmutableList(gr.g).map(lambda x: self._project_g(x)).filter(lambda x: x is not None).fold(
             lambda acc, x: acc + x + '\n', lines) + '}'
-
-        return lines
 
     def _project_l(self, protocol: L, typedefs: List[TypeDef]) -> str:
         """Write the projection of a local protocol to its corresponding Python file
@@ -259,6 +258,8 @@ class Projector:
                 return f'"{call}"'
             case end if isinstance(end, End):
                 return 'End'
+
+        raise Exception(f'unexpected {t.op}')
 
     def _project_local_send(self, ls: LocalSend) -> str:
         """Project a LocalSend AST node

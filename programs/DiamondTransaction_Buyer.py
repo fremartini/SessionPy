@@ -1,5 +1,4 @@
 from context import *
-from enum import Enum
 
 Price = int
 Catalogue = dict[int, Price]
@@ -10,7 +9,7 @@ yellow = 2
 
 roles = {'self': ('localhost', 5000), 'Seller': ('localhost', 5005), }
 
-ch = Channel(Send[str, 'Seller', Recv[Catalogue, 'Seller', Offer['Seller', {"purchase": Send[DiamondColor, 'Seller', Recv[str, 'Seller', End]], "reject": Recv[str, 'Seller', End]}]]], roles)
+ch = Channel(Send[str, 'Seller', Recv[dict, 'Seller', Choose['Seller', {"purchase": Send[DiamondColor, 'Seller', Recv[str, 'Seller', End]], "reject": Recv[str, 'Seller', End]}]]], routing_table)
 
 my_balance = 500_000  # USD
 

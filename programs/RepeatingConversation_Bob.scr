@@ -1,16 +1,16 @@
-local protocol RepeatingConversation at Bob(role Alice,role Bob) { 
-Greeting(str) from Alice;
-Response(str) to Alice;
-rec TALK {
-choice from Alice {
-@talk;
-Msg(str) to Alice;
-Msg(str) from Alice;
-continue TALK;
-} or {
-@stop;
-Msg(str) from Alice;
-End;
-}
-}
+local protocol RepeatingConversation at Bob(role Alice,role Bob) {
+    Greeting(str) from Alice;
+    Response(str) to Alice;
+    rec TALK {
+        choice from Alice {
+            @talk;
+            Msg(str) to Alice;
+            Msg(str) from Alice;
+            continue TALK;
+        } or {
+            @stop;
+            Msg(str) from Alice;
+            End;
+        }
+    }
 }
