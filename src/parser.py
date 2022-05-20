@@ -1,5 +1,6 @@
-from lexer import Token, TokenType
+from __future__ import annotations
 
+from lexer import Token, TokenType
 from typing import List, Callable, Any
 
 """
@@ -116,13 +117,13 @@ class BranchLabel:
 
 
 class LocalBranch:
-    def __init__(self, label: BranchLabel, t: List):
+    def __init__(self, label: BranchLabel, t: List[T]):
         self.label = label
         self.t = t
 
 
 class LocalRecursion:
-    def __init__(self, identifier: Identifier, t: List):
+    def __init__(self, identifier: Identifier, t: List[T]):
         self.identifier = identifier
         self.t = t
 
@@ -148,7 +149,7 @@ class LocalSend:
 
 
 class T:
-    def __init__(self, op: LocalSend | LocalRecv | LocalChoice | LocalRecursion | Call | str):
+    def __init__(self, op: LocalSend | LocalRecv | LocalChoice | LocalRecursion | End | Call):
         self.op = op
 
 
@@ -162,13 +163,13 @@ class L:
 
 
 class GlobalRecursion:
-    def __init__(self, identifier: Identifier, g: List):
+    def __init__(self, identifier: Identifier, g: List[G]):
         self.identifier = identifier
         self.g = g
 
 
 class GlobalBranch:
-    def __init__(self, label: BranchLabel, g: List):
+    def __init__(self, label: BranchLabel, g: List[G]):
         self.label = label
         self.g = g
 
@@ -190,7 +191,7 @@ class GlobalInteraction:
 
 
 class G:
-    def __init__(self, g: GlobalInteraction | GlobalChoice | GlobalRecursion | Call):
+    def __init__(self, g: GlobalInteraction | GlobalChoice | GlobalRecursion | End | Call):
         self.g = g
 
 
