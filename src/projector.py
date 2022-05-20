@@ -1,6 +1,7 @@
 from typing import Dict
 
 from parser import *
+from immutable_list import ImmutableList
 
 
 class Projector:
@@ -10,7 +11,6 @@ class Projector:
 
     def __init__(self):
         self._current_role = None
-        self._insert_loop = None
 
     def project(self, root: Protocol) -> List[str] | str:
         """Project the AST of a global or local protocol
@@ -57,7 +57,7 @@ class Projector:
 
                 # write typedefs
                 for typedef in typedefs:
-                    f.write(_project_typedef(typedef))
+                    f.write(f'{_project_typedef(typedef)}\n')
 
                 # write header
                 role_str = ''.join([f'role {x},' for x in roles])  # role X, role Y, role Z,
@@ -79,7 +79,7 @@ class Projector:
         Parameters
         ----------
         g: G
-            G AST node
+            AST node
 
         Returns
         -------
@@ -106,7 +106,7 @@ class Projector:
         Parameters
         ----------
         gi: GlobalInteraction
-            GlobalInteraction AST node
+            AST node
 
         Returns
         -------
@@ -133,14 +133,19 @@ class Projector:
         Parameters
         ----------
         gb: GlobalBranch
-            GlobalBranch AST node
+            AST node
 
         Returns
         -------
         str
             session type in format '@label; {ST}'
         """
-        st = ''.join([self._project_g(g) + '\n' for g in gb.g])
+        st = ''
+        for g in gb.g:
+            to_write = self._project_g(g)
+            if to_write is not None:
+                st = st + to_write + '\n'
+
         st = f'@{gb.label.label};\n{st}'
         return st
 
@@ -150,7 +155,7 @@ class Projector:
         Parameters
         ----------
         gc: GlobalChoice
-            GlobalChoice AST node
+            AST node
 
         Returns
         -------
@@ -167,15 +172,13 @@ class Projector:
         else:
             lines = f'choice from {gc.sender.identifier} {{\n'
 
-        lines = lines + self._project_global_branch(gc.b1)
-        lines = lines + '} or {\n'
-        lines = lines + self._project_global_branch(gc.b2)
+        lines = lines + self._project_global_branch(gc.b)
         lines = lines + '}'
 
         for c in gc.bn:
             lines = lines + ' or {\n'
             lines = lines + self._project_global_branch(c)
-            lines = lines + '}\n'
+            lines = lines + '}'
 
         return lines
 
@@ -185,7 +188,7 @@ class Projector:
         Parameters
         ----------
         gr: GlobalRecursion
-            GlobalRecursion AST node
+            AST node
 
         Returns
         -------
@@ -236,7 +239,7 @@ class Projector:
             f.write(f'routing_table = {routing_table}\n\n')
 
             # project the statements of the local protocol into a single session type
-            session_type = self._project_session_type(protocol.t)
+            session_type = self._project_session_type(protocol.t) + _closing_brackets(protocol.t)
             f.write(f'ch = Channel({session_type}, routing_table)\n')
 
         return file
@@ -247,7 +250,7 @@ class Projector:
         Parameters
         ----------
         t: T
-            T AST node
+            AST node
 
         Returns
         -------
@@ -274,7 +277,7 @@ class Projector:
         Parameters
         ----------
         ls: LocalSend
-            LocalSend AST node
+            AST node
 
         Returns
         -------
@@ -282,7 +285,7 @@ class Projector:
             session type in format 'Send[{TYP}, {ROLE}, {ST}'
         """
         typ = self._lookup_or_self(ls.message.payload.visit())
-        return f"Send[{typ}, '{ls.identifier.visit()}', {self._end()}"
+        return f"Send[{typ}, '{ls.identifier.visit()}', "
 
     def _project_local_recv(self, lr: LocalRecv) -> str:
         """Project a LocalSend AST node
@@ -290,7 +293,7 @@ class Projector:
         Parameters
         ----------
         lr: LocalRecv
-            LocalRecv AST node
+            AST node
 
         Returns
         -------
@@ -298,16 +301,7 @@ class Projector:
             session type in format 'Recv[{TYP}, {ROLE}, {ST}'
         """
         typ = self._lookup_or_self(lr.message.payload.visit())
-        return f"Recv[{typ}, '{lr.identifier.visit()}', {self._end()}"
-
-    def _end(self) -> str:
-        """Add the correct terminator to a session type depending on the context"""
-        if self._insert_loop:
-            return f'"{self._insert_loop.visit()}"'
-        elif self.insert_end:
-            return 'End'
-        else:
-            return ''
+        return f"Recv[{typ}, '{lr.identifier.visit()}', "
 
     def _project_local_branch(self, lb: LocalBranch) -> str:
         """Project a LocalBranch AST node
@@ -315,7 +309,7 @@ class Projector:
         Parameters
         ---------
         lb: LocalBranch
-            LocalBranch AST node
+            AST node
 
         Returns
         -------
@@ -330,10 +324,9 @@ class Projector:
         return st
 
     def _project_local_choice(self, c: LocalChoice) -> str:
-        b1 = self._project_local_branch(c.b1)
-        b2 = self._project_local_branch(c.b2)
+        b1 = self._project_local_branch(c.b)
         st = '{'
-        st = st + f'{b1}, {b2}'
+        st = st + f'{b1}'
         for b in c.bn:
             st = st + ', ' + self._project_local_branch(b)
         st = st + '}'
@@ -351,22 +344,16 @@ class Projector:
         Parameters
         ----------
         lr: LocalRecursion
-            LocalRecursion AST node
+            AST node
 
         Returns
         -------
         str
             session type in format 'Label["Label", {ST}]'
         """
-        st = ''
-        self.insert_end = False
-        for (idx, t) in enumerate(lr.t):
-            if idx == len(lr.t) - 1 and not isinstance(t.op, LocalChoice):
-                self._insert_loop = lr.identifier
-            st = st + self._project_t(t)
+        st = self._project_session_type(lr.t)
         st = st + _closing_brackets(lr.t)
 
-        self._insert_loop = None
         return f'Label["{lr.identifier.visit()}", {st}'
 
     def _project_session_type(self, ts: List[T]) -> str:
@@ -380,14 +367,9 @@ class Projector:
         Returns
         -------
         str
-            ts converted to a string
+            ts converted to a string without closing brackets
         """
-        st = ''
-        for (idx, t) in enumerate(ts):
-            self.insert_end = idx == len(ts) - 1 and not isinstance(t.op, LocalChoice)
-            st = st + self._project_t(t)
-        st = st + _closing_brackets(ts)
-        return st
+        return ImmutableList(ts).fold(lambda acc, t: acc + self._project_t(t), '')
 
     def _lookup_or_self(self, t: str) -> str:
         """Attempts a lookup for t in type_mappings
@@ -414,14 +396,14 @@ def _project_typedef(t: TypeDef) -> str:
     Parameters
     ----------
     t: TypeDef
-        TypeDef AST node that should be projected
+        AST node
 
     Returns
     -------
     str
         string representation of TypeDef AST node
     """
-    return f'type <{t.typ.visit()}> as {t.identifier.visit()};\n'
+    return f'type <{t.typ.visit()}> as {t.identifier.visit()};'
 
 
 def _project_call(c: Call) -> str:
@@ -430,7 +412,7 @@ def _project_call(c: Call) -> str:
     Parameters
     ----------
     c: Call
-        call AST node that should be projected
+        AST node
 
     Returns
     -------
@@ -453,13 +435,14 @@ def _closing_brackets(ts: List[T]) -> str:
     str
         the appropriate number of closing brackets based on ts
     """
-    braces = ''
-    for i in ts:
-        if isinstance(i.op, LocalChoice) or isinstance(i.op, GlobalChoice) or isinstance(i.op, End) or isinstance(i.op,
-                                                                                                                  Call):
-            continue
-        braces = braces + ']'
-    return braces
+    braces_to_insert = ImmutableList(ts).map(
+        lambda i:
+        isinstance(i.op, LocalChoice) or
+        isinstance(i.op, GlobalChoice) or
+        isinstance(i.op, End) or
+        isinstance(i.op, Call)).filter(lambda x: not x).len()
+
+    return ']' * braces_to_insert
 
 
 def _project_roles(me: str, roles: List[str]) -> str:
@@ -487,6 +470,6 @@ def _project_roles(me: str, roles: List[str]) -> str:
             to_append = f"'{role}': {address}, "
         lines = lines + to_append
 
-    lines = lines[:-1]  # remove trailing comma
+    lines = lines[:-2]  # remove trailing comma
     lines = lines + '}'
     return lines

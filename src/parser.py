@@ -1,24 +1,25 @@
-from lexer import Token, TokenType
+from __future__ import annotations
 
+from lexer import Token, TokenType
 from typing import List, Callable, Any
 
 """
 protocol            -> typedef* (P | L)
 
 P                   -> "global" "protocol" identifier "(" roles ")" "{" G* "}"
-G                   -> global_interaction | global_choice | global_recursion | call | end
+G                   -> global_interaction | global_choice | global_recursion | end | call
 
 global_interaction  -> message "from" identifier "to" identifier ";"
-global_choice       -> "choice" "from" identifier "to" identifier global_branch "or" global_branch ("or" global_branch)*
+global_choice       -> "choice" "from" identifier "to" identifier global_branch ("or" global_branch)+
 global_branch       -> "{" branch_label G* "}"
 global_recursion    -> "rec" identifier "{" G* "}"
 
 L                   -> "local" "protocol" identifier "at" identifier "(" roles ")" "{" T* "}"
-T                   -> local_send | local_recv | local_choice | local_recursion | call | end
+T                   -> local_send | local_recv | local_choice | local_recursion | end | call
 
 local_send          -> message "to" identifier ";"
 local_recv          -> message "from" identifier ";"
-local_choice        -> ("offer" "to" | "choice" "from") identifier local_branch "or" local_branch ("or" local_branch)*
+local_choice        -> ("offer" "to" | "choice" "from") identifier local_branch ("or" local_branch)+
 local_branch        -> "{" branch_label T* "}"
 local_recursion     -> "rec" identifier "{" T* "}"
 
@@ -116,23 +117,22 @@ class BranchLabel:
 
 
 class LocalBranch:
-    def __init__(self, label: BranchLabel, t: List):
+    def __init__(self, label: BranchLabel, t: List[T]):
         self.label = label
         self.t = t
 
 
 class LocalRecursion:
-    def __init__(self, identifier: Identifier, t: List):
+    def __init__(self, identifier: Identifier, t: List[T]):
         self.identifier = identifier
         self.t = t
 
 
 class LocalChoice:
-    def __init__(self, identifier: Identifier, op: str, b1: LocalBranch, b2: LocalBranch, bn: List[LocalBranch]):
+    def __init__(self, identifier: Identifier, op: str, b: LocalBranch, bn: List[LocalBranch]):
         self.identifier = identifier
         self.op = op
-        self.b1 = b1
-        self.b2 = b2
+        self.b = b
         self.bn = bn
 
 
@@ -149,7 +149,7 @@ class LocalSend:
 
 
 class T:
-    def __init__(self, op: LocalSend | LocalRecv | LocalChoice | LocalRecursion | Call | str):
+    def __init__(self, op: LocalSend | LocalRecv | LocalChoice | LocalRecursion | End | Call):
         self.op = op
 
 
@@ -163,24 +163,23 @@ class L:
 
 
 class GlobalRecursion:
-    def __init__(self, identifier: Identifier, g: List):
+    def __init__(self, identifier: Identifier, g: List[G]):
         self.identifier = identifier
         self.g = g
 
 
 class GlobalBranch:
-    def __init__(self, label: BranchLabel, g: List):
+    def __init__(self, label: BranchLabel, g: List[G]):
         self.label = label
         self.g = g
 
 
 class GlobalChoice:
-    def __init__(self, sender: Identifier, recipient: Identifier, b1: GlobalBranch, b2: GlobalBranch,
+    def __init__(self, sender: Identifier, recipient: Identifier, b: GlobalBranch,
                  bn: List[GlobalBranch]):
         self.sender = sender
         self.recipient = recipient
-        self.b1 = b1
-        self.b2 = b2
+        self.b = b
         self.bn = bn
 
 
@@ -192,7 +191,7 @@ class GlobalInteraction:
 
 
 class G:
-    def __init__(self, g: GlobalInteraction | GlobalChoice | GlobalRecursion | Call):
+    def __init__(self, g: GlobalInteraction | GlobalChoice | GlobalRecursion | End | Call):
         self.g = g
 
 
@@ -218,12 +217,18 @@ class Parser:
         return self._protocol()
 
     def _protocol(self) -> Protocol:
-        typedefs = _many(self._typedef)
+        """
+        protocol            -> typedef* (P | L)
+        """
+        typedefs = many(self._typedef)
         protocol: P | L = self._or('P | L', self._p, self._l)
 
         return Protocol(typedefs, protocol)
 
     def _p(self) -> P:
+        """
+        P                   -> "global" "protocol" identifier "(" roles ")" "{" G* "}"
+        """
         self._match(TokenType.GLOBAL, TokenType.PROTOCOL)
 
         protocol_name = self._identifier()
@@ -234,20 +239,26 @@ class Parser:
 
         self._match(TokenType.RIGHT_PARENS, TokenType.LEFT_BRACE)
 
-        g = _many(self._g)
+        g = many(self._g)
 
         self._match(TokenType.RIGHT_BRACE)
 
         return P(protocol_name, roles, g)
 
     def _g(self) -> G:
-        statement = self._or('global_interaction | global_choice | global_recursion | call | "End"',
-                             self._global_interaction, self._global_choice, self._global_recursion, self._call,
-                             self._end)
+        """
+        G                   -> global_interaction | global_choice | global_recursion | end | call
+        """
+        statement = self._or('global_interaction | global_choice | global_recursion | end | call',
+                             self._global_interaction, self._global_choice, self._global_recursion, self._end,
+                             self._call)
 
         return G(statement)
 
     def _global_interaction(self) -> GlobalInteraction:
+        """
+        global_interaction  -> message "from" identifier "to" identifier ";"
+        """
         message = self._message()
 
         self._match(TokenType.FROM)
@@ -263,17 +274,24 @@ class Parser:
         return GlobalInteraction(message, sender, recipient)
 
     def _global_branch(self) -> GlobalBranch:
+        """
+        global_branch       -> "{" branch_label G* "}"
+        """
         self._match(TokenType.LEFT_BRACE)
 
         label = self._branch_label()
 
-        gs = _many(self._g)
+        gs = many(self._g)
 
         self._match(TokenType.RIGHT_BRACE)
 
         return GlobalBranch(label, gs)
 
     def _global_choice(self) -> GlobalChoice:
+        """
+        global_choice       -> "choice" "from" identifier "to" identifier global_branch ("or" global_branch)+
+        """
+
         def _or_branch() -> GlobalBranch:
             self._match(TokenType.OR)
 
@@ -287,28 +305,33 @@ class Parser:
 
         recipient = self._identifier()
 
-        b1 = self._global_branch()
+        b = self._global_branch()
 
-        b2 = _or_branch()
+        bn = one_or_many(_or_branch)
 
-        bn = _many(_or_branch)
-
-        return GlobalChoice(sender, recipient, b1, b2, bn)
+        return GlobalChoice(sender, recipient, b, bn)
 
     def _global_recursion(self) -> GlobalRecursion:
+        """
+        global_recursion    -> "rec" identifier "{" G* "}"
+        """
+
         self._match(TokenType.REC)
 
         identifier = self._identifier()
 
         self._match(TokenType.LEFT_BRACE)
 
-        g = _many(self._g)
+        g = many(self._g)
 
         self._match(TokenType.RIGHT_BRACE)
 
         return GlobalRecursion(identifier, g)
 
     def _l(self) -> L:
+        """
+        L                   -> "local" "protocol" identifier "at" identifier "(" roles ")" "{" T* "}"
+        """
         self._match(TokenType.LOCAL, TokenType.PROTOCOL)
 
         protocol_name = self._identifier()
@@ -323,32 +346,41 @@ class Parser:
 
         self._match(TokenType.RIGHT_PARENS, TokenType.LEFT_BRACE)
 
-        t = _many(self._t)
+        t = many(self._t)
 
         self._match(TokenType.RIGHT_BRACE)
 
         return L(protocol_name, perspective, roles, t)
 
     def _t(self) -> T:
-        statement = self._or('local_send | local_recv | local_choice | local_recursion | call | "end"',
-                             self._local_send, self._local_recv, self._local_choice, self._local_recursion,
-                             self._call, self._end)
+        """
+        T                   -> local_send | local_recv | local_choice | local_recursion | end | call
+        """
+        statement = self._or('local_send | local_recv | local_choice | local_recursion | end | call',
+                             self._local_send, self._local_recv, self._local_choice, self._local_recursion, self._end,
+                             self._call)
 
         return T(statement)
 
     def _local_branch(self) -> LocalBranch:
-
+        """
+        local_branch        -> "{" branch_label T* "}"
+        """
         self._match(TokenType.LEFT_BRACE)
 
         label = self._branch_label()
 
-        ts = _many(self._t)
+        ts = many(self._t)
 
         self._match(TokenType.RIGHT_BRACE)
 
         return LocalBranch(label, ts)
 
     def _local_choice(self) -> LocalChoice:
+        """
+        local_choice        -> ("offer" "to" | "choice" "from") identifier local_branch ("or" local_branch)+
+        """
+
         def _offer_to() -> str:
             self._match(TokenType.OFFER, TokenType.TO)
 
@@ -367,28 +399,33 @@ class Parser:
 
         identifier = self._identifier()
 
-        b1 = self._local_branch()
+        b = self._local_branch()
 
-        b2 = _or_branch()
+        bn = one_or_many(_or_branch)
 
-        bn = _many(_or_branch)
-
-        return LocalChoice(identifier, op, b1, b2, bn)
+        return LocalChoice(identifier, op, b, bn)
 
     def _local_recursion(self) -> LocalRecursion:
+        """
+        local_recursion     -> "rec" identifier "{" T* "}"
+        """
+
         self._match(TokenType.REC)
 
         identifier = self._identifier()
 
         self._match(TokenType.LEFT_BRACE)
 
-        t = _many(self._t)
+        t = many(self._t)
 
         self._match(TokenType.RIGHT_BRACE)
 
         return LocalRecursion(identifier, t)
 
     def _local_send(self) -> LocalSend:
+        """
+        local_send          -> message "to" identifier ";"
+        """
         message = self._message()
 
         self._match(TokenType.TO)
@@ -400,6 +437,9 @@ class Parser:
         return LocalSend(message, identifier)
 
     def _local_recv(self) -> LocalRecv:
+        """
+        local_recv          -> message "from" identifier ";"
+        """
         message = self._message()
 
         self._match(TokenType.FROM)
@@ -411,7 +451,9 @@ class Parser:
         return LocalRecv(message, identifier)
 
     def _branch_label(self) -> BranchLabel:
-
+        """
+        branch_label        -> "@" identifier ";"
+        """
         self._match(TokenType.AT_SIGN)
 
         identifier = self._identifier()
@@ -421,6 +463,9 @@ class Parser:
         return BranchLabel(identifier)
 
     def _message(self) -> Message:
+        """
+        message             -> identifier "(" typ ")";
+        """
         label = self._identifier()
 
         self._match(TokenType.LEFT_PARENS)
@@ -432,6 +477,9 @@ class Parser:
         return Message(label, payload)
 
     def _typedef(self) -> TypeDef:
+        """
+        typedef             -> "type" "<" typ ">" "as" identifier ";"
+        """
         self._match(TokenType.TYPE, TokenType.LT)
 
         typ = self._typ()
@@ -445,6 +493,9 @@ class Parser:
         return TypeDef(typ, identifier)
 
     def _roles(self) -> Roles:
+        """
+        roles               -> role "," role ("," role)*
+        """
         roles: List[Role] = [self._role()]
 
         self._match(TokenType.COMMA)
@@ -457,17 +508,26 @@ class Parser:
         return Roles(roles)
 
     def _role(self) -> Role:
+        """
+        role                -> "role" identifier
+        """
         self._match(TokenType.ROLE)
 
         identifier = self._identifier()
         return Role(identifier)
 
     def _identifier(self) -> Identifier:
+        """
+        identifier          -> [A-Z] ([A-Z] | [a-z] | 0 - 9)*
+        """
         self._match(TokenType.IDENTIFIER)
 
         return Identifier(self._previous().literal)
 
     def _typ(self) -> Typ:
+        """
+        typ                 -> identifier ( "[" identifier ("," identifier)* "]" )?
+        """
         identifier = self._identifier()
         parameter: None | Identifier = None
 
@@ -482,6 +542,9 @@ class Parser:
         return Typ(identifier, parameter)
 
     def _call(self) -> Call:
+        """
+        call                -> "continue" identifier ";"
+        """
         self._match(TokenType.CONTINUE)
 
         identifier = self._identifier()
@@ -491,6 +554,9 @@ class Parser:
         return Call(identifier)
 
     def _end(self) -> End:
+        """
+        end                 -> "End" ";"
+        """
         self._match(TokenType.END, TokenType.SEMICOLON)
 
         return End()
@@ -539,7 +605,23 @@ class Parser:
         raise ParseError(f"Expected '{typ}' => {self.tokens[self.current]} <= ")
 
 
-def _many(rule: Callable) -> List:
+def zero_or_one(rule: Callable) -> Any | None:
+    try:
+        return rule()
+    except:
+        return None
+
+
+def one_or_many(rule: Callable) -> List:
+    matches = [rule()]
+
+    for m in many(rule):
+        matches.append(m)
+
+    return matches
+
+
+def many(rule: Callable) -> List:
     matches = []
 
     while True:
