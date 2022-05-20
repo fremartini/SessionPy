@@ -57,7 +57,7 @@ class Projector:
 
                 # write typedefs
                 for typedef in typedefs:
-                    f.write(_project_typedef(typedef))
+                    f.write(f'{_project_typedef(typedef)}\n')
 
                 # write header
                 role_str = ''.join([f'role {x},' for x in roles])  # role X, role Y, role Z,
@@ -97,6 +97,8 @@ class Projector:
                 return self._project_global_recursion(global_recursion)
             case call if isinstance(call, Call):
                 return _project_call(call)
+            case end if isinstance(end, End):
+                return 'End;'
 
     def _project_global_interaction(self, gi: GlobalInteraction) -> str | None:
         """Project a GlobalInteraction AST node
@@ -138,14 +140,13 @@ class Projector:
         str
             session type in format '@label; {ST}'
         """
-        st = ''.join([self._project_g(g) + '\n' for g in gb.g])
+        st = ''
+        for g in gb.g:
+            to_write = self._project_g(g)
+            if to_write is not None:
+                st = st + to_write + '\n'
 
-        if isinstance(gb.terminator, End):
-            terminator = 'End;'
-        else:
-            terminator = _project_call(gb.terminator)
-
-        st = f'@{gb.label.label};\n{st}{terminator}\n'
+        st = f'@{gb.label.label};\n{st}'
         return st
 
     def _project_global_choice(self, gc: GlobalChoice) -> str | None:
@@ -202,14 +203,7 @@ class Projector:
             if to_write is not None:
                 lines = lines + to_write + '\n'
 
-        if isinstance(gr.terminator, End):
-            terminator = 'End;'
-        elif isinstance(gr.terminator, Call):
-            terminator = f'continue {gr.terminator};'
-        else:
-            terminator = ''
-
-        lines = lines + terminator + '\n}'
+        lines = lines + '}'
 
         return lines
 
@@ -274,6 +268,8 @@ class Projector:
                 return self._project_local_recursion(local_recursion)
             case call if isinstance(call, Call):
                 return f'"{call}"'
+            case end if isinstance(end, End):
+                return 'End'
 
     def _project_local_send(self, ls: LocalSend) -> str:
         """Project a LocalSend AST node
@@ -324,12 +320,7 @@ class Projector:
         for t in lb.t:
             st = st + self._project_t(t)
 
-        if isinstance(lb.terminator, End):
-            terminator = 'End'
-        else:
-            terminator = f'"{lb.terminator}"'
-
-        st = st + terminator + _closing_brackets(lb.t)
+        st = st + _closing_brackets(lb.t)
         return st
 
     def _project_local_choice(self, c: LocalChoice) -> str:
@@ -361,15 +352,7 @@ class Projector:
             session type in format 'Label["Label", {ST}]'
         """
         st = self._project_session_type(lr.t)
-
-        if isinstance(lr.terminator, End):
-            terminator = 'End'
-        elif isinstance(lr.terminator, Call):
-            terminator = f'"{lr.terminator}"'
-        else:
-            terminator = ''
-
-        st = st + terminator + _closing_brackets(lr.t)
+        st = st + _closing_brackets(lr.t)
 
         return f'Label["{lr.identifier.visit()}", {st}'
 
@@ -386,7 +369,7 @@ class Projector:
         str
             ts converted to a string without closing brackets
         """
-        return ImmutableList.of_list(ts).fold(lambda acc, t: acc + self._project_t(t), '')
+        return ImmutableList(ts).fold(lambda acc, t: acc + self._project_t(t), '')
 
     def _lookup_or_self(self, t: str) -> str:
         """Attempts a lookup for t in type_mappings
@@ -420,7 +403,7 @@ def _project_typedef(t: TypeDef) -> str:
     str
         string representation of TypeDef AST node
     """
-    return f'type <{t.typ.visit()}> as {t.identifier.visit()};\n'
+    return f'type <{t.typ.visit()}> as {t.identifier.visit()};'
 
 
 def _project_call(c: Call) -> str:
@@ -452,7 +435,7 @@ def _closing_brackets(ts: List[T]) -> str:
     str
         the appropriate number of closing brackets based on ts
     """
-    braces_to_insert = ImmutableList.of_list(ts).map(
+    braces_to_insert = ImmutableList(ts).map(
         lambda i:
         isinstance(i.op, LocalChoice) or
         isinstance(i.op, GlobalChoice) or
@@ -487,6 +470,6 @@ def _project_roles(me: str, roles: List[str]) -> str:
             to_append = f"'{role}': {address}, "
         lines = lines + to_append
 
-    lines = lines[:-1]  # remove trailing comma
+    lines = lines[:-2]  # remove trailing comma
     lines = lines + '}'
     return lines

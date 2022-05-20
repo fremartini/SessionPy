@@ -13,17 +13,13 @@ class ImmutableList(Generic[T]):
             _list = []
         self._internal_list: List[T] = _list
 
-    @staticmethod
-    def of_list(elements: List[T]) -> ImmutableList[T]:
-        return ImmutableList(_list=elements)
-
     def len(self) -> int:
         return len(self._internal_list)
 
     def add(self, e) -> ImmutableList[T]:
         c = self._internal_list.copy()
         c.append(e)
-        return ImmutableList.of_list(c)
+        return ImmutableList(c)
 
     def head(self) -> T:
         if len(self._internal_list) == 0:
@@ -47,7 +43,7 @@ class ImmutableList(Generic[T]):
     def discard_last(self) -> ImmutableList[T]:
         c = self._internal_list.copy()
         c.pop()
-        return ImmutableList.of_list(c)
+        return ImmutableList(c)
 
     def map(self, f: Callable[[T], K]) -> ImmutableList[K]:
         return self.fold(lambda acc, x: acc.add(f(x)), ImmutableList())
