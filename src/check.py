@@ -57,7 +57,7 @@ class TypeChecker(NodeVisitor):
         params = [(name, (typ if not isinstance(typ, SessionStub) else self.build_session_type(typ.stub))) for
                   (name, typ) in params]
         function_type: ImmutableList[Tuple[str, type]] = \
-            ImmutableList.of_list(params).map(lambda tp: tp[1]).add(expected_return_type)
+            ImmutableList(params).map(lambda tp: tp[1]).add(expected_return_type)
 
         self.env().bind_func(node.name, function_type.items())
         self.dup()
@@ -186,7 +186,7 @@ class TypeChecker(NodeVisitor):
         return self.visit(node.returns) if node.returns else Any
 
     def get_function_args(self, args) -> ImmutableList:
-        return ImmutableList.of_list([self.visit(arg) for arg in args])
+        return ImmutableList([self.visit(arg) for arg in args])
 
     def get_current_function_return_type(self):
         current_function: FunctionDef = self.in_functions.last()
@@ -239,8 +239,6 @@ class TypeChecker(NodeVisitor):
                     pick = node.args[0].value
                 new_nd = None
                 for edge in nd.outgoing:
-                    expect(isinstance(edge, BranchEdge), 
-                        f"choose was called where {edge.action} was expected", node)
                     if pick == edge.key:
                         new_nd = nd.outgoing[edge]
                         break
@@ -389,7 +387,7 @@ class TypeChecker(NodeVisitor):
                 name = node.func.id
                 expect(isinstance(name, str), f"Expecting call to a function, got {name}", node, UnexpectedInternalBehaviour)
                 return self.call_to_function_affecting_sessiontype(node, name)
-            signature = ImmutableList.of_list(call_func)
+            signature = ImmutableList(call_func)
             return_type = signature.last()
             call_func = signature.discard_last()
             func_name = node.func.attr if isinstance(node.func, Attribute) else node.func.id
@@ -588,7 +586,7 @@ class TypeChecker(NodeVisitor):
             else:
                 lookup_able = name
                 expect(is_container(lookup_able),
-                    f"Subscript annotation only allowed on container/subcript types",
+                    f"Subscript annotation only allowed on container/subscript types",
                     node, UnexpectedInternalBehaviour)
                 if is_dictionary(lookup_able):
                     key_typ = self.visit(node.slice)
