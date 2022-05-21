@@ -239,8 +239,6 @@ class TypeChecker(NodeVisitor):
                     pick = node.args[0].value
                 new_nd = None
                 for edge in nd.outgoing:
-                    expect(isinstance(edge, BranchEdge), 
-                        f"choose was called where {edge.action} was expected", node)
                     if pick == edge.key:
                         new_nd = nd.outgoing[edge]
                         break
@@ -588,7 +586,7 @@ class TypeChecker(NodeVisitor):
             else:
                 lookup_able = name
                 expect(is_container(lookup_able),
-                    f"Subscript annotation only allowed on container/subcript types",
+                    f"Subscript annotation only allowed on container/subscript types",
                     node, UnexpectedInternalBehaviour)
                 if is_dictionary(lookup_able):
                     key_typ = self.visit(node.slice)

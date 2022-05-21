@@ -79,8 +79,7 @@ def fail_if_cannot_cast(a: type, b: type, err: str) -> None:
     types_differ = a != b
     can_downcast: bool = can_downcast_to(a, b)  # any -> int
     can_upcast: bool = can_upcast_to(a, b)  # int -> any
-
-    fail_if(types_differ and not (can_upcast or can_downcast), err)
+    expect(not types_differ or (can_upcast or can_downcast), err)
 
 
 def union(t1: Typ, t2: Typ) -> Typ:
