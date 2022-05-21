@@ -240,13 +240,10 @@ class TypeChecker(NodeVisitor):
 
         target = self.visit(node.targets[0])
 
-        print('target is', target)
         if is_session_type(node.value):
             self.bind_session_type(node.value, target)
         else:
-
             value = self.visit(node.value)
-            print(ast.unparse(node.value), '->', value)
             if isinstance(node.value, ast.Tuple):
                 value = parameterize(Tuple, value)
             if self.is_dictionary(target):
@@ -258,7 +255,6 @@ class TypeChecker(NodeVisitor):
     def visit_AnnAssign(self, node: AnnAssign) -> None:
         debug_print('visit_AnnAssign', dump(node))
         target: str = self.visit(node.target)
-        print('ann: target is', target)
         if is_session_type(node.value):
             self.bind_session_type(node.value, target)
         else:
