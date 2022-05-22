@@ -1,6 +1,7 @@
-type <List[int]> as workload;
+type <List[str]> as workload;
+type <Dict[str, int]> as result;
 local protocol MapReduce at c3(role Distributor,role c1,role c2,role c3) {
-    Work(workload) from Distributor;
-    Res(int) to Distributor;
-    End;
+Work(workload) from Distributor;
+Res(result) to Distributor;
+End;
 }

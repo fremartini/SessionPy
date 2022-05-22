@@ -1,18 +1,15 @@
-import random
-import time
-
 from context import *
 
-routing_table = {'Distributor': ('localhost', 5000), 'c1': ('localhost', 5001), 'c2': ('localhost', 5002), 'self': ('localhost', 5003),}
+routing_table = {'Distributor': ('localhost', 5000), 'c1': ('localhost', 5001), 'c2': ('localhost', 5002),
+                 'self': ('localhost', 5003)}
 
-ch = Channel(Recv[List[int], 'Distributor', Send[int, 'Distributor', End]], routing_table)
+ch = Channel(Recv[List[str], 'Distributor', Send[Dict[str, int], 'Distributor', End]], routing_table)
 
-workload = ch.recv()
+words: List[str] = ch.recv()
 
-print(workload)
+mapping: Dict[str, int] = {}
 
-time.sleep(random.randint(3, 9))
+for w in words:
+    mapping[w] = mapping.get(w, 0) + 1
 
-print('sending')
-
-ch.send(random.randint(50, 100))
+ch.send(mapping)
