@@ -46,6 +46,18 @@ class TypeChecker(NodeVisitor):
                         err_msg += f'\n- {str(edge)}'
                     failing_channels.append(err_msg)
         expect(not failing_channels, '\n'.join(failing_channels))
+        if failing_channels:
+            msgs = '\n'.join(failing_channels)
+            raise SessionException(msgs)
+
+    def is_builtin(self, typ):
+        return typ in sys.builtin_module_names or \
+               isinstance(typ, BuiltinFunctionType) or \
+               isinstance(typ, BuiltinMethodType) or \
+               isinstance(typ, ModuleType)
+
+    def is_dictionary(self, typ):
+        return isinstance(typ, ContainerType) and typ._name == 'Dict'
 
     def process_function(self, node: FunctionDef) -> Typ:
         self.in_functions = self.in_functions.add(node)
@@ -110,9 +122,9 @@ class TypeChecker(NodeVisitor):
                             f'function <{func_name}> got {param}={type_to_str(arg)} where it expected {param}={type_to_str(typ)}')
                 if isinstance(arg, Node):
                     expect(isinstance(param, str), f"Expecting parameter to be a string, got {param}",
-                        node, StaticTypeError)
+                           node, StaticTypeError)
                     expect(isinstance(typ, SessionStub), f"Expecting annotated type being a stub, got {typ}",
-                        node)
+                           node)
                     node_stub = self.build_session_type(typ.stub)
                     expect(arg == node_stub, f'function <{func_name}> received ill-typed session', node)
 
@@ -137,7 +149,7 @@ class TypeChecker(NodeVisitor):
             types_differ: bool = expected_type != actual_type
             can_upcast: bool = actual_type == expected_type or can_upcast_to(actual_type, expected_type)
             expect(not types_differ and can_upcast,
-                    f'function <{func_name}> expected {parameters}, got {arguments}', exc=StaticTypeError)
+                   f'function <{func_name}> expected {parameters}, got {arguments}', exc=StaticTypeError)
 
     def validate_loop(self, node: While | For):
         pre_channels = self.env().get_kind(Node)
@@ -154,16 +166,16 @@ class TypeChecker(NodeVisitor):
             post_channels = [chs[1] for chs in post_channels]
             for post_chan in post_channels:
                 chan_id = post_chan.identifier
-                expect(chan_id in self.env().loop_entrypoints or chan_id in self.env().loop_breakpoints, 
-                    f'loop error: needs to {post_chan.outgoing_action()} {post_chan.outgoing_type()}', 
-                        node)
+                expect(chan_id in self.env().loop_entrypoints or chan_id in self.env().loop_breakpoints,
+                       f'loop error: needs to {post_chan.outgoing_action()} {post_chan.outgoing_type()}',
+                       node)
 
     def process_and_substitute(self, node):
         stubs = self.env().get_kind(SessionStub)
         channel_str = ast.unparse(node) if isinstance(node, Subscript) else node  # 'Channel[Send[..., <Alias>]]'
         expect(isinstance(channel_str, str), \
-            f"Expected unparsed node, or parsed node, to be of string type, got '{channel_str}'", \
-            node, UnexpectedInternalBehaviour)
+               f"Expected unparsed node, or parsed node, to be of string type, got '{channel_str}'", \
+               node, UnexpectedInternalBehaviour)
         for key, val in stubs:
             channel_str = channel_str.replace(key, val.stub)
         return channel_str
@@ -211,7 +223,7 @@ class TypeChecker(NodeVisitor):
         if isinstance(out_edge, Transition) and isinstance(out_edge.typ, str):
             aliased_typ = self.env().lookup_or_self(out_edge.typ)
             expect(isinstance(aliased_typ, Typ), f"aliased type in transition should be a Typ, got {aliased_typ}", \
-                node, UnexpectedInternalBehaviour)
+                   node, UnexpectedInternalBehaviour)
             out_edge.typ = aliased_typ
         res = Any
         match op:
@@ -227,8 +239,8 @@ class TypeChecker(NodeVisitor):
                 expect(valid_action, f'expected a {nd.outgoing_action()}, but send was called', node)
                 valid_condition = valid_typ or argument == NoneType or is_builtin_or_module_type(argument)
                 expect(valid_condition, \
-                    f'expected to send a {type_to_str(nd.outgoing_type())}, got {type_to_str(argument)}', \
-                        node)
+                       f'expected to send a {type_to_str(nd.outgoing_type())}, got {type_to_str(argument)}', \
+                       node)
                 next_nd = nd.next_nd()
                 self.env().bind_var(ch_name, next_nd)
             case 'offer':
@@ -385,7 +397,8 @@ class TypeChecker(NodeVisitor):
                 any(isinstance(x, Node) for x in provided_args)
             if contains_bound_channel:
                 name = node.func.id
-                expect(isinstance(name, str), f"Expecting call to a function, got {name}", node, UnexpectedInternalBehaviour)
+                expect(isinstance(name, str), f"Expecting call to a function, got {name}", node,
+                       UnexpectedInternalBehaviour)
                 return self.call_to_function_affecting_sessiontype(node, name)
             signature = ImmutableList(call_func)
             return_type = signature.last()
@@ -466,16 +479,16 @@ class TypeChecker(NodeVisitor):
             for (ch1, nd1), (ch2, nd2) in zip(channels, chans1):
                 # This is the scenario after and if-then-else block
                 valid = nd1.accepting and nd2.accepting or nd1.identifier == nd2.identifier
-                expect(ch1 != ch2 or valid, 
-                    f'after conditional block, channel <{ch1}> ended up in two different states',
-                    node)
+                expect(ch1 != ch2 or valid,
+                       f'after conditional block, channel <{ch1}> ended up in two different states',
+                       node)
         elif channels:
             latest = self.env()
             for (ch, nd) in channels:
                 ch1 = latest.lookup_var(ch)
                 expect(nd.identifier == ch1.identifier, \
-                    'then-block without else should not affect any session types',
-                    node)
+                       'then-block without else should not affect any session types',
+                       node)
         self.env().loop_breakpoints = self.env().loop_breakpoints.intersection(then_breakpoints)
         self.env().loop_depth = current_loop_depth
         for (ch, nd) in channels:
@@ -514,26 +527,26 @@ class TypeChecker(NodeVisitor):
                 self.env().bind_var(ch_name, nd)
                 new_nd = None
                 for edge in nd.outgoing:
-                    expect(isinstance(edge, BranchEdge), 
-                        f"Outgoing edges should be BranchEdges, got {edge}",
-                        node, UnexpectedInternalBehaviour)
+                    expect(isinstance(edge, BranchEdge),
+                           f"Outgoing edges should be BranchEdges, got {edge}",
+                           node, UnexpectedInternalBehaviour)
                     if branch_pick == edge.key:
-                        expect(branch_pick in offers, 
-                            f"Case '{branch_pick}' already visited", 
-                            node)
+                        expect(branch_pick in offers,
+                               f"Case '{branch_pick}' already visited",
+                               node)
                         offers.remove(branch_pick)
                         new_nd = nd.outgoing[edge]
                         break
                 expect(new_nd, \
-                    f"Case option '{ast.unparse(match_value)}' not an available offer", \
-                    node)
+                       f"Case option '{ast.unparse(match_value)}' not an available offer", \
+                       node)
                 self.env().bind_var(ch_name, new_nd)
                 self.visit_statements(case.body)
                 self.validate_post_conditions()
 
             expect(not offers, \
-                f"Match cases were not exhaustive; paths not covered: {', '.join(offers)}",
-                node) 
+                   f"Match cases were not exhaustive; paths not covered: {', '.join(offers)}",
+                   node)
 
         else:
             for mc in node.cases:
@@ -586,8 +599,8 @@ class TypeChecker(NodeVisitor):
             else:
                 lookup_able = name
                 expect(is_container(lookup_able),
-                    f"Subscript annotation only allowed on container/subscript types",
-                    node, UnexpectedInternalBehaviour)
+                       f"Subscript annotation only allowed on container/subscript types",
+                       node, UnexpectedInternalBehaviour)
                 if is_dictionary(lookup_able):
                     key_typ = self.visit(node.slice)
                     if key_typ == NoneType:
@@ -595,12 +608,10 @@ class TypeChecker(NodeVisitor):
                     elif isinstance(key_typ, str):
                         key_typ = self.env().lookup_or_self(key_typ)
                     kv = lookup_able.__args__
-                    if kv[0] == key_typ:
-                        return kv[1]
-                    else:
-                        raise StaticTypeError(
-                            f'dictionary got key of type {type_to_str(key_typ)} where {type_to_str(kv[0])} was expected',
-                            node)
+                    expect(kv[0] == key_typ,
+                           f'dictionary got key of type {type_to_str(key_typ)} where {type_to_str(kv[0])} was expected',
+                           node, StaticTypeError)
+                    return Dict[kv[0], kv[1]]
 
     def visit_Tuple(self, node: ast.Tuple) -> list:
         debug_print('visit_Tuple', dump(node))
@@ -624,7 +635,6 @@ class TypeChecker(NodeVisitor):
 visited_files: dict[str, object] = {}
 
 
-
 def is_builtin_or_module_type(typ):
     return typ in sys.builtin_module_names or \
            isinstance(typ, BuiltinFunctionType) or \
@@ -643,6 +653,7 @@ def is_dictionary(typ: Typ):
 def is_session_type(node: expr) -> bool:
     def check_subscript(node) -> bool:
         return isinstance(node, Subscript) and isinstance(node.value, Name) and node.value.id == 'Channel'
+
     return isinstance(node, Call) and check_subscript(node.func)
 
 
@@ -664,13 +675,24 @@ def typecheck_file():
 def typecheck_function(function_def):
     function_src: str = dedent(inspect.getsource(function_def))
     module: Module = ast.parse(function_src)
-    expect(len(module.body) == 1, 
-        "Only expecting one element: a FunctionDef",
-        function_def, UnexpectedInternalBehaviour)
+    assert len(module.body) == 1, "Only expecting one element: a FunctionDef"
     function_ast = module.body[0]
-    expect(isinstance(function_ast, FunctionDef), 
-        "Decorator called on non-FunctionDef",
-        function_def, UnexpectedInternalBehaviour)
+    assert isinstance(function_ast, FunctionDef), "Decorator called on non-FunctionDef"
+    typechecker: TypeChecker = TypeChecker(function_ast)
+    typechecker.run()
+    return function_def
+
+
+def typecheck_function(function_def):
+    function_src: str = dedent(inspect.getsource(function_def))
+    module: Module = ast.parse(function_src)
+    expect(len(module.body) == 1,
+           "Only expecting one element: a FunctionDef",
+           function_def, UnexpectedInternalBehaviour)
+    function_ast = module.body[0]
+    expect(isinstance(function_ast, FunctionDef),
+           "Decorator called on non-FunctionDef",
+           function_def, UnexpectedInternalBehaviour)
     typechecker: TypeChecker = TypeChecker(function_ast)
     typechecker.run()
     return function_def
