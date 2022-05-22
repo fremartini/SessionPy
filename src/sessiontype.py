@@ -40,8 +40,6 @@ class End(SessionType):
     ...
 
 
-
-
 STR_ST_MAPPING = {
     'recv': Recv,
     'send': Send,

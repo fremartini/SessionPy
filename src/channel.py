@@ -4,7 +4,7 @@ from threading import Thread
 from types import GenericAlias
 from typing import Any, Dict
 import pickle
-from lib import type_to_str
+from lib import expect, type_to_str
 from sessiontype import *
 import socket
 from stack import Stack
@@ -207,9 +207,10 @@ class Channel(Generic[T]):
             case action.BRANCH:
                 if not action == next_action:
                     raise RuntimeError(f'Expected to {expected_action}, choose/offer was called')
-
                 for edge in self.session_type.outgoing:
-                    assert isinstance(edge, BranchEdge)
+                    expect(isinstance(edge, BranchEdge),
+                        f"Outgoing edges should be BranchEdge, got {edge}",
+                        exc=RuntimeError)
                     if edge.key == message:
                         self.session_type = self.session_type.outgoing[edge]
                         break

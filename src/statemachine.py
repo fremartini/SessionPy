@@ -6,7 +6,7 @@ from typing import ForwardRef, Any, Iterable, Tuple
 import typing
 import sessiontype
 
-from lib import Typ, parameterize, str_to_typ, type_to_str
+from lib import Typ, parameterize, str_to_typ, type_to_str, SessionException
 from sessiontype import *
 
 A = TypeVar('A')
@@ -404,7 +404,7 @@ class STParser(NodeVisitor):
         return root
 
 
-def print_node(n: Node, title='') -> None:
+def print_node(n: Node) -> None:
     if not n.outgoing:
         return
     print(n)

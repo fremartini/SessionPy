@@ -29,12 +29,9 @@ def project_all_global_protocols():
     global_protocols = all_files.filter(
         lambda file: file.endswith('.scr') and '_' not in file)
 
-    for gb in global_protocols:
-        local_protocols = project_file(f'../programs/{gb}')
-        for lp in local_protocols:
-            project_file(lp)
+    global_protocols.map(lambda file: project_global_protocol(f'../programs/{file}'))
 
 
 # project_all_global_protocols()
 project_global_protocol('../programs/TwoBuyers.scr')
-project_many('../programs/RepeatingConversation_Alice.scr', '../programs/RepeatingConversation_Bob.scr')
+# project_many('../programs/RepeatingConversation_Alice.scr', '../programs/RepeatingConversation_Bob.scr')

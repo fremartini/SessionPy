@@ -6,38 +6,38 @@ from lib import read_src_from_file
 
 class TokenType(Enum):
     # single character tokens
-    LEFT_PARENS = auto(),
-    RIGHT_PARENS = auto(),
-    LEFT_BRACE = auto(),
-    RIGHT_BRACE = auto(),
-    LEFT_BRACKET = auto(),
-    RIGHT_BRACKET = auto(),
-    SEMICOLON = auto(),
-    EOF = auto(),
-    COMMA = auto(),
-    LT = auto(),
-    GT = auto(),
-    AT_SIGN = auto(),
+    LEFT_PARENS = auto()
+    RIGHT_PARENS = auto()
+    LEFT_BRACE = auto()
+    RIGHT_BRACE = auto()
+    LEFT_BRACKET = auto()
+    RIGHT_BRACKET = auto()
+    SEMICOLON = auto()
+    EOF = auto()
+    COMMA = auto()
+    LT = auto()
+    GT = auto()
+    AT_SIGN = auto()
 
     # keywords
-    GLOBAL = auto(),
-    LOCAL = auto(),
-    PROTOCOL = auto(),
-    ROLE = auto(),
-    FROM = auto(),
+    GLOBAL = auto()
+    LOCAL = auto()
+    PROTOCOL = auto()
+    ROLE = auto()
+    FROM = auto()
     TO = auto()
-    CHOICE = auto(),
-    OFFER = auto(),
-    AS = auto(),
-    AT = auto(),
-    OR = auto(),
-    END = auto(),
-    TYPE = auto(),
-    REC = auto(),
-    CONTINUE = auto(),
+    CHOICE = auto()
+    OFFER = auto()
+    AS = auto()
+    AT = auto()
+    OR = auto()
+    END = auto()
+    TYPE = auto()
+    REC = auto()
+    CONTINUE = auto()
 
     # types
-    IDENTIFIER = auto(),
+    IDENTIFIER = auto()
 
     def __str__(self):
         return self.name
