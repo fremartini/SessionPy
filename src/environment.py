@@ -16,6 +16,7 @@ class Category(Enum):
 def empty() -> dict:
     return {cat: {} for cat in list(Category)}
 
+
 class Environment:
     def __init__(self, env: dict = None):
         if env is None:
@@ -24,7 +25,6 @@ class Environment:
         self.loop_depth = 0
         self.loop_entrypoints = set()
         self.loop_breakpoints = set()
-
 
     def lookup_var(self, v: str) -> Typ:
         if v in self.environment[Category.VARIABLE]:
@@ -58,7 +58,6 @@ class Environment:
             return self.lookup_func(k)
         except EnvironmentError:
             return default
-
 
     def bind_var(self, var: str, typ: Typ) -> None:
         self.environment[Category.VARIABLE][var] = typ

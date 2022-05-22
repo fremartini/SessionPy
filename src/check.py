@@ -84,9 +84,9 @@ class TypeChecker(NodeVisitor):
         self.in_functions = self.in_functions.tail()
         return function_type.items()
 
-    def visit_statements(self, stms: List[stmt]):
+    def visit_statements(self, statements: List[stmt]):
         current_loop_depth = self.env().loop_depth
-        for stm in stms:
+        for stm in statements:
             self.visit(stm)
             if current_loop_depth > self.env().loop_depth:
                 break
@@ -147,7 +147,7 @@ class TypeChecker(NodeVisitor):
                 _, expected_type = self.env().lookup(expected_type)
 
             types_differ: bool = expected_type != actual_type
-            can_upcast: bool = actual_type == expected_type or can_upcast_to(actual_type, expected_type)
+            can_upcast: bool = actual_type == expected_type or expected_type == Any
             expect(not types_differ and can_upcast,
                    f'function <{func_name}> expected {parameters}, got {arguments}', exc=StaticTypeError)
 
@@ -173,9 +173,7 @@ class TypeChecker(NodeVisitor):
     def process_and_substitute(self, node):
         stubs = self.env().get_kind(SessionStub)
         channel_str = ast.unparse(node) if isinstance(node, Subscript) else node  # 'Channel[Send[..., <Alias>]]'
-        expect(isinstance(channel_str, str), \
-               f"Expected unparsed node, or parsed node, to be of string type, got '{channel_str}'", \
-               node, UnexpectedInternalBehaviour)
+        expect(isinstance(channel_str, str), f"Expected unparsed node, or parsed node, to be of string type, got '{channel_str}'", node, UnexpectedInternalBehaviour)
         for key, val in stubs:
             channel_str = channel_str.replace(key, val.stub)
         return channel_str
@@ -222,7 +220,7 @@ class TypeChecker(NodeVisitor):
         out_edge = nd.get_edge()
         if isinstance(out_edge, Transition) and isinstance(out_edge.typ, str):
             aliased_typ = self.env().lookup_or_self(out_edge.typ)
-            expect(isinstance(aliased_typ, Typ), f"aliased type in transition should be a Typ, got {aliased_typ}", \
+            expect(isinstance(aliased_typ, Typ), f"aliased type in transition should be a Typ, got {aliased_typ}",
                    node, UnexpectedInternalBehaviour)
             out_edge.typ = aliased_typ
         res = Any
@@ -238,8 +236,8 @@ class TypeChecker(NodeVisitor):
                 valid_action, valid_typ = nd.valid_action_type(op, argument)
                 expect(valid_action, f'expected a {nd.outgoing_action()}, but send was called', node)
                 valid_condition = valid_typ or argument == NoneType or is_builtin_or_module_type(argument)
-                expect(valid_condition, \
-                       f'expected to send a {type_to_str(nd.outgoing_type())}, got {type_to_str(argument)}', \
+                expect(valid_condition,
+                       f'expected to send a {type_to_str(nd.outgoing_type())}, got {type_to_str(argument)}',
                        node)
                 next_nd = nd.next_nd()
                 self.env().bind_var(ch_name, next_nd)
@@ -264,7 +262,7 @@ class TypeChecker(NodeVisitor):
         return res
 
     """ ################### """
-    ### ENVIRONMENT HELPERS ###
+    # ENVIRONMENT HELPERS #
     """ ################### """
 
     def push(self) -> None:
@@ -289,7 +287,7 @@ class TypeChecker(NodeVisitor):
         print('Subst:', self.subst_var)
 
     """ ##################### """
-    ### VISITOR PATTERN BELOW ###
+    # VISITOR PATTERN BELOW #
     """ ##################### """
 
     def visit_AnnAssign(self, node: AnnAssign) -> None:
@@ -361,8 +359,8 @@ class TypeChecker(NodeVisitor):
     def visit_Break(self, node: Break) -> Any:
         expect(self.env().loop_depth != 0, 'call to break outside of loop', node, StaticTypeError)
         self.env().loop_depth -= 1
-        chans = self.env().get_kind(Node)
-        for (_, nd) in chans:
+        channels = self.env().get_kind(Node)
+        for (_, nd) in channels:
             self.env().loop_breakpoints.add(nd.identifier)
 
     def visit_Call(self, node: Call) -> Typ:
@@ -486,9 +484,7 @@ class TypeChecker(NodeVisitor):
             latest = self.env()
             for (ch, nd) in channels:
                 ch1 = latest.lookup_var(ch)
-                expect(nd.identifier == ch1.identifier, \
-                       'then-block without else should not affect any session types',
-                       node)
+                expect(nd.identifier == ch1.identifier, 'then-block without else should not affect any session types', node)
         self.env().loop_breakpoints = self.env().loop_breakpoints.intersection(then_breakpoints)
         self.env().loop_depth = current_loop_depth
         for (ch, nd) in channels:
@@ -537,16 +533,12 @@ class TypeChecker(NodeVisitor):
                         offers.remove(branch_pick)
                         new_nd = nd.outgoing[edge]
                         break
-                expect(new_nd, \
-                       f"Case option '{ast.unparse(match_value)}' not an available offer", \
-                       node)
+                expect(new_nd, f"Case option '{ast.unparse(match_value)}' not an available offer", node)
                 self.env().bind_var(ch_name, new_nd)
                 self.visit_statements(case.body)
                 self.validate_post_conditions()
 
-            expect(not offers, \
-                   f"Match cases were not exhaustive; paths not covered: {', '.join(offers)}",
-                   node)
+            expect(not offers, f"Match cases were not exhaustive; paths not covered: {', '.join(offers)}", node)
 
         else:
             for mc in node.cases:

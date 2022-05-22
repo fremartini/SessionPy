@@ -8,7 +8,6 @@ from typing import Any, List, Tuple
 from collections import namedtuple
 
 from debug import debug_print
-from sessiontype import SessionType
 from ast import AST
 
 FunctionTyp = list  # of types
@@ -20,22 +19,24 @@ SessionStub = namedtuple('SessionStub', 'stub')
 
 
 class SessionException(TypeError):
-    def __init__(self, message: str, nd:AST=None) -> None:
+    def __init__(self, message: str, nd: AST = None) -> None:
         if nd:
             message = f"at line {nd.lineno}: {message}"
         super().__init__(message)
+
 
 class StaticTypeError(TypeError):  # Show-off: not just a standard Pythonic runtime typeerror
-    def __init__(self, message: str, nd:AST=None) -> None:
+    def __init__(self, message: str, nd: AST = None) -> None:
         if nd:
             message = f"at line {nd.lineno}: {message}"
         super().__init__(message)
 
+
 class UnexpectedInternalBehaviour(Exception):
-    def __init__(self, message: str, nd:AST=None) -> None:
+    def __init__(self, message: str, nd: AST = None) -> None:
         if nd:
             message = f"at line {nd.lineno}: {message}"
-        super().__init__(message)  
+        super().__init__(message)
 
 
 class IllegalArgumentException(TypeError):
@@ -55,30 +56,15 @@ def read_src_from_file(file) -> str:
         return f.read()
 
 
-def can_upcast_to(t1: type, t2: type):
-    if t2 == Any:
-        return True
-    # FIXME: issubclass is broken => issubclass(int, float) -> false. Find better solution
-    return False
-
-
-def can_downcast_to(t1: type, t2: type):
-    if t1 == Any:
-        return True
-
-    # FIXME: issubclass is broken => issubclass(int, float) -> false. Find better solution
-    return False
-
-
-def expect(e: bool, msg: str, ast_node: AST=None, exc: Type[Exception] = SessionException) -> None:
+def expect(e: bool, msg: str, ast_node: AST = None, exc: Type[Exception] = SessionException) -> None:
     if not e:
         raise exc(msg, ast_node)
 
 
 def fail_if_cannot_cast(a: type, b: type, err: str) -> None:
     types_differ = a != b
-    can_downcast: bool = can_downcast_to(a, b)  # any -> int
-    can_upcast: bool = can_upcast_to(a, b)  # int -> any
+    can_downcast: bool = a == Any  # any -> int
+    can_upcast: bool = b == Any  # int -> any
     expect(not types_differ or (can_upcast or can_downcast), err)
 
 
@@ -94,9 +80,12 @@ def union(t1: Typ, t2: Typ) -> Typ:
             union(int, str)                 => Error - unrelated hierarchies       
     """
     debug_print(f'union: called with {t1} and {t2}')
-    if t1 == Any: return t2
-    if t2 == Any: return t1
-    if t1 == t2: return t1
+    if t1 == Any:
+        return t2
+    if t2 == Any:
+        return t1
+    if t1 == t2:
+        return t1
     numerics: List[type] = [float, complex, int, bool, Any]  # from high to low
     sequences: List[type] = [str, tuple, bytes, list, bytearray, Any]
     if t1 in numerics and t2 in sequences or t1 in sequences and t2 in numerics:
@@ -122,8 +111,6 @@ def union(t1: Typ, t2: Typ) -> Typ:
             return res
         else:
             raise TypeError(f"cannot union {t1._name} yet")
-
-        # TODO: Extend with other collections 
     else:
         if issubclass(t1, t2):
             return t2
