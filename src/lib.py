@@ -9,6 +9,7 @@ from collections import namedtuple
 
 from debug import debug_print
 from sessiontype import SessionType
+from ast import AST
 
 FunctionTyp = list  # of types
 ContainerType = Union[typing._GenericAlias, GenericAlias, typing._SpecialGenericAlias, tuple]
@@ -18,8 +19,17 @@ Typ = Union[type, FunctionTyp, ContainerType, ClassTypes]
 SessionStub = namedtuple('SessionStub', 'stub')
 
 
+class SessionException(TypeError):
+    def __init__(self, message: str, nd:AST=None) -> None:
+        if nd:
+            message = f"at line {nd.lineno}: {message}"
+        super().__init__(message)
+
 class StaticTypeError(TypeError):  # Show-off: not just a standard Pythonic runtime typeerror
-    ...
+    def __init__(self, message: str, nd:AST=None) -> None:
+        if nd:
+            message = f"at line {nd.lineno}: {message}"
+        super().__init__(message)
 
 
 class IllegalArgumentException(TypeError):
@@ -54,7 +64,7 @@ def can_downcast_to(t1: type, t2: type):
     return False
 
 
-def fail_if(e: bool, msg: str, exc: Exception = Exception) -> None:
+def fail_if(e: bool, msg: str, exc: Type[Exception] = Exception) -> None:
     if e:
         raise exc(msg)
 
@@ -85,7 +95,7 @@ def union(t1: Typ, t2: Typ) -> Typ:
     numerics: List[type] = [float, complex, int, bool, Any]  # from high to low
     sequences: List[type] = [str, tuple, bytes, list, bytearray, Any]
     if t1 in numerics and t2 in sequences or t1 in sequences and t2 in numerics:
-        raise TypeError(f'cannot merge different hierarchies of {t1} and {t2}')
+        raise TypeError(f'unable to unify <{type_to_str(t1)}> and <{type_to_str(t2)}>')
     for typ_hierarchy in [numerics, sequences]:
         if t1 in typ_hierarchy and t2 in typ_hierarchy:
             for typ in typ_hierarchy:
@@ -95,7 +105,7 @@ def union(t1: Typ, t2: Typ) -> Typ:
     if isinstance(t1, ContainerType) and isinstance(t2, ContainerType):
 
         if t1._name != t2._name:
-            raise TypeError("cannot union different typing constructs")
+            raise TypeError(f"cannot union different parameterised types: {t1._name} != {t2._name}")
 
         if t1._name in ['Tuple', 'Dict']:
             res = parameterize(Tuple if t1._name == 'Tuple' else Dict,
@@ -115,7 +125,7 @@ def union(t1: Typ, t2: Typ) -> Typ:
         elif issubclass(t2, t1):
             return t1
         else:
-            raise TypeError(f"exhausted: could not union {t1} with {t2}")
+            raise TypeError(f"exhausted: could not union {type_to_str(t1)} with {type_to_str(t2)}")
 
 
 def to_typing(typ: type):

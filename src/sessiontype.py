@@ -40,8 +40,6 @@ class End(SessionType):
     ...
 
 
-class SessionException(TypeError):
-    ...
 
 
 STR_ST_MAPPING = {

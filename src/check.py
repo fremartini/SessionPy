@@ -1,8 +1,10 @@
 import ast
 import copy
+import inspect
 import sys
 from ast import *
 from functools import reduce
+from textwrap import dedent
 from types import BuiltinFunctionType, BuiltinMethodType, NoneType
 
 from debug import *
@@ -10,7 +12,7 @@ from environment import Environment
 from immutable_list import ImmutableList
 from lib import *
 from statemachine import BranchEdge, STParser, Node, TGoto, Transition
-from sessiontype import STR_ST_MAPPING, SessionException
+from sessiontype import STR_ST_MAPPING
 
 visited_files: dict[str, object] = {}
 
@@ -26,8 +28,14 @@ class TypeChecker(NodeVisitor):
         self.functions_queue: dict[str, FunctionDef] = {}
         self.environments: ImmutableList[Environment] = ImmutableList().add(Environment())
         self.in_functions: ImmutableList[FunctionDef] = ImmutableList()
-        self.loop_entrypoints: Set[int] = set()  # TODO: consider putting into environment
-        self.visit(tree)
+        self.loop_depth: int = 0  # Not in loop = 0
+        self.loop_entrypoints: Set[int] = set()  
+        self.loop_breakpoints: Set[int] = set()  
+        self.tree = tree
+
+
+    def run(self):
+        self.visit(self.tree)
         self.validate_post_conditions()
 
     def validate_post_conditions(self):
@@ -35,7 +43,7 @@ class TypeChecker(NodeVisitor):
         failing_channels = []
         for (k, v) in latest.get_vars():
             if isinstance(v, Node):
-                if not v.accepting and v.identifier not in self.loop_entrypoints:
+                if not v.accepting and v.identifier not in self.loop_entrypoints and not v.any_state:
                     err_msg = f'\nchannel <{k}> not exhausted - next up is:'
                     for edge in v.outgoing.keys():
                         err_msg += f'\n- {str(edge)}'
@@ -49,6 +57,9 @@ class TypeChecker(NodeVisitor):
                isinstance(typ, BuiltinFunctionType) or \
                isinstance(typ, BuiltinMethodType) or \
                isinstance(typ, ModuleType)
+    
+    def is_dictionary(self, typ):
+        return isinstance(typ, ContainerType) and typ._name == 'Dict'
 
     def visit_function(self, node: FunctionDef) -> Typ:
         self.in_functions = self.in_functions.add(node)
@@ -68,8 +79,7 @@ class TypeChecker(NodeVisitor):
             if v not in self.subst_var:
                 self.bind_var(v, t)
 
-        for stm in node.body:
-            self.visit(stm)
+        self.visit_statements(node.body)
         env = self.pop()
         channels = env.get_kind(Node)
         for var, nd in channels:
@@ -92,6 +102,14 @@ class TypeChecker(NodeVisitor):
         union(left, right)
         return bool
 
+    def visit_statements(self, stms: List[stmt]):
+        current_loop_depth = self.loop_depth
+        for stm in stms:
+            self.visit(stm)
+            if current_loop_depth > self.loop_depth:
+                break
+
+
     def visit_AugAssign(self, node: AugAssign) -> None:
         debug_print('visit_AugAssign', dump(node))
         target = self.lookup_or_self(self.visit(node.target))
@@ -107,7 +125,9 @@ class TypeChecker(NodeVisitor):
             ch_name = node.subject.func.value.id
             nd = subj
             offers = [key.key for key in nd.outgoing.keys()]
+            current_loop_depth = self.loop_depth
             for case in node.cases:
+                self.loop_depth = current_loop_depth
                 match_value = case.pattern.value
                 if isinstance(match_value, Constant):
                     branch_pick = match_value.value
@@ -119,18 +139,17 @@ class TypeChecker(NodeVisitor):
                     assert isinstance(edge, BranchEdge)
                     if branch_pick == edge.key:
                         if branch_pick not in offers:
-                            raise SessionException(f"Case '{branch_pick}' already visited")
+                            raise SessionException(f"Case '{branch_pick}' already visited", node)
                         offers.remove(branch_pick)
                         new_nd = nd.outgoing[edge]
                         break
                 if new_nd is None:
                     raise SessionException(f"Case option '{ast.unparse(match_value)}' not an available offer")
                 self.bind_var(ch_name, new_nd)
-                for s in case.body:
-                    self.visit(s)
+                self.visit_statements(case.body)
                 self.validate_post_conditions()
             if offers:
-                raise SessionException(f"Match cases were not exhaustive; paths not covered: {', '.join(offers)}")
+                raise SessionException(f"Match cases were not exhaustive; paths not covered: {', '.join(offers)}", node)
 
         else:
             for case in node.cases:
@@ -142,8 +161,7 @@ class TypeChecker(NodeVisitor):
                 if case.guard:
                     self.visit(case.guard)
 
-                for s in case.body:
-                    self.visit(s)
+                self.visit_statements(case.body)
                 self.pop()
 
     def visit_MatchAs(self, node: ast.MatchAs) -> Union[str, None]:
@@ -208,6 +226,7 @@ class TypeChecker(NodeVisitor):
             invokable()
             return
         if value in STR_ST_MAPPING or attr in STR_ST_MAPPING:
+            assert value not in STR_ST_MAPPING, "Do we ever expect this?"
             return ChannelOperation(value, attr)
         else:
             if self.is_builtin(value):
@@ -227,6 +246,10 @@ class TypeChecker(NodeVisitor):
             value = self.visit(node.value)
             if isinstance(node.value, ast.Tuple):
                 value = parameterize(Tuple, value)
+            if self.is_dictionary(target):
+                expected_value = target.__args__[1]
+                if value != expected_value:
+                    raise StaticTypeError(f'value type of dictionary should be {type_to_str(expected_value)}, got {type_to_str(value)}', node)
             self.bind_var(target, value)
 
     def visit_AnnAssign(self, node: AnnAssign) -> None:
@@ -256,7 +279,20 @@ class TypeChecker(NodeVisitor):
         debug_print('visit_BinOp', dump(node))
         l_typ = self.visit(node.left)
         r_typ = self.visit(node.right)
-        return union(l_typ, r_typ)
+        try:
+            return union(l_typ, r_typ)
+        except TypeError as err:
+            raise StaticTypeError(err, node)
+
+
+    def visit_Break(self, node: Break) -> Any:
+        if self.loop_depth == 0:
+            raise StaticTypeError('call to break outside of loop', node)
+        self.loop_depth -= 1
+        chans = self.get_latest_scope().get_kind(Node)
+        for (_, nd) in chans:
+            self.loop_breakpoints.add(nd.identifier)
+        
 
     def visit_Constant(self, node: Constant) -> type:
         return type(node.value)
@@ -286,7 +322,7 @@ class TypeChecker(NodeVisitor):
                     assert isinstance(typ, SessionStub), "Expecting annotated type being a stub"
                     node_stub = self.build_session_type(typ.stub)
                     if arg != node_stub:
-                        raise SessionException(f'function <{func_name}> received ill-typed session')
+                        raise SessionException(f'function <{func_name}> received ill-typed session', node)
 
                     if isinstance(arg_ast, Name):
                         self.subst_var[param] = arg_ast.id
@@ -302,13 +338,14 @@ class TypeChecker(NodeVisitor):
     def visit_Call(self, node: Call) -> Typ:
         debug_print('visit_Call', dump(node))
         call_func = self.visit(node.func)
-
         if isinstance(call_func, str):
             match call_func:
                 case 'Channel':
                     for arg in node.args:
                         if isinstance(arg, Subscript):
                             return self.build_session_type(arg)
+                case 'typecheck_file':
+                    return Any
                 case _:
                     return self.call_to_function_affecting_sessiontype(node, call_func)
 
@@ -333,7 +370,9 @@ class TypeChecker(NodeVisitor):
             if not nd or nd and not isinstance(nd, Node):
                 nd = call_func[0]
             if not nd.outgoing:
-                assert False, (ast.unparse(node), nd)
+                if not nd.any_state:
+                    raise SessionException(f'Call to {op} on exhausted channel', node)
+                return Any
             out_edge = nd.get_edge()
             if isinstance(out_edge, Transition) and isinstance(out_edge.typ, str):
                 aliased_typ = self.lookup_or_self(out_edge.typ)
@@ -343,7 +382,7 @@ class TypeChecker(NodeVisitor):
                 case 'recv':
                     valid_action, _ = nd.valid_action_type(op, None)
                     if not valid_action:
-                        raise SessionException(f'expected a {nd.outgoing_action()}, but recv was called')
+                        raise SessionException(f'expected {nd.outgoing_action()}, but recv was called', node)
                     next_nd = nd.next_nd()
                     self.bind_var(ch_name, next_nd)
                     return nd.outgoing_type()
@@ -353,10 +392,10 @@ class TypeChecker(NodeVisitor):
                     valid_action, valid_typ = nd.valid_action_type(op, argument)
 
                     if not valid_action:
-                        raise SessionException(f'expected a {nd.outgoing_action()}, but send was called')
+                        raise SessionException(f'expected a {nd.outgoing_action()}, but send was called', node)
                     elif not valid_typ and argument != NoneType and argument != BuiltinMethodType:
                         raise SessionException(
-                            f'expected to send a {type_to_str(nd.outgoing_type())}, got {type_to_str(argument)}')
+                            f'expected to send a {type_to_str(nd.outgoing_type())}, got {type_to_str(argument)}', node)
                     next_nd = nd.next_nd()
                     self.bind_var(ch_name, next_nd)
                 case 'offer':
@@ -368,13 +407,13 @@ class TypeChecker(NodeVisitor):
                     new_nd = None
                     for edge in nd.outgoing:
                         if not isinstance(edge, BranchEdge):
-                            raise SessionException(f"choose was called where {edge.action} was expected")
+                            raise SessionException(f"choose was called where {edge.action} was expected", node)
                         if pick == edge.key:
                             new_nd = nd.outgoing[edge]
                             break
                     if not new_nd:
                         options = ', '.join(k.key for k in nd.outgoing.keys())
-                        raise SessionException(f"The choice of '{pick}' is not one of: {options}")
+                        raise SessionException(f"The choice of '{pick}' is not one of: {options}", node)
                     if new_nd.outgoing and isinstance(new_nd.get_edge(), TGoto):
                         new_nd = new_nd.next_nd()
                     self.bind_var(ch_name, new_nd)
@@ -416,17 +455,18 @@ class TypeChecker(NodeVisitor):
 
     def visit_While(self, node: While) -> None:
         debug_print('visit_While', dump(node))
-        self.verify_loop(node)
+        self.loop_depth += 1
+        self.validate_loop(node)
 
     def visit_For(self, node: For) -> None:
         debug_print('visit_For', dump(node))
+        self.loop_depth += 1
         target = self.visit(node.target)
         ite = self.visit(node.iter)
-        assert isinstance(ite, ContainerType) or ite is str, ite
         typ = ite.__args__[0] if isinstance(ite, ContainerType) else str
         self.bind_var(target, typ)
 
-        self.verify_loop(node)
+        self.validate_loop(node)
 
     def visit_Dict(self, node: Dict) -> Dict[Typ, Typ]:
         debug_print('visit_Dict', dump(node))
@@ -457,7 +497,7 @@ class TypeChecker(NodeVisitor):
             else:
                 lookup_able = name
                 assert isinstance(lookup_able, ContainerType)
-                if lookup_able._name == 'Dict':
+                if self.is_dictionary(lookup_able):
                     key_typ = self.visit(node.slice)
                     if key_typ == NoneType:
                         return Any
@@ -465,10 +505,10 @@ class TypeChecker(NodeVisitor):
                         key_typ = self.lookup_or_self(key_typ)
                     kv = lookup_able.__args__
                     if kv[0] == key_typ:
-                        return kv[1]
+                        return Dict[kv[0], kv[1]]
                     else:
                         raise StaticTypeError(
-                            f'dictionary got key of type {type_to_str(key_typ)} where {type_to_str(kv[0])} was expected')
+                            f'dictionary got key of type {type_to_str(key_typ)} where {type_to_str(kv[0])} was expected', node)
 
     def visit_Return(self, node: Return) -> Any:
         debug_print('visit_Return', dump(node))
@@ -482,29 +522,31 @@ class TypeChecker(NodeVisitor):
 
         self.visit(node.test)
         self.dup()
-        for stm in node.body:
-            self.visit(stm)
+        current_loop_depth = self.loop_depth
+        self.visit_statements(node.body)
         env_if = self.pop()
         channels: list[(str, Node)] = env_if.get_kind(Node)
-
+        self.loop_depth = current_loop_depth
+        then_breakpoints = copy.deepcopy(self.loop_breakpoints)
+        self.loop_breakpoints.clear()
         if node.orelse:
             self.dup()
-            for stm in node.orelse:
-                self.visit(stm)
+            self.visit_statements(node.orelse)
             env_else = self.pop()
             chans1 = env_else.get_kind(Node)
             for (ch1, nd1), (ch2, nd2) in zip(channels, chans1):
                 # This is the scenario after and if-then-else block
                 valid = nd1.accepting and nd2.accepting or nd1.identifier == nd2.identifier
                 if ch1 == ch2 and not valid:
-                    raise SessionException(f'after conditional block, channel <{ch1}> ended up in two different states')
+                    raise SessionException(f'after conditional block, channel <{ch1}> ended up in two different states', node)
         elif channels:
             latest = self.get_latest_scope()
             for (ch, nd) in channels:
                 ch1 = latest.lookup_var(ch)
                 if nd.identifier != ch1.identifier:
-                    raise SessionException('then-block without else should not affect any session types')
-
+                    raise SessionException('then-block without else should not affect any session types', node)
+        self.loop_breakpoints = self.loop_breakpoints.intersection(then_breakpoints)
+        self.loop_depth = current_loop_depth
         for (ch, nd) in channels:
             self.bind_var(ch, nd)
 
@@ -520,7 +562,7 @@ class TypeChecker(NodeVisitor):
             fail_if(types_differ and not can_upcast,
                     f'function <{func_name}> expected {parameters}, got {arguments}')
 
-    def verify_loop(self, node: While | For):
+    def validate_loop(self, node: While | For):
         pre_channels = self.get_latest_scope().get_kind(Node)
         if pre_channels:
             nds = [chs[1] for chs in pre_channels]
@@ -529,17 +571,15 @@ class TypeChecker(NodeVisitor):
             pre_channels = nds
         if isinstance(node, While):
             self.visit(node.test)
-        for stm in node.body:
-            self.visit(stm)
-            if isinstance(stm, Break):
-                assert False, "got tha break"
+        self.visit_statements(node.body)
         post_channels = self.get_latest_scope().get_kind(Node)
         if pre_channels and post_channels:
             post_channels = [chs[1] for chs in post_channels]
             for post_chan in post_channels:
-                if post_chan.identifier not in self.loop_entrypoints:
+                chan_id = post_chan.identifier
+                if chan_id not in self.loop_entrypoints and chan_id not in self.loop_breakpoints:
                     raise SessionException(
-                        f'loop error: needs to {post_chan.outgoing_action()()} {post_chan.outgoing_type()}')
+                        f'loop error: needs to {post_chan.outgoing_action()()} {post_chan.outgoing_type()}', node)
 
     def process_and_substitute(self, node):
         alias_opts = self.get_latest_scope().get_kind(str)
@@ -610,7 +650,7 @@ class TypeChecker(NodeVisitor):
         print('Subst:', self.subst_var)
 
 
-def is_session_type(node: Node) -> bool:
+def is_session_type(node: expr) -> bool:
     def check_subscript(node) -> bool:
         return isinstance(node, Subscript) and isinstance(node.value, Name) and node.value.id == 'Channel'
 
@@ -623,12 +663,23 @@ def typechecker_from_path(file) -> TypeChecker:
     src = read_src_from_file(file)
     tree = parse(src)
     tc = TypeChecker(tree)
+    tc.run()
     visited_files[file] = tc
     return tc
 
 
 def typecheck_file():
     return typechecker_from_path(sys.argv[0])
+
+def typecheck_function(function_def):
+    function_src: str = dedent(inspect.getsource(function_def))
+    module: Module = ast.parse(function_src)
+    assert len(module.body) == 1, "Only expecting one element: a FunctionDef"
+    function_ast = module.body[0]
+    assert isinstance(function_ast, FunctionDef), "Decorator called on non-FunctionDef"
+    typechecker: TypeChecker = TypeChecker(function_ast)
+    typechecker.run()
+    return function_def
 
 
 if __name__ == '__main__':
