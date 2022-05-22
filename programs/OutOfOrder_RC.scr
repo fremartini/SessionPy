@@ -1,5 +1,6 @@
-local protocol OutOfOrder at RC(role RA,role RB,role RC) { 
-rec LOOP {
-Msg(int) to RA;
-}
+local protocol OutOfOrder at RC(role RA,role RB,role RC) {
+    rec LOOP {
+        Msg(int) to RA;
+        continue LOOP;
+    }
 }

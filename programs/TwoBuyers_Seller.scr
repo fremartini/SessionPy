@@ -1,0 +1,14 @@
+type <float> as price;
+local protocol TwoBuyers at Seller(role B1,role B2,role Seller) {
+    Title(str) from B1;
+    Quote(price) to B1;
+    Quote(price) to B2;
+    choice from B2 {
+        @buy;
+        Address(str) from B2;
+        End;
+    } or {
+        @reject;
+        End;
+    }
+}

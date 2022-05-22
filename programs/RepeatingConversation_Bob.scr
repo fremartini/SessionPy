@@ -1,4 +1,4 @@
-local protocol RepeatingConversation at Bob(role Alice,role Bob) { 
+local protocol RepeatingConversation at Bob(role Alice,role Bob) {
     Greeting(str) from Alice;
     Response(str) to Alice;
     rec TALK {

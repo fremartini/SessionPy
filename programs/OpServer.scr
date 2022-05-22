@@ -1,0 +1,20 @@
+global protocol OpServer(role Server, role Client) {
+    choice from Client to Server {
+        @add;
+        Num(int) from Client to Server;
+        Num(int) from Client to Server;
+        Num(int) from Server to Client;
+        End;
+    } or {
+        @neg;
+        Num(int) from Client to Server;
+        Num(int) from Server to Client;
+        End;
+    }  or {
+        @mul;
+        Num(int) from Client to Server;
+        Num(int) from Client to Server;
+        Num(int) from Server to Client;
+        End;
+    }
+}

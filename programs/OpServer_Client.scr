@@ -1,0 +1,20 @@
+local protocol OpServer at Client(role Server,role Client) {
+    offer to Server {
+        @add;
+        Num(int) to Server;
+        Num(int) to Server;
+        Num(int) from Server;
+        End;
+    } or {
+        @neg;
+        Num(int) to Server;
+        Num(int) from Server;
+        End;
+    } or {
+        @mul;
+        Num(int) to Server;
+        Num(int) to Server;
+        Num(int) from Server;
+        End;
+    }
+}

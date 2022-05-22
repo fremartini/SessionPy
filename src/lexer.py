@@ -39,6 +39,9 @@ class TokenType(Enum):
     # types
     IDENTIFIER = auto(),
 
+    def __str__(self):
+        return self.name
+
 
 keywords = {
     "global": TokenType.GLOBAL,
@@ -65,7 +68,10 @@ class Token:
         self.literal = literal
 
     def __repr__(self) -> str:
-        return f'({self.typ}, {self.literal})'
+        if self.literal is None:
+            return str(self.typ)
+        else:
+            return f'({str(self.typ)}, {self.literal})'
 
 
 class Lexer:
