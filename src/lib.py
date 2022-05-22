@@ -70,15 +70,9 @@ def can_downcast_to(t1: type, t2: type):
     return False
 
 
-<<<<<<< HEAD
 def expect(e: bool, msg: str, ast_node: AST=None, exc: Type[Exception] = SessionException) -> None:
     if not e:
         raise exc(msg, ast_node)
-=======
-def fail_if(e: bool, msg: str, exc: Type[Exception] = Exception) -> None:
-    if e:
-        raise exc(msg)
->>>>>>> main
 
 
 def fail_if_cannot_cast(a: type, b: type, err: str) -> None:
