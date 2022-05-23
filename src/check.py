@@ -595,6 +595,9 @@ class TypeChecker(NodeVisitor):
                            node, StaticTypeError)
                     return Dict[kv[0], kv[1]]
 
+    def visit_UnaryOp(self, node: UnaryOp) -> Any:
+        return self.visit(node.operand)
+
     def visit_Tuple(self, node: ast.Tuple) -> list:
         debug_print('visit_Tuple', dump(node))
         expect(node.elts, "Tuple should contain elements", Exception)

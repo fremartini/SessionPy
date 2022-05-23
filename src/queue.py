@@ -56,7 +56,7 @@ class Queue(Generic[T]):
 
         return self._lst.head()
 
-    def isEmpty(self) -> bool:
+    def is_empty(self) -> bool:
         """Check if the queue is empty
 
         Returns

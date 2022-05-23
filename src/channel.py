@@ -160,7 +160,7 @@ class Channel(Generic[T]):
         try:
             while True:
                 queue = self.message_queue[sender]
-                if queue.isEmpty():
+                if queue.is_empty():
                     continue
 
                 recipient = queue.peek()[1]
@@ -172,7 +172,7 @@ class Channel(Generic[T]):
             _trace(ex)
 
     def _listen(self):
-        """Listens on the assigned local port for messages and put them in a stack"""
+        """Listens on the assigned local port for messages and put them in a queue"""
         self.server_socket.listen()
         while True:
             try:
