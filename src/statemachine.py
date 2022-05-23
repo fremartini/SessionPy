@@ -4,9 +4,10 @@ from ast import *
 from types import EllipsisType, GenericAlias
 from typing import ForwardRef, Any, Iterable, Tuple
 import typing
+from debug import dump_object
 import sessiontype
 
-from lib import Typ, parameterize, str_to_typ, type_to_str, SessionException
+from lib import Typ, parameterize, str_to_typ, to_typing, type_to_str, SessionException
 from sessiontype import *
 
 A = TypeVar('A')
@@ -231,6 +232,13 @@ class STParser(NodeVisitor):
             case sessiontype.End:
                 return STEnd()
 
+    def process_generic_alias(self, typ):
+        if isinstance(typ, GenericAlias):
+            # A parameterised type like dict[str, int], list[bool], etc.
+            container = to_typing(typ.__origin__)
+            return parameterize(container, typ.__args__)
+        return typ
+
     def from_generic_alias(self, typ: GenericAlias):
         if typ == End:
             return STEnd()
@@ -242,6 +250,7 @@ class STParser(NodeVisitor):
         assert isinstance(base, Transition), base
         if base.action in [Action.SEND, Action.RECV]:
             base.typ = typ.__args__[0]
+            base.typ = self.process_generic_alias(base.typ)
             base.actor = typ.__args__[1].__forward_arg__
             return base, self.from_generic_alias(typ.__args__[2])
         elif base.action == Action.BRANCH:
@@ -382,9 +391,8 @@ class STParser(NodeVisitor):
                         go(tl, node)
                 elif head.action in [Action.SEND, Action.RECV]:
                     nd = new_node()
-                    typ = head.typ
-                    if isinstance(typ, tuple):
-                        head.typ = parameterize(head.typ[0], [head.typ[1]])
+                    if isinstance(head.typ, tuple):
+                        head.typ = parameterize(to_typing(head.typ[0]), [head.typ[1]])
                     go(tail, nd)
                     node.outgoing[head] = nd
                     return nd, head

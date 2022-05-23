@@ -65,3 +65,6 @@ class Stack(Generic[T]):
             if the stack is empty
         """
         return len(self._lst) == 0
+
+    def __repr__(self) -> str:
+        return str(self._lst)

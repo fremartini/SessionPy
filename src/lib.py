@@ -138,8 +138,7 @@ def to_typing(typ: type):
         return Any
     elif isinstance(typ, ModuleType):
         return typ.__name__
-    else:
-        raise Exception(f'to_typing: unsupported built-in type: {typ}')
+    return typ
 
 
 def parameterize(container: Typ, typ: List[Typ] | type) -> str | list[Any] | tuple[Any, ...] | Any:

@@ -1,10 +1,11 @@
+from functools import reduce
 import sys
 import traceback
 from threading import Thread
 from types import GenericAlias
-from typing import Any, Dict
+from typing import Any, Dict, List, Set, Tuple
 import pickle
-from lib import expect, type_to_str
+from lib import expect, parameterize, type_to_str, union
 from sessiontype import *
 import socket
 from stack import Stack
@@ -182,6 +183,20 @@ class Channel(Generic[T]):
             except Exception as ex:
                 _trace(ex)
 
+    def _read_dynamic_type(self, obj: object) -> type:
+        if isinstance(obj, list):
+            reduced_typ = reduce(union, [type(elem) for elem in obj])
+            return List[reduced_typ]
+        elif isinstance(obj, dict):
+            key_typ = reduce(union, [type(elem) for elem in obj.keys()])
+            val_typ = reduce(union, [type(elem) for elem in obj.values()])
+            return Dict[key_typ, val_typ]
+        elif isinstance(obj, tuple):
+            return parameterize(Tuple, [type(elem) for elem in obj])
+        elif isinstance(obj, set):
+            return parameterize(Set, [type(elem) for elem in obj])
+        return type(obj)
+
     def _try_advance(self, action: Action, message: str | None) -> None:
         """Try to advance the current session type, throws an exception if the operation or type was unexpected
 
@@ -194,11 +209,11 @@ class Channel(Generic[T]):
         """
         next_action = self.session_type.outgoing_action()
         expected_action = 'branch' if isinstance(self.session_type.get_edge(), Branch) else self.session_type.get_edge()
-
+        argument_typ = self._read_dynamic_type(message)
         match action:
             case action.SEND:
-                if not action == next_action or not self.session_type.outgoing_type() == type(message):
-                    raise RuntimeError(f'Expected to {expected_action}, end {type_to_str(type(message))} was called')
+                if not action == next_action or not self.session_type.outgoing_type() == argument_typ:
+                    raise RuntimeError(f'Expected to {expected_action}, end {type_to_str(argument_typ)} was called')
                 self.session_type = self.session_type.next_nd()
             case action.RECV:
                 if not action == next_action:
@@ -209,8 +224,8 @@ class Channel(Generic[T]):
                     raise RuntimeError(f'Expected to {expected_action}, choose/offer was called')
                 for edge in self.session_type.outgoing:
                     expect(isinstance(edge, BranchEdge),
-                        f"Outgoing edges should be BranchEdge, got {edge}",
-                        exc=RuntimeError)
+                           f"Outgoing edges should be BranchEdge, got {edge}",
+                           exc=RuntimeError)
                     if edge.key == message:
                         self.session_type = self.session_type.outgoing[edge]
                         break
