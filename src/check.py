@@ -50,15 +50,6 @@ class TypeChecker(NodeVisitor):
             msgs = '\n'.join(failing_channels)
             raise SessionException(msgs)
 
-    def is_builtin(self, typ):
-        return typ in sys.builtin_module_names or \
-               isinstance(typ, BuiltinFunctionType) or \
-               isinstance(typ, BuiltinMethodType) or \
-               isinstance(typ, ModuleType)
-
-    def is_dictionary(self, typ):
-        return isinstance(typ, ContainerType) and typ._name == 'Dict'
-
     def process_function(self, node: FunctionDef) -> Typ:
         self.in_functions = self.in_functions.add(node)
         expected_return_type: type = self.get_return_type(node)
@@ -661,17 +652,6 @@ def typechecker_from_path(file) -> object | TypeChecker:
 
 def typecheck_file():
     return typechecker_from_path(sys.argv[0])
-
-
-def typecheck_function(function_def):
-    function_src: str = dedent(inspect.getsource(function_def))
-    module: Module = ast.parse(function_src)
-    assert len(module.body) == 1, "Only expecting one element: a FunctionDef"
-    function_ast = module.body[0]
-    assert isinstance(function_ast, FunctionDef), "Decorator called on non-FunctionDef"
-    typechecker: TypeChecker = TypeChecker(function_ast)
-    typechecker.run()
-    return function_def
 
 
 def typecheck_function(function_def):

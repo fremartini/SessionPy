@@ -9,7 +9,7 @@ from lib import expect, parameterize, type_to_str, union
 from sessiontype import *
 import socket
 from stack import Stack
-from statemachine import Action, BranchEdge, from_generic_alias, Node, print_node
+from statemachine import Action, BranchEdge, from_generic_alias, Node
 from check import typecheck_file
 from debug import debug_print
 
@@ -183,7 +183,7 @@ class Channel(Generic[T]):
             except Exception as ex:
                 _trace(ex)
 
-    def _read_dynamic_type(self, obj: object):
+    def _read_dynamic_type(self, obj: object) -> type:
         if isinstance(obj, list):
             reduced_typ = reduce(union, [type(elem) for elem in obj])
             return List[reduced_typ]
@@ -224,8 +224,8 @@ class Channel(Generic[T]):
                     raise RuntimeError(f'Expected to {expected_action}, choose/offer was called')
                 for edge in self.session_type.outgoing:
                     expect(isinstance(edge, BranchEdge),
-                        f"Outgoing edges should be BranchEdge, got {edge}",
-                        exc=RuntimeError)
+                           f"Outgoing edges should be BranchEdge, got {edge}",
+                           exc=RuntimeError)
                     if edge.key == message:
                         self.session_type = self.session_type.outgoing[edge]
                         break
