@@ -1,3 +1,4 @@
+import struct
 from functools import reduce
 import sys
 import traceback
@@ -137,8 +138,9 @@ class Channel(Generic[T]):
             try:
                 self._wait_until_connected_to(client_socket, to)
 
-                payload = (e, self.roles_to_ports['self'])
-                client_socket.send(_encode(payload))
+                payload = _encode((e, self.roles_to_ports['self']))
+                client_socket.sendall(struct.pack('>I', len(payload)))
+                client_socket.sendall(payload)
             except Exception as ex:
                 _trace(ex)
 
@@ -178,13 +180,17 @@ class Channel(Generic[T]):
                     break
                 conn, _ = self.server_socket.accept()
                 with conn:
-                    payload = conn.recv(1024)
-                    if payload:
-                        msg, addr = _decode(payload)
-                        sender = self.ports_to_roles[addr]
+                    data_size = struct.unpack('>I', conn.recv(4))[0]
+                    received_payload = b""
+                    remaining_payload_size = data_size
+                    while remaining_payload_size != 0:
+                        received_payload += conn.recv(remaining_payload_size)
+                        remaining_payload_size = data_size - len(received_payload)
+                    msg, addr = _decode(received_payload)
+                    sender = self.ports_to_roles[addr]
 
-                        if sender in self.message_queue:
-                            self.message_queue[sender].enqueue((msg, sender))
+                    if sender in self.message_queue:
+                        self.message_queue[sender].enqueue((msg, sender))
             except socket.timeout:
                 pass
             except Exception as ex:
