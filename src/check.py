@@ -167,8 +167,7 @@ class TypeChecker(NodeVisitor):
             for post_chan in post_channels:
                 chan_id = post_chan.identifier
                 expect(chan_id in self.env().loop_entrypoints or chan_id in self.env().loop_breakpoints,
-                       f'loop error: needs to {post_chan.outgoing_action()} {post_chan.outgoing_type()}',
-                       node)
+                       f'loop error: needs to {post_chan}')
 
     def process_and_substitute(self, node):
         stubs = self.env().get_kind(SessionStub)
