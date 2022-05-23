@@ -8,14 +8,20 @@ ch = Channel(Send[list[str], 'c1',
                        Send[list[str], 'c3',
                             Recv[dict[str, int], 'c1',
                                  Recv[dict[str, int], 'c2',
-                                      Recv[dict[str, int], 'c3', End]]]]]], routing_table)
+                                      Recv[dict[str, int], 'c3', End]]]]]], routing_table, static_check=False)
 
-ch.send(['Deer', 'Bear', 'River'])
-ch.send(['Car', 'Car', 'River'])
-ch.send(['Deer', 'Car', 'Bear'])
+ch.send(['Deer', 'Bear', 'River', 'River', 'Bear'])
+ch.send(['Car', 'Car', 'River', 'River', 'River'])
+ch.send(['Deer', 'Car', 'Bear', 'Car'])
 
-r1 = ch.recv()
-r2 = ch.recv()
-r3 = ch.recv()
+r1: dict[str, int] = ch.recv()
+r2: dict[str, int] = ch.recv()
+r3: dict[str, int] = ch.recv()
 
-print(r1 | r2 | r3)
+for k, v in r2.items():
+    r1[k] = r1.get(k, 0) + v
+
+for k, v in r3.items():
+    r1[k] = r1.get(k, 0) + v
+
+print(r1)

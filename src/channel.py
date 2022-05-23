@@ -8,7 +8,8 @@ import pickle
 from lib import expect, parameterize, type_to_str, union
 from sessiontype import *
 import socket
-from stack import Stack
+
+from queue import Queue
 from statemachine import Action, BranchEdge, from_generic_alias, Node
 from check import typecheck_file
 from debug import debug_print
@@ -27,8 +28,8 @@ class Channel(Generic[T]):
         dictionary mapping roles to their address
     ports_to_roles: Dict[tuple[str, int],str]
         reverse of roles_to_ports, maps addresses to their roles
-    stack: Stack
-        a stack of (message, role) tuples
+    message_queue: Queue
+        a queue of (message, role) tuples
     server_socket: socket.socket
         socket listening for messages sent to this channels local address
     running:
@@ -55,7 +56,10 @@ class Channel(Generic[T]):
 
         self.roles_to_ports = roles
         self.ports_to_roles = {v: k for k, v in roles.items()}
-        self.stack: Stack[tuple[str, str]] = Stack()
+        self.message_queue: Dict[str, Queue[tuple[str, str]]] = {}
+        for k in roles.keys():
+            if k != 'self':
+                self.message_queue[k] = Queue()
 
         self.server_socket = _spawn_socket()
         self.server_socket.bind(roles['self'])
@@ -153,12 +157,13 @@ class Channel(Generic[T]):
         """
         try:
             while True:
-                if self.stack.isEmpty():
+                queue = self.message_queue[sender]
+                if queue.isEmpty():
                     continue
 
-                recipient = self.stack.peek()[1]
+                recipient = queue.peek()[1]
                 if recipient == sender:
-                    return self.stack.pop()[0]
+                    return queue.dequeue()[0]
         except KeyboardInterrupt:
             self._exit()
         except Exception as ex:
@@ -177,7 +182,9 @@ class Channel(Generic[T]):
                     if payload:
                         msg, addr = _decode(payload)
                         sender = self.ports_to_roles[addr]
-                        self.stack.push((msg, sender))
+
+                        if sender in self.message_queue:
+                            self.message_queue[sender].enqueue((msg, sender))
             except socket.timeout:
                 pass
             except Exception as ex:

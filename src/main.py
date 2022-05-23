@@ -33,5 +33,5 @@ def project_all_global_protocols():
 
 
 # project_all_global_protocols()
-project_global_protocol('../programs/TwoBuyers.scr')
+project_global_protocol('../programs/Stream.scr')
 # project_many('../programs/RepeatingConversation_Alice.scr', '../programs/RepeatingConversation_Bob.scr')
