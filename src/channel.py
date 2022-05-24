@@ -1,3 +1,4 @@
+import struct
 from functools import reduce
 import sys
 import traceback
@@ -8,7 +9,8 @@ import pickle
 from lib import expect, parameterize, type_to_str, union
 from sessiontype import *
 import socket
-from stack import Stack
+
+from queue import Queue
 from statemachine import Action, BranchEdge, from_generic_alias, Node
 from check import typecheck_file
 from debug import debug_print
@@ -27,8 +29,8 @@ class Channel(Generic[T]):
         dictionary mapping roles to their address
     ports_to_roles: Dict[tuple[str, int],str]
         reverse of roles_to_ports, maps addresses to their roles
-    stack: Stack
-        a stack of (message, role) tuples
+    message_queue: Queue
+        a queue of (message, role) tuples
     server_socket: socket.socket
         socket listening for messages sent to this channels local address
     running:
@@ -55,7 +57,10 @@ class Channel(Generic[T]):
 
         self.roles_to_ports = roles
         self.ports_to_roles = {v: k for k, v in roles.items()}
-        self.stack: Stack[tuple[str, str]] = Stack()
+        self.message_queue: Dict[str, Queue[tuple[str, str]]] = {}
+        for k in roles.keys():
+            if k != 'self':
+                self.message_queue[k] = Queue()
 
         self.server_socket = _spawn_socket()
         self.server_socket.bind(roles['self'])
@@ -133,8 +138,9 @@ class Channel(Generic[T]):
             try:
                 self._wait_until_connected_to(client_socket, to)
 
-                payload = (e, self.roles_to_ports['self'])
-                client_socket.send(_encode(payload))
+                payload = _encode((e, self.roles_to_ports['self']))
+                client_socket.sendall(struct.pack('>I', len(payload)))
+                client_socket.sendall(payload)
             except Exception as ex:
                 _trace(ex)
 
@@ -153,19 +159,20 @@ class Channel(Generic[T]):
         """
         try:
             while True:
-                if self.stack.isEmpty():
+                queue = self.message_queue[sender]
+                if queue.is_empty():
                     continue
 
-                recipient = self.stack.peek()[1]
+                recipient = queue.peek()[1]
                 if recipient == sender:
-                    return self.stack.pop()[0]
+                    return queue.dequeue()[0]
         except KeyboardInterrupt:
             self._exit()
         except Exception as ex:
             _trace(ex)
 
     def _listen(self):
-        """Listens on the assigned local port for messages and put them in a stack"""
+        """Listens on the assigned local port for messages and put them in a queue"""
         self.server_socket.listen()
         while True:
             try:
@@ -173,11 +180,17 @@ class Channel(Generic[T]):
                     break
                 conn, _ = self.server_socket.accept()
                 with conn:
-                    payload = conn.recv(1024)
-                    if payload:
-                        msg, addr = _decode(payload)
-                        sender = self.ports_to_roles[addr]
-                        self.stack.push((msg, sender))
+                    data_size = struct.unpack('>I', conn.recv(4))[0]
+                    received_payload = b""
+                    remaining_payload_size = data_size
+                    while remaining_payload_size != 0:
+                        received_payload += conn.recv(remaining_payload_size)
+                        remaining_payload_size = data_size - len(received_payload)
+                    msg, addr = _decode(received_payload)
+                    sender = self.ports_to_roles[addr]
+
+                    if sender in self.message_queue:
+                        self.message_queue[sender].enqueue((msg, sender))
             except socket.timeout:
                 pass
             except Exception as ex:

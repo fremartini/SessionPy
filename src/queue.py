@@ -5,8 +5,8 @@ from immutable_list import ImmutableList
 T = TypeVar('T')
 
 
-class Stack(Generic[T]):
-    """Stack data structure
+class Queue(Generic[T]):
+    """Queue data structure
 
     Attributes
     ----------
@@ -17,52 +17,52 @@ class Stack(Generic[T]):
     def __init__(self):
         self._lst: ImmutableList = ImmutableList()
 
-    def push(self, e: Any) -> None:
-        """Push an element onto the stack
+    def enqueue(self, e: Any) -> None:
+        """Enqueues an element
 
         Parameters
         ----------
         e: Any
-            element to be pushed onto the stack
+            element to be enqueued
         """
         self._lst = self._lst.add(e)
 
-    def pop(self) -> T:
-        """Pops the top element of the stack.
-        Throws an exception if the stack is empty
+    def dequeue(self) -> T:
+        """Dequeue the oldest element.
+        Throws an exception if the queue is empty
 
         Returns
         -------
         T
-            the top element on the stack
+            the oldest element in the queue
         """
         if len(self._lst) == 0:
-            raise Exception('empty stack')
+            raise Exception('empty queue')
 
-        top = self._lst.last()
+        fst = self._lst.head()
 
-        self._lst = self._lst.discard_last()
+        self._lst = self._lst.tail()
 
-        return top
+        return fst
 
     def peek(self) -> T:
-        """Look at the top element of the stack without popping it
+        """Look at the first element of the queue
 
         Returns
         -------
         T
-            the top element of the stack
+            the next element to dequeue
         """
 
-        return self._lst.last()
+        return self._lst.head()
 
     def is_empty(self) -> bool:
-        """Check if the stack is empty
+        """Check if the queue is empty
 
         Returns
         -------
         bool
-            if the stack is empty
+            if the queue is empty
         """
         return len(self._lst) == 0
 

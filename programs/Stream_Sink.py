@@ -1,5 +1,12 @@
 from context import *
 
-routing_table = {'Source': ('localhost', 0), 'self': ('localhost', 0),}
+routing_table = {'Source': ('localhost', 5000), 'self': ('localhost', 5001)}
 
 ch = Channel(Label["LOOP", Offer['Source', {"work": Recv[int, 'Source', "LOOP"], "stop": End}]], routing_table)
+
+while True:
+    match ch.offer():
+        case 'work':
+            print(ch.recv())
+        case 'stop':
+            break
