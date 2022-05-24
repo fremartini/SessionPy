@@ -7,9 +7,9 @@ red = 0
 blue = 1
 yellow = 2
 
-roles = {'self': ('localhost', 5000), 'Seller': ('localhost', 5005), }
+routing_table = {'self': ('localhost', 5000), 'Seller': ('localhost', 5005), }
 
-ch = Channel(Send[str, 'Seller', Recv[dict, 'Seller', Choose['Seller', {"purchase": Send[DiamondColor, 'Seller', Recv[str, 'Seller', End]], "reject": Recv[str, 'Seller', End]}]]], routing_table)
+ch = Endpoint(Send[str, 'Seller', Recv[dict, 'Seller', Choose['Seller', {"purchase": Send[DiamondColor, 'Seller', Recv[str, 'Seller', End]], "reject": Recv[str, 'Seller', End]}]]], routing_table)
 
 my_balance = 500_000  # USD
 

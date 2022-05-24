@@ -178,16 +178,16 @@ def ch_to_mod_dir(mod_name: str):
     os.chdir(target_dir)
 
 
-def channels_str(channels):
+def endpoints_str(endpoints):
     res = ''
-    for ch_name in channels:
-        res += f'"{ch_name}": {channels[ch_name]}\n'
+    for ep_name in endpoints:
+        res += f'"{ep_name}": {endpoints[ep_name]}\n'
     return res
 
 
 def str_to_typ(s: str) -> type:
     py_files_in_dir = [fname.split('.')[0].lower() for fname in os.listdir() if os.path.splitext(fname)[1] == '.py']
-    if s in ['main', 'Channel'] or s in builtin_module_names or s.lower() in py_files_in_dir:
+    if s in ['main', 'Endpoint'] or s in builtin_module_names or s.lower() in py_files_in_dir:
         return s
     opt = locate(s)
     opt_lower = locate(s.lower())

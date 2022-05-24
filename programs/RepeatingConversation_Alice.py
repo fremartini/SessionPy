@@ -2,7 +2,7 @@ from context import *
 
 routing_table = {'self': ('localhost', 50_000), 'Bob': ('localhost', 50_005),}
 
-ch = Channel(Send[str, 'Bob', Recv[str, 'Bob', Label["TALK", Choose['Bob', {"talk": Recv[str, 'Bob', Send[str, 'Bob', "TALK"]], "stop": Send[str, 'Bob', End]}]]]], routing_table)
+ch = Endpoint(Send[str, 'Bob', Recv[str, 'Bob', Label["TALK", Choose['Bob', {"talk": Recv[str, 'Bob', Send[str, 'Bob', "TALK"]], "stop": Send[str, 'Bob', End]}]]]], routing_table)
 
 ch.send("hello")
 s = ch.recv()

@@ -46,7 +46,7 @@ STR_ST_MAPPING = {
     'offer': Offer,
     'end': End,
     'choose': Choose,
-    'channel': None,
+    'endpoint': None,
     'Branch': None,
     'label': Label,
 }

@@ -18,7 +18,7 @@ from debug import debug_print
 T = TypeVar('T')
 
 
-class Channel(Generic[T]):
+class Endpoint(Generic[T]):
     """Represents the communication in a MPST protocol
 
     Attributes
@@ -32,9 +32,9 @@ class Channel(Generic[T]):
     message_queue: Queue
         a queue of (message, role) tuples
     server_socket: socket.socket
-        socket listening for messages sent to this channels local address
+        socket listening for messages sent to this endpoints local address
     running:
-        flag indicating if the channel is currently listening on its local address
+        flag indicating if the endpoint is currently listening on its local address
     """
 
     def __init__(self, session_type: GenericAlias, roles: Dict[str, tuple[str, int]],
@@ -47,7 +47,7 @@ class Channel(Generic[T]):
         roles: Dict[str, tuple[str, int]
             dictionary mapping roles to their address
         static_check: bool
-            indicator if this channel should be statically checked
+            indicator if this endpoint should be statically checked
         """
 
         self.session_type: State = from_generic_alias(session_type)

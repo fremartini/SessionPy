@@ -2,7 +2,7 @@ from context import *
 
 routing_table = {'self': ('localhost', 5000), 'Sink': ('localhost', 5001)}
 
-ch = Channel(Label["LOOP", Choose['Sink', {"work": Send[int, 'Sink', "LOOP"], "stop": End}]], routing_table)
+ch = Endpoint(Label["LOOP", Choose['Sink', {"work": Send[int, 'Sink', "LOOP"], "stop": End}]], routing_table)
 
 i = 0
 

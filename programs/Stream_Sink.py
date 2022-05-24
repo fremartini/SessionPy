@@ -2,7 +2,7 @@ from context import *
 
 routing_table = {'Source': ('localhost', 5000), 'self': ('localhost', 5001)}
 
-ch = Channel(Label["LOOP", Offer['Source', {"work": Recv[int, 'Source', "LOOP"], "stop": End}]], routing_table)
+ch = Endpoint(Label["LOOP", Offer['Source', {"work": Recv[int, 'Source', "LOOP"], "stop": End}]], routing_table)
 
 while True:
     match ch.offer():
