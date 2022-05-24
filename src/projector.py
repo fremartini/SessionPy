@@ -255,7 +255,7 @@ class Projector:
             case local_recursion if isinstance(local_recursion, LocalRecursion):
                 return self._project_local_recursion(local_recursion)
             case call if isinstance(call, Call):
-                return f'"{call}"'
+                return f"'{call}'"
             case end if isinstance(end, End):
                 return 'End'
 
@@ -306,7 +306,7 @@ class Projector:
         str
             session type in format '"label": {ST}'
         """
-        st = f'"{lb.label.visit()}": '
+        st = f"'{lb.label.visit()}': "
         return ImmutableList(lb.t).fold(lambda acc, x: acc + self._project_t(x), st) + _closing_brackets(lb.t)
 
     def _project_local_choice(self, lc: LocalChoice) -> str:
@@ -357,7 +357,7 @@ class Projector:
             session type in format 'Label["Label", {ST}]'
         """
         st = self._project_session_type(lr.t)
-        return f'Label["{lr.identifier.visit()}", {st}'
+        return f"Label['{lr.identifier.visit()}', {st}"
 
     def _project_session_type(self, ts: List[T]) -> str:
         """Build a string from a list of T AST nodes

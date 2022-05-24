@@ -19,23 +19,23 @@ SessionStub = namedtuple('SessionStub', 'stub')
 
 
 class SessionException(TypeError):
-    def __init__(self, message: str, nd: AST = None) -> None:
-        if nd:
-            message = f"at line {nd.lineno}: {message}"
+    def __init__(self, message: str, current_state: AST = None) -> None:
+        if current_state:
+            message = f"at line {current_state.lineno}: {message}"
         super().__init__(message)
 
 
 class StaticTypeError(TypeError):  # Show-off: not just a standard Pythonic runtime typeerror
-    def __init__(self, message: str, nd: AST = None) -> None:
-        if nd:
-            message = f"at line {nd.lineno}: {message}"
+    def __init__(self, message: str, current_state: AST = None) -> None:
+        if current_state:
+            message = f"at line {current_state.lineno}: {message}"
         super().__init__(message)
 
 
 class UnexpectedInternalBehaviour(Exception):
-    def __init__(self, message: str, nd: AST = None) -> None:
-        if nd:
-            message = f"at line {nd.lineno}: {message}"
+    def __init__(self, message: str, current_state: AST = None) -> None:
+        if current_state:
+            message = f"at line {current_state.lineno}: {message}"
         super().__init__(message)
 
 

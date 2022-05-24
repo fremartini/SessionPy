@@ -11,7 +11,7 @@ from sessiontype import *
 import socket
 
 from queue import Queue
-from statemachine import Action, BranchEdge, from_generic_alias, Node
+from statemachine import Action, BranchEdge, from_generic_alias, State
 from check import typecheck_file
 from debug import debug_print
 
@@ -23,7 +23,7 @@ class Endpoint(Generic[T]):
 
     Attributes
     ----------
-    session_type: Node
+    session_type: State
         state machine of the given session type
     roles_to_ports: Dict[str, tuple[str, int]
         dictionary mapping roles to their address
@@ -50,7 +50,7 @@ class Endpoint(Generic[T]):
             indicator if this endpoint should be statically checked
         """
 
-        self.session_type: Node = from_generic_alias(session_type)
+        self.session_type: State = from_generic_alias(session_type)
         if static_check:
             typecheck_file()
             debug_print('> Static check succeeded ✅')

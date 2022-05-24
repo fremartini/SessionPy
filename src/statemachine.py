@@ -7,7 +7,7 @@ import typing
 from debug import dump_object
 import sessiontype
 
-from lib import Typ, parameterize, str_to_typ, to_typing, type_to_str, SessionException
+from lib import Typ, parameterize, str_to_typ, to_typing, type_to_str, SessionException, union
 from sessiontype import *
 
 A = TypeVar('A')
@@ -55,7 +55,11 @@ class Transition:
         if not isinstance(__o, type(self)):
             return False
         if self.action in [Action.SEND, Action.RECV]:
-            return self.typ == __o.typ and self.actor == __o.actor
+            try: 
+                union(self.typ, __o.typ)
+            except:
+                return False
+            return self.actor == __o.actor
         elif self.action == Action.BRANCH:
             return self.action == __o.action and self.actor == __o.actor and self.left == __o.left and self.right == __o.right
         elif self.action == Action.LABEL:
@@ -110,7 +114,7 @@ class TGoto:
         return f'goto {self.lab}'
 
 
-class Node:
+class State:
     def __init__(self, identifier: int, accepting_state: bool = False) -> None:
         self.identifier = identifier
         self.accepting = accepting_state
@@ -123,29 +127,29 @@ class Node:
         return f'SessionType(state={state})'
 
     def __repr__(self) -> str:
-        return f'Node(state={self.identifier})'
+        return f'State(state={self.identifier})'
 
-    def __eq__(self, nd: Node) -> bool:
-        if not isinstance(nd, Node):
+    def __eq__(self, current_state: State) -> bool:
+        if not isinstance(current_state, State):
             return False
-        if self.any_state or nd.any_state:
+        if self.any_state or current_state.any_state:
             return True
-        if len(self.outgoing) == 0 or len(nd.outgoing) == 0:
-            return self.accepting == nd.accepting
+        if len(self.outgoing) == 0 or len(current_state.outgoing) == 0:
+            return self.accepting == current_state.accepting
 
-        if len(self.outgoing) == 1 and len(nd.outgoing) == 1:
+        if len(self.outgoing) == 1 and len(current_state.outgoing) == 1:
             e1 = self.get_edge()
-            e2 = nd.get_edge()
-            return e1 == e2 and self.next_nd() == nd.next_nd()
+            e2 = current_state.get_edge()
+            return e1 == e2 and self.next_nd() == current_state.next_nd()
         else:
             res = False
-            for k1, k2 in zip(self.outgoing, nd.outgoing):
-                res = k1 == k2 and self.outgoing[k1] == nd.outgoing[k2]
+            for k1, k2 in zip(self.outgoing, current_state.outgoing):
+                res = k1 == k2 and self.outgoing[k1] == current_state.outgoing[k2]
                 if not res:
                     return res
             return res
 
-    def next_nd(self) -> Node:
+    def next_nd(self) -> State:
         assert len(self.outgoing) == 1, "Function should not be called if it's not a single outgoing edge"
         points_to = list(self.outgoing.values())[0]
         if points_to.outgoing and isinstance(points_to.get_edge(), TGoto):
@@ -193,7 +197,7 @@ class Node:
         return action == self.outgoing_action(), typ == self.outgoing_type() or typ is Any
 
 
-def from_generic_alias(typ: GenericAlias) -> Node:
+def from_generic_alias(typ: GenericAlias) -> State:
     stp = STParser(typ=typ)
     return stp.build()
 
@@ -270,8 +274,8 @@ class STParser(NodeVisitor):
         self.identifier += 1
         return res
 
-    def new_node(self) -> Node:
-        return Node(self.next_id())
+    def new_node(self) -> State:
+        return State(self.next_id())
 
     def visit_Name(self, node: Name) -> Any:
         match node.id:
@@ -339,7 +343,7 @@ class STParser(NodeVisitor):
         assert isinstance(node.value, str | EllipsisType)
         return self.visit(Name(node.value))
 
-    def build(self) -> Node:
+    def build(self) -> State:
         global ident
         ident = 0
 
@@ -349,8 +353,8 @@ class STParser(NodeVisitor):
             ident += 1
             return res
 
-        def new_node() -> Node:
-            return Node(next_id())
+        def new_node() -> State:
+            return State(next_id())
 
         root = new_node()
         ref = root
@@ -358,7 +362,7 @@ class STParser(NodeVisitor):
         labels = {}
         forwarded_labs = {}
 
-        def go(tup, node: Node):
+        def go(tup, node: State):
             if isinstance(tup, STEnd):
                 node.accepting = True
                 return node, None
@@ -390,12 +394,12 @@ class STParser(NodeVisitor):
                     else:
                         go(tl, node)
                 elif head.action in [Action.SEND, Action.RECV]:
-                    nd = new_node()
+                    current_state = new_node()
                     if isinstance(head.typ, tuple):
                         head.typ = parameterize(to_typing(head.typ[0]), [head.typ[1]])
-                    go(tail, nd)
-                    node.outgoing[head] = nd
-                    return nd, head
+                    go(tail, current_state)
+                    node.outgoing[head] = current_state
+                    return current_state, head
                 elif head.action == Action.BRANCH:
                     options = head.branch_options
                     for branch_key in options:
@@ -412,7 +416,7 @@ class STParser(NodeVisitor):
         return root
 
 
-def print_node(n: Node) -> None:
+def print_node(n: State) -> None:
     if not n.outgoing:
         return
     print(n)
