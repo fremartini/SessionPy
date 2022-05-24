@@ -7,15 +7,12 @@ red = 0
 blue = 1
 yellow = 2
 
-roles = {'Buyer': ('localhost', 5000), 'self': ('localhost', 5005), }
+routing_table = {'Buyer': ('localhost', 5000), 'self': ('localhost', 5005), }
 
-ch = Channel(Recv[str, 'Buyer', Send[dict, 'Buyer', Offer['Buyer', {"purchase": Recv[DiamondColor, 'Buyer', Send[str, 'Buyer', End]], "reject": Send[str, 'Buyer', End]}]]], routing_table)
+ch = Endpoint(Recv[str, 'Buyer', Send[dict, 'Buyer', Offer['Buyer', {"purchase": Recv[DiamondColor, 'Buyer', Send[str, 'Buyer', End]], "reject": Send[str, 'Buyer', End]}]]], routing_table)
 
 req = ch.recv()
 print('Received request from seller:', req)
-red = 0
-blue = 1
-yellow = 2
 catalogue = {
     red: 1_000_000,
     blue: 500_000,

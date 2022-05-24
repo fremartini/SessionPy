@@ -159,13 +159,13 @@ class Node:
 
     def outgoing_actor(self) -> str:
         if len(self.outgoing) == 0:
-            raise SessionException(f'Channel {self} is exhausted')
+            raise SessionException(f'Endpoint {self} is exhausted')
         edge = self.get_edge()
         return edge.actor
 
     def outgoing_action(self) -> Action | Transition:
         if len(self.outgoing) == 0:
-            raise SessionException(f'Channel {self} is exhausted')
+            raise SessionException(f'Endpoint {self} is exhausted')
         edge = self.get_edge()
         if isinstance(edge, BranchEdge):
             return Action.BRANCH
@@ -201,7 +201,7 @@ def from_generic_alias(typ: GenericAlias) -> Node:
 class STParser(NodeVisitor):
     """
     Parses a sessiontype and stores it in a tuple (self.res):
-        parsed = STParser("Channel[Recv[str, Offer[Send[bool, End], Loop[Send[int, End]]]]]")
+        parsed = STParser("Endpoint[Recv[str, Offer[Send[bool, End], Loop[Send[int, End]]]]]")
         parsed.res # (recv, (<class 'str'>, (offer, ((send, (<class 'bool'>, end)), (loop, (send, (<class 'int'>, end)))))))
     """
 
@@ -287,7 +287,7 @@ class STParser(NodeVisitor):
                 return Transition(Action.BRANCH)
             case sessiontype.Label | 'Label':
                 return Transition(Action.LABEL)
-            case 'Channel':
+            case 'Endpoint':
                 return None
             case EllipsisType():
                 return EllipsisType()

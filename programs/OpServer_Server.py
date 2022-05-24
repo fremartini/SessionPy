@@ -2,7 +2,7 @@ from context import *
 
 routing_table = {'self': ('localhost', 5000), 'Client': ('localhost', 5001)}
 
-ch = Channel(Offer['Client', {"add": Recv[int, 'Client', Recv[int, 'Client', Send[int, 'Client', End]]], "neg": Recv[int, 'Client', Send[int, 'Client', End]], "mul": Recv[int, 'Client', Recv[int, 'Client', Send[int, 'Client', End]]]}], routing_table)
+ch = Endpoint(Offer['Client', {"add": Recv[int, 'Client', Recv[int, 'Client', Send[int, 'Client', End]]], "neg": Recv[int, 'Client', Send[int, 'Client', End]], "mul": Recv[int, 'Client', Recv[int, 'Client', Send[int, 'Client', End]]]}], routing_table)
 
 match ch.offer():
     case 'add':

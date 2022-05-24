@@ -217,7 +217,7 @@ class Projector:
             self.type_mapping[typedef.identifier.visit()] = typedef.typ.visit()
 
         with open(file, "w+") as f:
-            f.write('from channel import Channel\n')
+            f.write('from endpoint import Endpoint\n')
             f.write('from sessiontype import *\n\n')
 
             # create a routing table mapping roles to their address
@@ -226,7 +226,7 @@ class Projector:
 
             # project the statements of the local protocol into a single session type
             session_type = self._project_session_type(protocol.t)
-            f.write(f'ch = Channel({session_type}, routing_table)\n')
+            f.write(f'ep = Endpoint({session_type}, routing_table)\n')
 
         return file
 

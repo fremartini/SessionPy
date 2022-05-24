@@ -15,7 +15,7 @@ from statemachine import BranchEdge, STParser, Node, TGoto, Transition
 from sessiontype import STR_ST_MAPPING
 
 Closure = namedtuple('Closure', ['args', 'body'])
-ChannelOperation = namedtuple('ChannelOperation', ['ch', 'operation'])
+EndpointOperation = namedtuple('EndpointOperation', ['ch', 'operation'])
 
 
 class TypeChecker(NodeVisitor):
@@ -37,17 +37,17 @@ class TypeChecker(NodeVisitor):
 
     def validate_post_conditions(self):
         env = self.env()
-        failing_channels = []
+        failing_endpoints = []
         for (k, v) in env.get_vars():
             if isinstance(v, Node):
                 if not v.accepting and v.identifier not in env.loop_entrypoints and not v.any_state:
-                    err_msg = f'\nchannel <{k}> not exhausted - next up is:'
+                    err_msg = f'\nendpoint <{k}> not exhausted - next up is:'
                     for edge in v.outgoing.keys():
                         err_msg += f'\n- {str(edge)}'
-                    failing_channels.append(err_msg)
-        expect(not failing_channels, '\n'.join(failing_channels))
-        if failing_channels:
-            msgs = '\n'.join(failing_channels)
+                    failing_endpoints.append(err_msg)
+        expect(not failing_endpoints, '\n'.join(failing_endpoints))
+        if failing_endpoints:
+            msgs = '\n'.join(failing_endpoints)
             raise SessionException(msgs)
 
     def process_function(self, node: FunctionDef) -> Typ:
@@ -69,8 +69,8 @@ class TypeChecker(NodeVisitor):
                 self.env().bind_var(v, t)
 
         self.visit_statements(node.body)
-        channels = self.pop().get_kind(Node)
-        for var, nd in channels:
+        endpoints = self.pop().get_kind(Node)
+        for var, nd in endpoints:
             self.env().bind_var(var, nd)
         self.in_functions = self.in_functions.tail()
         return function_type.items()
@@ -101,7 +101,7 @@ class TypeChecker(NodeVisitor):
         function: FunctionDef = self.functions_queue[func_name]
         args_contain_sessiontype = any(isinstance(a, Node) for a in visited_args)
         if args_contain_sessiontype:
-            # We passed a channel to a function
+            # We passed an endpoint to a function
             params = self.visit(function.args)
             pre_subst = copy.deepcopy(self.subst_var)
             for (param, typ), (arg_ast, arg) in zip(params, zip(node.args, visited_args)):
@@ -143,34 +143,34 @@ class TypeChecker(NodeVisitor):
                    f'function <{func_name}> expected {parameters}, got {arguments}', exc=StaticTypeError)
 
     def validate_loop(self, node: While | For):
-        pre_channels = self.env().get_kind(Node)
-        if pre_channels:
-            nds = [chs[1] for chs in pre_channels]
+        pre_endpoints = self.env().get_kind(Node)
+        if pre_endpoints:
+            nds = [chs[1] for chs in pre_endpoints]
             for nd in nds:
                 self.env().loop_entrypoints.add(nd.identifier)
-            pre_channels = nds
+            pre_endpoints = nds
         if isinstance(node, While):
             self.visit(node.test)
         self.visit_statements(node.body)
-        post_channels = self.env().get_kind(Node)
-        if pre_channels and post_channels:
-            post_channels = [chs[1] for chs in post_channels]
-            for post_chan in post_channels:
+        post_endpoints = self.env().get_kind(Node)
+        if pre_endpoints and post_endpoints:
+            post_endpoints = [chs[1] for chs in post_endpoints]
+            for post_chan in post_endpoints:
                 chan_id = post_chan.identifier
                 expect(chan_id in self.env().loop_entrypoints or chan_id in self.env().loop_breakpoints,
                        f'loop error: needs to {post_chan}')
 
     def process_and_substitute(self, node):
         stubs = self.env().get_kind(SessionStub)
-        channel_str = ast.unparse(node) if isinstance(node, Subscript) else node  # 'Channel[Send[..., <Alias>]]'
-        expect(isinstance(channel_str, str), f"Expected unparsed node, or parsed node, to be of string type, got '{channel_str}'", node, UnexpectedInternalBehaviour)
+        endpoint_str = ast.unparse(node) if isinstance(node, Subscript) else node  # 'Endpoint[Send[..., <Alias>]]'
+        expect(isinstance(endpoint_str, str), f"Expected unparsed node, or parsed node, to be of string type, got '{endpoint_str}'", node, UnexpectedInternalBehaviour)
         for key, val in stubs:
-            channel_str = channel_str.replace(key, val.stub)
-        return channel_str
+            endpoint_str = endpoint_str.replace(key, val.stub)
+        return endpoint_str
 
     def build_session_type(self, node):
-        channel_str = self.process_and_substitute(node)
-        return STParser(src=channel_str).build()
+        endpoint_str = self.process_and_substitute(node)
+        return STParser(src=endpoint_str).build()
 
     def bind_session_type(self, node, target):
         nd = self.build_session_type(node)
@@ -193,7 +193,7 @@ class TypeChecker(NodeVisitor):
         ty = self.get_return_type(current_function)
         return ty
 
-    def process_session_operation(self, node: Call, ch_op: ChannelOperation):
+    def process_session_operation(self, node: Call, ch_op: EndpointOperation):
         args = self.get_function_args(node.args)
         op = ch_op.operation
         ch_name = node.func.value.id
@@ -205,7 +205,7 @@ class TypeChecker(NodeVisitor):
         if not nd or nd and not isinstance(nd, Node):
             nd = ch_op.ch
         if not nd.outgoing:
-            expect(nd.any_state, f'Call to {op} on exhausted channel', node)
+            expect(nd.any_state, f'Call to {op} on exhausted endpoint', node)
             return Any
         out_edge = nd.get_edge()
         if isinstance(out_edge, Transition) and isinstance(out_edge.typ, str):
@@ -322,9 +322,9 @@ class TypeChecker(NodeVisitor):
         value = self.visit(node.value)
         attr = node.attr
         if isinstance(value, Node):
-            return ChannelOperation(value, attr)
+            return EndpointOperation(value, attr)
         if value in STR_ST_MAPPING or attr in STR_ST_MAPPING:
-            return ChannelOperation(value, attr)
+            return EndpointOperation(value, attr)
         else:
             if is_builtin_or_module_type(value):
                 return BuiltinFunctionType
@@ -349,8 +349,8 @@ class TypeChecker(NodeVisitor):
     def visit_Break(self, node: Break) -> Any:
         expect(self.env().loop_depth != 0, 'call to break outside of loop', node, StaticTypeError)
         self.env().loop_depth -= 1
-        channels = self.env().get_kind(Node)
-        for (_, nd) in channels:
+        endpoints = self.env().get_kind(Node)
+        for (_, nd) in endpoints:
             self.env().loop_breakpoints.add(nd.identifier)
 
     def visit_Call(self, node: Call) -> Typ:
@@ -358,7 +358,7 @@ class TypeChecker(NodeVisitor):
         call_func = self.visit(node.func)
         if isinstance(call_func, str):
             match call_func:
-                case 'Channel':
+                case 'Endpoint':
                     for arg in node.args:
                         if isinstance(arg, Subscript):
                             return self.build_session_type(arg)
@@ -375,15 +375,15 @@ class TypeChecker(NodeVisitor):
                 self.env().bind_var(var, union(a, typ))
             return self.visit(call_func.body)
 
-        if isinstance(call_func, ChannelOperation):
+        if isinstance(call_func, EndpointOperation):
             return self.process_session_operation(node, call_func)
 
         elif isinstance(call_func, FunctionTyp):
             provided_args = self.get_function_args(node.args)
-            contains_bound_channel = \
+            contains_bound_endpoint = \
                 any(isinstance(x, Name) for x in node.args) and \
                 any(isinstance(x, Node) for x in provided_args)
-            if contains_bound_channel:
+            if contains_bound_endpoint:
                 name = node.func.id
                 expect(isinstance(name, str), f"Expecting call to a function, got {name}", node,
                        UnexpectedInternalBehaviour)
@@ -455,7 +455,7 @@ class TypeChecker(NodeVisitor):
         current_loop_depth = self.env().loop_depth
         self.visit_statements(node.body)
         env_if = self.pop()
-        channels: list[(str, Node)] = env_if.get_kind(Node)
+        endpoints: list[(str, Node)] = env_if.get_kind(Node)
         self.env().loop_depth = current_loop_depth
         then_breakpoints = copy.deepcopy(self.env().loop_breakpoints)
         self.env().loop_breakpoints.clear()
@@ -464,20 +464,20 @@ class TypeChecker(NodeVisitor):
             self.visit_statements(node.orelse)
             env_else = self.pop()
             chans1: list[tuple[str, Node]] = env_else.get_kind(Node)
-            for (ch1, nd1), (ch2, nd2) in zip(channels, chans1):
+            for (ch1, nd1), (ch2, nd2) in zip(endpoints, chans1):
                 # This is the scenario after and if-then-else block
                 valid = nd1.accepting and nd2.accepting or nd1.identifier == nd2.identifier
                 expect(ch1 != ch2 or valid,
-                       f'after conditional block, channel <{ch1}> ended up in two different states',
+                       f'after conditional block, endpoint <{ch1}> ended up in two different states',
                        node)
-        elif channels:
+        elif endpoints:
             latest = self.env()
-            for (ch, nd) in channels:
+            for (ch, nd) in endpoints:
                 ch1 = latest.lookup_var(ch)
                 expect(nd.identifier == ch1.identifier, 'then-block without else should not affect any session types', node)
         self.env().loop_breakpoints = self.env().loop_breakpoints.intersection(then_breakpoints)
         self.env().loop_depth = current_loop_depth
-        for (ch, nd) in channels:
+        for (ch, nd) in endpoints:
             self.env().bind_var(ch, nd)
 
     def visit_JoinedStr(self, _: JoinedStr) -> Any:
@@ -566,7 +566,7 @@ class TypeChecker(NodeVisitor):
         name = node.value.id.lower()
         if name in STR_ST_MAPPING:
             str_repr = self.process_and_substitute(node)
-            if name == 'channel':
+            if name == 'endpoint':
                 return self.build_session_type(str_repr)
             return SessionStub(str_repr)
         else:
@@ -628,7 +628,7 @@ def is_builtin_or_module_type(typ):
 
 
 def is_container(typ: Typ) -> bool:
-    return isinstance(typ, ContainerType) and not isinstance(typ, Closure | ChannelOperation)
+    return isinstance(typ, ContainerType) and not isinstance(typ, Closure | EndpointOperation)
 
 
 def is_dictionary(typ: Typ):
@@ -637,7 +637,7 @@ def is_dictionary(typ: Typ):
 
 def is_session_type(node: expr) -> bool:
     def check_subscript(node) -> bool:
-        return isinstance(node, Subscript) and isinstance(node.value, Name) and node.value.id == 'Channel'
+        return isinstance(node, Subscript) and isinstance(node.value, Name) and node.value.id == 'Endpoint'
 
     return isinstance(node, Call) and check_subscript(node.func)
 
