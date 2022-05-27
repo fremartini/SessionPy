@@ -2,13 +2,13 @@ from context import *
 
 routing_table = {'B1': ('localhost', 5000), 'self': ('localhost', 5001), 'Seller': ('localhost', 5002),}
 
-ch = Endpoint(Recv[float, 'Seller', Recv[float, 'B1', Choose['Seller', {"buy": Send[str, 'Seller', End], "reject": End}]]], routing_table)
+ep = Endpoint(Recv[float, 'Seller', Recv[float, 'B1', Choose['Seller', {"buy": Send[str, 'Seller', End], "reject": End}]]], routing_table)
 
-quote = ch.recv()
-contrib = ch.recv()
+quote = ep.recv()
+contrib = ep.recv()
 
 if quote - contrib <= 99:
-    ch.choose('buy')
-    ch.send('here is my address')
+    ep.choose('buy')
+    ep.send('here is my address')
 else:
-    ch.choose('reject')
+    ep.choose('reject')
