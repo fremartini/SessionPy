@@ -1,0 +1,15 @@
+type <int> as n;
+local protocol ComputeService at Client(role Server,role Client) {
+    offer to Server {
+        @neg;
+        Num(n) to Server;
+        Num(n) from Server;
+        End;
+    } or {
+        @add;
+        Num(n) to Server;
+        Num(n) to Server;
+        Num(n) from Server;
+        End;
+    }
+}
