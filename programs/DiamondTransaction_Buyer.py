@@ -9,7 +9,7 @@ yellow = 2
 
 routing_table = {'self': ('localhost', 5000), 'Seller': ('localhost', 5005), }
 
-ep = Endpoint(Send[str, 'Seller', Recv[dict, 'Seller', Choose['Seller', {"purchase": Send[DiamondColor, 'Seller', Recv[str, 'Seller', End]], "reject": Recv[str, 'Seller', End]}]]], routing_table)
+ep = Endpoint(Send[str, 'Seller', Recv[dict, 'Seller', Choose['Seller', {"purchase": Send[DiamondColor, 'Seller', Recv[str, 'Seller', End]], "reject": Recv[str, 'Seller', End]}]]], routing_table, static_check=False)
 
 my_balance = 500_000  # USD
 

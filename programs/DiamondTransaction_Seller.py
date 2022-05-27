@@ -9,7 +9,7 @@ yellow = 2
 
 routing_table = {'Buyer': ('localhost', 5000), 'self': ('localhost', 5005), }
 
-ep = Endpoint(Recv[str, 'Buyer', Send[dict, 'Buyer', Offer['Buyer', {"purchase": Recv[DiamondColor, 'Buyer', Send[str, 'Buyer', End]], "reject": Send[str, 'Buyer', End]}]]], routing_table)
+ep = Endpoint(Recv[str, 'Buyer', Send[dict[int, int], 'Buyer', Offer['Buyer', {"purchase": Recv[DiamondColor, 'Buyer', Send[str, 'Buyer', End]], "reject": Send[str, 'Buyer', End]}]]], routing_table)
 
 req = ep.recv()
 print('Received request from seller:', req)
