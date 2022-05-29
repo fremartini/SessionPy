@@ -1,0 +1,16 @@
+type <int> as n;
+
+global protocol ComputeService(role Server, role Client) {
+    choice from Client to Server {
+        @neg;
+        Num(n) from Client to Server;
+        Num(n) from Server to Client;
+        End;
+    } or {
+        @add;
+        Num(n) from Client to Server;
+        Num(n) from Client to Server;
+        Num(n) from Server to Client;
+        End;
+    }
+}

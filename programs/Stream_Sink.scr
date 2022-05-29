@@ -1,9 +1,8 @@
-type <int> as payload;
 local protocol Stream at Sink(role Source,role Sink) {
     rec LOOP {
         choice from Source {
             @work;
-            Send(payload) from Source;
+            Send(int) from Source;
             continue LOOP;
         } or {
             @stop;

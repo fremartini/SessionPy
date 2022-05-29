@@ -1,10 +1,8 @@
-type <int> as payload;
-
 global protocol Stream(role Source, role Sink) {
     rec LOOP {
         choice from Source to Sink {
             @work;
-            Send(payload) from Source to Sink;
+            Send(int) from Source to Sink;
             continue LOOP;
         } or {
             @stop;

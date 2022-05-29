@@ -9,12 +9,12 @@ yellow = 2
 
 routing_table = {'self': ('localhost', 5000), 'Seller': ('localhost', 5005), }
 
-ch = Endpoint(Send[str, 'Seller', Recv[dict, 'Seller', Choose['Seller', {"purchase": Send[DiamondColor, 'Seller', Recv[str, 'Seller', End]], "reject": Recv[str, 'Seller', End]}]]], routing_table)
+ep = Endpoint(Send[str, 'Seller', Recv[dict, 'Seller', Choose['Seller', {"purchase": Send[DiamondColor, 'Seller', Recv[str, 'Seller', End]], "reject": Recv[str, 'Seller', End]}]]], routing_table, static_check=False)
 
 my_balance = 500_000  # USD
 
-ch.send("Hi! I'd like to purchase a diamond")
-catalogue : Catalogue = ch.recv()
+ep.send("Hi! I'd like to purchase a diamond")
+catalogue : Catalogue = ep.recv()
 best_diamond = None
 
 for colour in catalogue:
@@ -24,12 +24,12 @@ for colour in catalogue:
         best_diamond = colour
 
 if best_diamond:
-    ch.choose('purchase')
-    ch.send(best_diamond)
-    receipt: str = ch.recv()
+    ep.choose('purchase')
+    ep.send(best_diamond)
+    receipt: str = ep.recv()
     print('Receipt from seller:', receipt)
     my_balance -= catalogue[best_diamond]
 else:
-    ch.choose('reject')
-    response = ch.recv()
+    ep.choose('reject')
+    response = ep.recv()
     print('Response from seller:', response)

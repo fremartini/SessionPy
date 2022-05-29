@@ -2,12 +2,12 @@ from context import *
 
 routing_table = {'self': ('localhost', 5000), 'Client': ('localhost', 5001)}
 
-ch = Endpoint(Offer['Client', {"add": Recv[int, 'Client', Recv[int, 'Client', Send[int, 'Client', End]]], "neg": Recv[int, 'Client', Send[int, 'Client', End]], "mul": Recv[int, 'Client', Recv[int, 'Client', Send[int, 'Client', End]]]}], routing_table)
+ep = Endpoint(Offer['Client', {"add": Recv[int, 'Client', Recv[int, 'Client', Send[int, 'Client', End]]], "neg": Recv[int, 'Client', Send[int, 'Client', End]], "mul": Recv[int, 'Client', Recv[int, 'Client', Send[int, 'Client', End]]]}], routing_table)
 
-match ch.offer():
+match ep.offer():
     case 'add':
-        ch.send(ch.recv() + ch.recv())
+        ep.send(ep.recv() + ep.recv())
     case 'neg':
-        ch.send(ch.recv() * -1)
+        ep.send(ep.recv() * -1)
     case 'mul':
-        ch.send(ch.recv() * ch.recv())
+        ep.send(ep.recv() * ep.recv())

@@ -1,6 +1,6 @@
 type <List[str]> as workload;
 type <Dict[str, int]> as result;
-local protocol MapReduce at Distributor(role Distributor,role c1,role c2,role c3) {
+local protocol WordCount at Distributor(role Distributor,role c1,role c2,role c3) {
 Work(workload) to c1;
 Work(workload) to c2;
 Work(workload) to c3;
