@@ -162,10 +162,7 @@ class Endpoint(Generic[T]):
                 queue = self.message_queue[sender]
                 if queue.is_empty():
                     continue
-
-                recipient = queue.peek()[1]
-                if recipient == sender:
-                    return queue.dequeue()[0]
+                return queue.dequeue()[0]  # (msg, role) tuple
         except KeyboardInterrupt:
             self._exit()
         except Exception as ex:
