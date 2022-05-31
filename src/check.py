@@ -19,7 +19,10 @@ EndpointOperation = namedtuple('EndpointOperation', ['ch', 'operation'])
 
 
 class TypeChecker(NodeVisitor):
-
+    """
+    Static type checker visiting multiple AST nodes in order to validate correct
+    type usage and validation of session types statically.
+    """
     def __init__(self, tree, inside_class=False) -> None:
         self.inside_class = inside_class
         self.subst_var: dict[str, str] = {}
@@ -29,13 +32,24 @@ class TypeChecker(NodeVisitor):
         self.tree = tree
 
     def run(self):
+        """
+        Starts the typechecking process, and then verifies endpoints.
+        """
         self.visit(self.tree)
         self.validate_post_conditions()
 
     def env(self) -> Environment:
+        """
+        Helper to retrieve most recent environment.
+        
+        :returns most recent environment
+        """ 
         return self.environments.last()
 
     def validate_post_conditions(self):
+        """
+        Validates that all endpoints are in accepting state.
+        """
         env = self.env()
         failing_endpoints = []
         for (k, v) in env.get_vars():
@@ -51,6 +65,9 @@ class TypeChecker(NodeVisitor):
             raise SessionException(msgs)
 
     def process_function(self, node: FunctionDef) -> Typ:
+        """
+        Typechecks function and its body.
+        """
         self.in_functions = self.in_functions.add(node)
         expected_return_type: type = self.get_return_type(node)
         params = self.visit(node.args)
@@ -76,6 +93,9 @@ class TypeChecker(NodeVisitor):
         return function_type.items()
 
     def visit_statements(self, statements: List[stmt]):
+        """
+        Visits a list of statements, but stops if loop depth is decreased.
+        """ 
         current_loop_depth = self.env().loop_depth
         for stm in statements:
             self.visit(stm)
@@ -83,12 +103,20 @@ class TypeChecker(NodeVisitor):
                 break
 
     def visit_arguments(self, node: arguments) -> list[type]:
+        """
+        Visit all arguments in an arguments node.
+        """
         args: ImmutableList[type] = ImmutableList()
         for argument in node.args:
             args = args.add(self.process_arg(argument))
         return args.items()
 
     def process_arg(self, node: arg) -> Tuple[str, type]:
+        """
+        Process single argument.
+        
+        :returns tuple of variable and optional annotated type, otherwise Any.
+        """
         match node:
             case node if node.annotation:
                 ann: Typ = self.visit(node.annotation)
@@ -97,6 +125,11 @@ class TypeChecker(NodeVisitor):
                 return node.arg, Any
 
     def call_to_function_affecting_sessiontype(self, node: Call, func_name: str):
+        """
+        Function annotated with session type stub notation called, and compared accordingly with passed endpoint.
+        
+        :returns list of types from visit to function
+        """
         visited_args = [self.visit(a) for a in node.args]
         function: FunctionDef = self.functions_queue[func_name]
         args_contain_sessiontype = any(isinstance(a, State) for a in visited_args)
@@ -130,6 +163,9 @@ class TypeChecker(NodeVisitor):
             return res
 
     def compare_function_arguments_and_parameters(self, func_name, arguments: ImmutableList, parameters: ImmutableList):
+        """
+        Compares the types of a function's parameters to the arguments given.
+        """
         err_msg = f'function <{func_name}> expected {len(parameters)} argument(s) got {len(arguments)}'
         expect(len(arguments) == len(parameters), err_msg, exc=StaticTypeError)
         for actual_type, expected_type in zip(arguments.items(), parameters.items()):
@@ -142,6 +178,9 @@ class TypeChecker(NodeVisitor):
                    f'function <{func_name}> expected {parameters}, got {arguments}', exc=StaticTypeError)
 
     def validate_loop(self, node: While | For):
+        """
+        Ensures that session types are used correctly in looping constructs. 
+        """
         pre_endpoints = self.env().get_kind(State)
         if pre_endpoints:
             nds = [chs[1] for chs in pre_endpoints]
@@ -159,7 +198,12 @@ class TypeChecker(NodeVisitor):
                 expect(chan_id in self.env().loop_entrypoints or chan_id in self.env().loop_breakpoints,
                        f'loop error: needs to {post_chan}')
 
-    def process_and_substitute(self, node):
+    def process_alias_session(self, node) -> str:
+        """
+        Session type's string representation should have alias' (placeholders) replaced with existing session types.
+        
+        :returns new session type string representation without placeholders/aliases
+        """
         stubs = self.env().get_kind(SessionStub)
         endpoint_str = ast.unparse(node) if isinstance(node, Subscript) else node  # 'Endpoint[Send[..., <Alias>]]'
         expect(isinstance(endpoint_str, str), f"Expected unparsed node, or parsed node, to be of string type, got '{endpoint_str}'", node, UnexpectedInternalBehaviour)
@@ -167,21 +211,33 @@ class TypeChecker(NodeVisitor):
             endpoint_str = endpoint_str.replace(key, val.stub)
         return endpoint_str
 
-    def build_session_type(self, node):
-        endpoint_str = self.process_and_substitute(node)
+    def build_session_type(self, node) -> State:
+        """
+        :returns statemachine built from subscript node
+        """
+        endpoint_str = self.process_alias_session(node)
         return STParser(src=endpoint_str).build()
 
     def bind_session_type(self, node, target):
+        """
+        Specialised bind for session types.
+        """
         current_state = self.build_session_type(node)
         self.env().bind_var(target, current_state)
 
     def compare_type_to_latest_func_return_type(self, return_type: Typ):
+        """
+        Helper method to validate return type of functions.
+        """
         expected_return_type = self.get_current_function_return_type()
         fail_if_cannot_cast(return_type, expected_return_type,
                             f'return type {return_type} did not match {expected_return_type}')
         return return_type
 
     def get_return_type(self, node: FunctionDef):
+        """
+        Ternary for return types; type if existing, else Any.
+        """
         return self.visit(node.returns) if node.returns else Any
 
     def get_function_args(self, args) -> ImmutableList:
@@ -193,6 +249,15 @@ class TypeChecker(NodeVisitor):
         return ty
 
     def process_session_operation(self, node: Call, ch_op: EndpointOperation):
+        """
+        Responsible for progres in session types.
+        Based on an attribute node part of a call, and an EndpointOperation with
+        var name and concrete operation, matches on the operation and validates
+        any type provided in the call adheres to the expected session type
+        according to the state machine.
+        
+        :returns Any if not receive operation, otherwise type of a received value
+        """
         args = self.get_function_args(node.args)
         op = ch_op.operation
         ch_name = node.func.value.id
@@ -291,7 +356,7 @@ class TypeChecker(NodeVisitor):
             if isinstance(rhs_type, str):
                 rhs_type = self.env().lookup_or_self(rhs_type)
             elif isinstance(name_or_type, typing._GenericAlias) and name_or_type.__origin__ == tuple:
-                rhs_type = parameterize(Tuple, rhs_type)
+                rhs_type = parameterise(Tuple, rhs_type)
 
             if is_type(name_or_type):
                 self.env().bind_var(target, union(rhs_type, name_or_type))
@@ -313,7 +378,7 @@ class TypeChecker(NodeVisitor):
         else:
             value = self.visit(node.value)
             if isinstance(node.value, ast.Tuple):
-                value = parameterize(Tuple, value)
+                value = parameterise(Tuple, value)
             self.env().bind_var(target, value)
 
     def visit_Attribute(self, node: Attribute) -> Typ:
@@ -424,7 +489,7 @@ class TypeChecker(NodeVisitor):
         key_typ = reduce(union, ((self.visit(k)) for k in node.keys)) if node.keys else Any
         val_typ = reduce(union, ((self.visit(v)) for v in node.values)) if node.values else Any
         if isinstance(val_typ, list):
-            val_typ = parameterize(Tuple, val_typ)
+            val_typ = parameterise(Tuple, val_typ)
         res = Dict[key_typ, val_typ]
         return res
 
@@ -564,7 +629,7 @@ class TypeChecker(NodeVisitor):
         debug_print('visit_Subscript', dump(node))
         name = node.value.id.lower()
         if name in STR_ST_MAPPING:
-            str_repr = self.process_and_substitute(node)
+            str_repr = self.process_alias_session(node)
             if name == 'endpoint':
                 return self.build_session_type(str_repr)
             return SessionStub(str_repr)
@@ -574,7 +639,7 @@ class TypeChecker(NodeVisitor):
                 container = str_to_typ(name)
                 types = self.visit(node.slice)
                 if isinstance(types, type | list):
-                    return parameterize(to_typing(container), types)
+                    return parameterise(to_typing(container), types)
                 else:
                     return to_typing(container)[types]
             else:
@@ -619,7 +684,12 @@ class TypeChecker(NodeVisitor):
 visited_files: dict[str, object] = {}
 
 
-def is_builtin_or_module_type(typ):
+def is_builtin_or_module_type(typ) -> bool:
+    """
+    Built-in module types coming in multiple flavours, this helps to unify a checker for this.
+    
+    :returns true if type is a built in module type 
+    """
     return typ in sys.builtin_module_names or \
            isinstance(typ, BuiltinFunctionType) or \
            isinstance(typ, BuiltinMethodType) or \
@@ -627,7 +697,7 @@ def is_builtin_or_module_type(typ):
 
 
 def is_container(typ: Typ) -> bool:
-    return isinstance(typ, ContainerType) and not isinstance(typ, Closure | EndpointOperation)
+    return isinstance(typ, ParameterisedType) and not isinstance(typ, Closure | EndpointOperation)
 
 
 def is_dictionary(typ: Typ):
@@ -635,6 +705,11 @@ def is_dictionary(typ: Typ):
 
 
 def is_session_type(node: expr) -> bool:
+    """
+    Crude checker for if an expression is an endpoint/session type.
+    
+    :returns boolean whether passed expression is session type
+    """
     def check_subscript(node) -> bool:
         return isinstance(node, Subscript) and isinstance(node.value, Name) and node.value.id == 'Endpoint'
 
@@ -657,6 +732,12 @@ def typecheck_file():
 
 
 def typecheck_function(function_def):
+    """
+    Decorator for typechecking functions.
+    Should be used as annotation above any function where type checking is needed.
+
+    :returns function definition object
+    """
     function_src: str = dedent(inspect.getsource(function_def))
     module: Module = ast.parse(function_src)
     expect(len(module.body) == 1,

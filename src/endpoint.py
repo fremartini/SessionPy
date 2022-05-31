@@ -6,7 +6,7 @@ from threading import Thread
 from types import GenericAlias
 from typing import Any, Dict, List, Set, Tuple
 import pickle
-from lib import expect, parameterize, type_to_str, union
+from lib import expect, parameterise, type_to_str, union
 from sessiontype import *
 import socket
 
@@ -202,9 +202,9 @@ class Endpoint(Generic[T]):
             val_typ = reduce(union, [type(elem) for elem in obj.values()])
             return Dict[key_typ, val_typ]
         elif isinstance(obj, tuple):
-            return parameterize(Tuple, [type(elem) for elem in obj])
+            return parameterise(Tuple, [type(elem) for elem in obj])
         elif isinstance(obj, set):
-            return parameterize(Set, [type(elem) for elem in obj])
+            return parameterise(Set, [type(elem) for elem in obj])
         return type(obj)
 
     def _try_advance(self, action: Action, message: str | None) -> None:

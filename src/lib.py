@@ -11,21 +11,27 @@ from debug import debug_print
 from ast import AST
 
 FunctionTyp = list  # of types
-ContainerType = Union[typing._GenericAlias, GenericAlias, typing._SpecialGenericAlias, tuple]
+ParameterisedType = Union[typing._GenericAlias, GenericAlias, typing._SpecialGenericAlias, tuple]
 ClassTypes = str
-Typ = Union[type, FunctionTyp, ContainerType, ClassTypes]
+Typ = Union[type, FunctionTyp, ParameterisedType, ClassTypes]
 
 SessionStub = namedtuple('SessionStub', 'stub')
 
 
 class SessionException(TypeError):
+    """
+    General session type exception; thrown when invalid usage of session types.
+    """
     def __init__(self, message: str, current_state: AST = None) -> None:
         if current_state:
             message = f"at line {current_state.lineno}: {message}"
         super().__init__(message)
 
 
-class StaticTypeError(TypeError):  # Show-off: not just a standard Pythonic runtime typeerror
+class StaticTypeError(TypeError): 
+    """
+    A type error found during static check of Python AST.
+    """  
     def __init__(self, message: str, current_state: AST = None) -> None:
         if current_state:
             message = f"at line {current_state.lineno}: {message}"
@@ -33,6 +39,9 @@ class StaticTypeError(TypeError):  # Show-off: not just a standard Pythonic runt
 
 
 class UnexpectedInternalBehaviour(Exception):
+    """
+    Error for internal unexpected behaviour that should be investigated.
+    """
     def __init__(self, message: str, current_state: AST = None) -> None:
         if current_state:
             message = f"at line {current_state.lineno}: {message}"
@@ -40,28 +49,44 @@ class UnexpectedInternalBehaviour(Exception):
 
 
 class IllegalArgumentException(TypeError):
-    ...
-
-
-class IllegalArgumentException(TypeError):
+    """
+    Error for illegal argument to a function.
+    """
     ...
 
 
 def is_type(opt_typ):
+    """
+    Checks that a given object belongs to typing family Typ.
+    """
     return isinstance(opt_typ, Typ)
 
 
 def read_src_from_file(file) -> str:
+    """
+    :returns content of provided source file as string
+    """
     with open(file, 'r') as f:
         return f.read()
 
 
 def expect(e: bool, msg: str, ast_node: AST = None, exc: Type[Exception] = SessionException) -> None:
+    """
+    Assert-like helper to throw specified exceptions; expects some testing
+    condition along with a message, and optionally AST node and specific
+    exception. AST nodes help provide insight into where the error is found
+    in the source program.
+
+    :raises SessionException if none other specified
+    """
     if not e:
         raise exc(msg, ast_node)
 
 
 def fail_if_cannot_cast(a: type, b: type, err: str) -> None:
+    """
+    Tries to up/down cast, fails if cannot.
+    """
     types_differ = a != b
     can_downcast: bool = a == Any  # any -> int
     can_upcast: bool = b == Any  # int -> any
@@ -70,14 +95,14 @@ def fail_if_cannot_cast(a: type, b: type, err: str) -> None:
 
 def union(t1: Typ, t2: Typ) -> Typ:
     """
-        Unionises two types based on their hierachical structure/class relation.
-        
-        Examples:
-            union(int, float)               => float
+    Unionises two types based on their hierachical structure/class relation.
+    
+    Examples:
+    - union(int, float)       -> float
+    - union(A, B) when B <: A -> A
+    - union(int, str)         -> Error: unrelated hierarchies   
 
-            union(A, B) when A is supertype => A
-
-            union(int, str)                 => Error - unrelated hierarchies       
+    :returns t2 if t1 <: t2, otherwise t1
     """
     debug_print(f'union: called with {t1} and {t2}')
     if t1 == Any:
@@ -96,13 +121,13 @@ def union(t1: Typ, t2: Typ) -> Typ:
                 if t1 == typ or t2 == typ:
                     return typ
     # Check if from typing module, i.e. List, Sequence, Tuple, etc.
-    if isinstance(t1, ContainerType) and isinstance(t2, ContainerType):
+    if isinstance(t1, ParameterisedType) and isinstance(t2, ParameterisedType):
 
         if t1._name != t2._name:
             raise TypeError(f"cannot union different parameterised types: {t1._name} != {t2._name}")
 
         if t1._name in ['Tuple', 'Dict']:
-            res = parameterize(Tuple if t1._name == 'Tuple' else Dict,
+            res = parameterise(Tuple if t1._name == 'Tuple' else Dict,
                                [union(t1, t2) for t1, t2 in zip(t1.__args__, t2.__args__)])
             return res
         elif t1._name == 'List':
@@ -120,13 +145,14 @@ def union(t1: Typ, t2: Typ) -> Typ:
             raise TypeError(f"exhausted: could not union {type_to_str(t1)} with {type_to_str(t2)}")
 
 
-def to_typing(typ: type):
+def to_typing(typ: type) -> ParameterisedType:
     """
-        Idea: convert lowercase types of type GenericAlias to typing types:
-
-        Examples:
-            list    => List
-            dict    => Dict
+    Convert lowercase types of type GenericAlias to typing._GenericAlias.
+    Examples:
+    - list -> List
+    - dict -> Dict
+    
+    :returns typing._GenericAlias (ParameterisedType)
     """
     if typ == list:
         return List
@@ -141,8 +167,16 @@ def to_typing(typ: type):
     return typ
 
 
-def parameterize(container: Typ, typ: List[Typ] | type) -> str | list[Any] | tuple[Any, ...] | Any:
-    debug_print('parameterize', container, typ)
+def parameterise(container: Typ, typ: List[Typ] | type) -> str | list[Any] | tuple[Any, ...] | Any:
+    """
+    Helper function to parameterise a container type with a given list of types.
+    Examples:
+    - parameterise(List, [int]) => List[int]
+    - parameterise(Tuple, [int, str]) => Tuple[int, str]
+
+    :returns ParameterisedType
+    """
+    debug_print('parameterise', container, typ)
     if isinstance(typ, type):
         return container[typ]
     else:
@@ -156,10 +190,13 @@ def parameterize(container: Typ, typ: List[Typ] | type) -> str | list[Any] | tup
             case 4:
                 return container[typ[0], typ[1], typ[2], typ[3]]
             case _:
-                raise Exception(f"parameterize: supporting up to four types now; {container}[{typ}] needs support")
+                raise Exception(f"parameterise: supporting up to four types now; {container}[{typ}] needs support")
 
 
 def get_dir(path: str):
+    """
+    :returns directory name from provided path
+    """
     return os.path.dirname(os.path.realpath(path))
 
 
@@ -178,14 +215,13 @@ def ch_to_mod_dir(mod_name: str):
     os.chdir(target_dir)
 
 
-def endpoints_str(endpoints):
-    res = ''
-    for ep_name in endpoints:
-        res += f'"{ep_name}": {endpoints[ep_name]}\n'
-    return res
 
-
-def str_to_typ(s: str) -> type:
+def str_to_typ(s: str) -> Typ:
+    """
+    A (poorly written) function that will convert a string representing a known type, to the actual type.
+    - str_to_typ("int") -> int (type)
+    - str_to_typ("List[int]") -> List[int] (typing._GenericAlias)
+    """
     py_files_in_dir = [fname.split('.')[0].lower() for fname in os.listdir() if os.path.splitext(fname)[1] == '.py']
     if s in ['main', 'Endpoint'] or s in builtin_module_names or s.lower() in py_files_in_dir:
         return s
@@ -198,12 +234,12 @@ def str_to_typ(s: str) -> type:
     return opt
 
 
-def assert_eq(expected, actual):
-    if not expected == actual:
-        raise Exception("expected " + str(expected) + ", found " + str(actual))
-
-
-def type_to_str(typ: Typ) -> str | tuple:
+def type_to_str(typ: Typ) -> str:
+    """
+    From a type, get the string representation.
+    - type_to_str(int) -> "int"
+    - type_to_str(Dict[str, bool]) -> "Dict[str, bool]"
+    """
     if isinstance(typ, type):
         return typ.__name__
     elif isinstance(typ, typing._GenericAlias):
