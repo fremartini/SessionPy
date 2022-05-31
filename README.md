@@ -50,12 +50,12 @@ That generates two Python files (imports omitted):
 # SampleProtocol_A.py
 routing_table = {'self': ('localhost', 0), 'B': ('localhost', 0)}
 
-ch = Endpoint(Send[List[int], 'B', Recv[int, 'B', Send[int, 'B', End]]], routing_table)
+ep = Endpoint(Send[List[int], 'B', Recv[int, 'B', Send[int, 'B', End]]], routing_table)
 
 # SampleProtocol_B.py
 routing_table = {'A': ('localhost', 0), 'self': ('localhost', 0)}
 
-ch = Endpoint(Recv[List[int], 'A', Send[int, 'A', Recv[int, 'A', End]]], routing_table)
+ep = Endpoint(Recv[List[int], 'A', Send[int, 'A', Recv[int, 'A', End]]], routing_table)
 ```
 
 The programmer must fill in the implementation-specific details such as the routing table that maps roles to addresses, and the protocol itself using the operations defined below.
