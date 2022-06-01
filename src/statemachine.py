@@ -7,13 +7,16 @@ import typing
 from debug import dump_object
 import sessiontype
 
-from lib import Typ, parameterize, str_to_typ, to_typing, type_to_str, SessionException, union
+from lib import Typ, parameterise, str_to_typ, to_typing, type_to_str, SessionException, union
 from sessiontype import *
 
 A = TypeVar('A')
 
 
 class Action(str, Enum):
+    """
+    Action is an enumeration of what a transition can be.
+    """
     SEND = 'send'
     RECV = 'recv'
     LABEL = 'label'
@@ -21,6 +24,9 @@ class Action(str, Enum):
 
 
 class BranchEdge:
+    """
+    BranchEdge is a specialised transition for choice/offers.
+    """
     def __init__(self, key: str, actor: str) -> None:
         self.key = key
         self.actor = actor
@@ -40,6 +46,9 @@ class BranchEdge:
 
 
 class Transition:
+    """
+    Transition in the state machine; depending on action encapsulates different arguments.
+    """
     def __init__(self, action: Action) -> None:
         self.action: Action = action
         self.actor: str | None = None
@@ -87,13 +96,6 @@ class Transition:
         return res
 
 
-class TLabel(Generic[A]):
-    def __repr__(self) -> str:
-        return self.__str__()
-
-    def __str__(self) -> str:
-        return f'label'
-
 
 class STEnd:
     def __str__(self) -> str:
@@ -115,6 +117,9 @@ class TGoto:
 
 
 class State:
+    """
+    State in the state machine that encapsulates id, bool if it's accepting or not, and outgoing edges.
+    """
     def __init__(self, identifier: int, accepting_state: bool = False) -> None:
         self.identifier = identifier
         self.accepting = accepting_state
@@ -240,7 +245,7 @@ class STParser(NodeVisitor):
         if isinstance(typ, GenericAlias):
             # A parameterised type like dict[str, int], list[bool], etc.
             container = to_typing(typ.__origin__)
-            return parameterize(container, typ.__args__)
+            return parameterise(container, typ.__args__)
         return typ
 
     def from_generic_alias(self, typ: GenericAlias):
@@ -396,7 +401,7 @@ class STParser(NodeVisitor):
                 elif head.action in [Action.SEND, Action.RECV]:
                     current_state = new_node()
                     if isinstance(head.typ, tuple):
-                        head.typ = parameterize(to_typing(head.typ[0]), [head.typ[1]])
+                        head.typ = parameterise(to_typing(head.typ[0]), [head.typ[1]])
                     go(tail, current_state)
                     node.outgoing[head] = current_state
                     return current_state, head
