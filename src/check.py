@@ -41,8 +41,11 @@ class TypeChecker(NodeVisitor):
     def env(self) -> Environment:
         """
         Helper to retrieve most recent environment.
-        
-        :returns most recent environment
+
+        Returns
+        -------
+        Environment
+            most recent environment
         """ 
         return self.environments.last()
 
@@ -114,8 +117,11 @@ class TypeChecker(NodeVisitor):
     def process_arg(self, node: arg) -> Tuple[str, type]:
         """
         Process single argument.
-        
-        :returns tuple of variable and optional annotated type, otherwise Any.
+
+        Returns
+        -------
+        Tuple[str, type]
+            tuple of variable and optional annotated type, otherwise Any.
         """
         match node:
             case node if node.annotation:
@@ -128,7 +134,10 @@ class TypeChecker(NodeVisitor):
         """
         Function annotated with session type stub notation called, and compared accordingly with passed endpoint.
         
-        :returns list of types from visit to function
+        Returns
+        -------
+        List
+            list of types from visit to function
         """
         visited_args = [self.visit(a) for a in node.args]
         function: FunctionDef = self.functions_queue[func_name]
@@ -201,8 +210,11 @@ class TypeChecker(NodeVisitor):
     def process_alias_session(self, node) -> str:
         """
         Session type's string representation should have alias' (placeholders) replaced with existing session types.
-        
-        :returns new session type string representation without placeholders/aliases
+
+        Returns
+        -------
+        str
+            new session type string representation without placeholders/aliases
         """
         stubs = self.env().get_kind(SessionStub)
         endpoint_str = ast.unparse(node) if isinstance(node, Subscript) else node  # 'Endpoint[Send[..., <Alias>]]'
@@ -213,7 +225,10 @@ class TypeChecker(NodeVisitor):
 
     def build_session_type(self, node) -> State:
         """
-        :returns statemachine built from subscript node
+        Returns
+        -------
+        State
+            statemachine built from subscript node
         """
         endpoint_str = self.process_alias_session(node)
         return STParser(src=endpoint_str).build()
@@ -255,8 +270,11 @@ class TypeChecker(NodeVisitor):
         var name and concrete operation, matches on the operation and validates
         any type provided in the call adheres to the expected session type
         according to the state machine.
-        
-        :returns Any if not receive operation, otherwise type of a received value
+
+        Returns
+        -------
+        Any
+            if not receive operation, otherwise type of a received value
         """
         args = self.get_function_args(node.args)
         op = ch_op.operation

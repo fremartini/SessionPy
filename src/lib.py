@@ -64,7 +64,10 @@ def is_type(opt_typ):
 
 def read_src_from_file(file) -> str:
     """
-    :returns content of provided source file as string
+    Returns
+    -------
+    str
+        content of provided source file as string
     """
     with open(file, 'r') as f:
         return f.read()
@@ -77,7 +80,10 @@ def expect(e: bool, msg: str, ast_node: AST = None, exc: Type[Exception] = Sessi
     exception. AST nodes help provide insight into where the error is found
     in the source program.
 
-    :raises SessionException if none other specified
+    Raises
+    ------
+    SessionException
+        if none other specified
     """
     if not e:
         raise exc(msg, ast_node)
@@ -95,14 +101,17 @@ def fail_if_cannot_cast(a: type, b: type, err: str) -> None:
 
 def union(t1: Typ, t2: Typ) -> Typ:
     """
-    Unionises two types based on their hierachical structure/class relation.
+    Union two types based on their hierachical structure/class relation.
     
     Examples:
     - union(int, float)       -> float
     - union(A, B) when B <: A -> A
     - union(int, str)         -> Error: unrelated hierarchies   
 
-    :returns t2 if t1 <: t2, otherwise t1
+    Returns
+    -------
+    Typ
+        t2 if t1 <: t2, otherwise t1
     """
     debug_print(f'union: called with {t1} and {t2}')
     if t1 == Any:
@@ -152,7 +161,10 @@ def to_typing(typ: type) -> ParameterisedType:
     - list -> List
     - dict -> Dict
     
-    :returns typing._GenericAlias (ParameterisedType)
+    Returns
+    -------
+    ParameterisedType
+        typing._GenericAlias (ParameterisedType)
     """
     if typ == list:
         return List
@@ -174,7 +186,9 @@ def parameterise(container: Typ, typ: List[Typ] | type) -> str | list[Any] | tup
     - parameterise(List, [int]) => List[int]
     - parameterise(Tuple, [int, str]) => Tuple[int, str]
 
-    :returns ParameterisedType
+    Returns
+    -------
+    ParameterisedType
     """
     debug_print('parameterise', container, typ)
     if isinstance(typ, type):
@@ -195,7 +209,10 @@ def parameterise(container: Typ, typ: List[Typ] | type) -> str | list[Any] | tup
 
 def get_dir(path: str):
     """
-    :returns directory name from provided path
+    Returns
+    -------
+    str
+        directory name from provided path
     """
     return os.path.dirname(os.path.realpath(path))
 
