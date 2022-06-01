@@ -706,7 +706,10 @@ def is_builtin_or_module_type(typ) -> bool:
     """
     Built-in module types coming in multiple flavours, this helps to unify a checker for this.
     
-    :returns true if type is a built in module type 
+    Returns
+    -------
+    bool
+        true if type is a built in module type
     """
     return typ in sys.builtin_module_names or \
            isinstance(typ, BuiltinFunctionType) or \
@@ -726,7 +729,10 @@ def is_session_type(node: expr) -> bool:
     """
     Crude checker for if an expression is an endpoint/session type.
     
-    :returns boolean whether passed expression is session type
+    Returns
+    -------
+    bool
+        whether passed expression is session type
     """
     def check_subscript(node) -> bool:
         return isinstance(node, Subscript) and isinstance(node.value, Name) and node.value.id == 'Endpoint'
@@ -754,7 +760,9 @@ def typecheck_function(function_def):
     Decorator for typechecking functions.
     Should be used as annotation above any function where type checking is needed.
 
-    :returns function definition object
+    Returns
+    -------
+    function definition object
     """
     function_src: str = dedent(inspect.getsource(function_def))
     module: Module = ast.parse(function_src)
