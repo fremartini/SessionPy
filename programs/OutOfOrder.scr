@@ -1,7 +1,6 @@
-global protocol OutOfOrder(role RA, role RB, role RC) {
-    rec LOOP {
-        Msg(int) from RB to RA;
-        Msg(int) from RC to RA;
-        continue LOOP;
+global protocol OutOfOrder(role Alice, role Bob, role Charlie) 
+    {
+        Msg(int) from Bob to Alice;
+        Msg(int) from Charlie to Alice;
     }
 }
